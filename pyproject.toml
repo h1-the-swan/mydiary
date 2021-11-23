@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "mydiary"
+version = "0.1.0"
+description = ""
+authors = ["h1-the-swan <jason.portenoy@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+python-dotenv = "^0.19.2"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+jupyter = "^1.0.0"
+black = "^21.11b1"
+humanfriendly = "^10.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
