@@ -7,12 +7,19 @@ authors = ["h1-the-swan <jason.portenoy@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 python-dotenv = "^0.19.2"
+pydantic = "^1.8.2"
+spotipy = "^2.19.0"
+pocket = "^0.3.6"
+google-api-python-client = "^2.31.0"
+google-auth-httplib2 = "^0.1.0"
+google-auth-oauthlib = "^0.4.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
 jupyter = "^1.0.0"
 black = "^21.11b1"
 humanfriendly = "^10.0"
+pandas = "^1.3.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

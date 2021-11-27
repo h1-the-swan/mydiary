@@ -13,3 +13,9 @@ env.bak/
 venv.bak/
 
 Untitled*.ipynb
+
+tmp*
+
+googlecalendar/token.json
+
+.cache
