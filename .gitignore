@@ -13,9 +13,13 @@ env.bak/
 venv.bak/
 
 Untitled*.ipynb
+# ignore all notebooks for now
+notebooks/
 
 tmp*
 
 googlecalendar/token.json
 
 .cache
+
+dist/

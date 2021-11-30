@@ -1,3 +1,5 @@
 {
-	"python.defaultInterpreterPath": ""
+	"python.defaultInterpreterPath": "",
+	"python.linting.pylintEnabled": true,
+	"python.linting.enabled": true,
 }
