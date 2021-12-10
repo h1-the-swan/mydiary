@@ -17,6 +17,8 @@ import antigravity
 ```
 
 ## heading 3
+
+goodbye
 """
 
 def test_markdown_split_and_rejoin():

@@ -3,7 +3,7 @@
 DESCRIPTION = """Make edits to Markdown docs, prioritizing making sure nothing is lost from original."""
 
 from collections import OrderedDict
-from typing import Any, List
+from typing import Any, Generator, List, Tuple
 
 import logging
 
@@ -22,7 +22,7 @@ class MarkdownDoc:
 
         self.sections = [
             MarkdownSection(sec, title, parent=self, level=2)
-            for title, sec in self.split_into_sections(self.txt, level=2).items()
+            for title, sec in self.split_into_sections(self.txt, level=2)
         ]
 
     def __repr__(self) -> str:
@@ -32,7 +32,7 @@ class MarkdownDoc:
 
     def split_into_sections(
         self, markdown_text: str, level=2
-    ) -> "OrderedDict[str, str]":
+    ) -> Generator[Tuple[str, str], None, None]:
         """This is a very simple way of splitting the markdown text into sections.
         It will not handle edge cases very well.
 
@@ -45,23 +45,25 @@ class MarkdownDoc:
         """
         heading_indicator = "#" * level
         protect_flag = False
-        sections = OrderedDict()
+        # sections = OrderedDict()
         this_section = []
         this_section_title = ""
+        this_section_txt = ""
         for line in markdown_text.split("\n"):
             if line.startswith("```"):
                 protect_flag = not protect_flag
             if protect_flag is False and line.startswith(heading_indicator + " "):
                 # sections.append("\n".join(this_section))
-                sections[this_section_title] = "\n".join(this_section)
+                # sections[this_section_title] = "\n".join(this_section)
+                this_section_txt = "\n".join(this_section)
+                yield this_section_title, this_section_txt
                 this_section = [line]
                 this_section_title = line.strip(heading_indicator).strip()
             else:
                 this_section.append(line)
         # sections.append("\n".join(this_section))
-        sections[this_section_title] = "\n".join(this_section)
-        return sections
-        # return markdown_text.split(f"\n{heading_indicator} ")
+        this_section_txt = "\n".join(this_section)
+        yield this_section_title, this_section_txt
 
 
 class MarkdownSection:

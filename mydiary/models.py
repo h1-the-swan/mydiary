@@ -27,23 +27,25 @@ class GoogleCalendarEvent(BaseModel):
     # what else? location? description? canceled/deleted?
 
 class Tag(BaseModel):
-    uid: uuid.UUID
+    uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
 
 class MyDiaryImage(BaseModel):
     uid: uuid.UUID
     hash: bytes
     name: str
-    location: Union[str, Path]
-    description: str
+    filepath: Union[str, Path]
+    description: str = None
+    created_at: datetime = None
 
 class MyDiaryDay(BaseModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     dt: date = now().date()
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
-    thumbnail: MyDiaryImage
-    images: List[MyDiaryImage]
+    joplin_note_id: str = None
+    thumbnail: MyDiaryImage = None
+    images: List[MyDiaryImage] = []
     spotify_songs: List[SpotifyTrack] = []  # Spotify songs played on this day
     pocket_articles: List[PocketArticle] = []  # interactions with Pocket articles on this day
     google_calendar_events: List[GoogleCalendarEvent] = []
