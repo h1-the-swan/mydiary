@@ -1,5 +1,6 @@
 import uuid
 from typing import List, Dict, Union, Optional
+from enum import Enum, IntEnum
 from pydantic import BaseModel, Field
 from datetime import datetime, date
 from pendulum import now
@@ -13,12 +14,86 @@ class SpotifyTrack(BaseModel):
     uri: str
     played_at: datetime = None
 
-# TODO
+    @classmethod
+    def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
+        # Parse a spotify track from the Spotify API
+        played_at = t.get("played_at", None)
+        if "track" in t:
+            track_data = t["track"]
+        else:
+            track_data = t
+        track_id = track_data["id"]
+        track_name = track_data["name"]
+        track_artist = ", ".join([artist["name"] for artist in track_data["artists"]])
+        track_uri = track_data["uri"]
+        return cls(
+            id=track_id,
+            name=track_name,
+            artist_name=track_artist,
+            uri=track_uri,
+            played_at=played_at,
+        )
+
+
+class PocketStatusEnum(IntEnum):
+    UNREAD = 0
+    ARCHIVED = 1
+    SHOULD_BE_DELETED = 2
+
 class PocketArticle(BaseModel):
     id: str
     given_title: str
     resolved_title: str
     url: str
+    favorite: bool
+    status: PocketStatusEnum
+    time_added: datetime = None
+    time_updated: datetime = None
+    time_read: datetime = None
+    time_favorited: datetime = None
+
+    @classmethod
+    def from_pocket_item(cls, item: Dict) -> "PocketArticle":
+        # Parse a Pocket article from the Pocket API
+        id = item["item_id"]
+        given_title = item["given_title"]
+        resolved_title = item["resolved_title"]
+        url = item["resolved_url"]
+        favorite = int(item["favorite"])
+        status = int(item["status"])
+        time_added = (
+            datetime.fromtimestamp(int(item["time_added"]))
+            if int(item["time_added"]) != 0
+            else None
+        )
+        time_updated = (
+            datetime.fromtimestamp(int(item["time_updated"]))
+            if int(item["time_updated"]) != 0
+            else None
+        )
+        time_read = (
+            datetime.fromtimestamp(int(item["time_read"]))
+            if int(item["time_read"]) != 0
+            else None
+        )
+        time_favorited = (
+            datetime.fromtimestamp(int(item["time_favorited"]))
+            if int(item["time_favorited"]) != 0
+            else None
+        )
+        return cls(
+            id=id,
+            given_title=given_title,
+            resolved_title=resolved_title,
+            url=url,
+            favorite=favorite,
+            status=status,
+            time_added=time_added,
+            time_updated=time_updated,
+            time_read=time_read,
+            time_favorited=time_favorited,
+        )
+
 
 # TODO
 class GoogleCalendarEvent(BaseModel):
@@ -26,9 +101,11 @@ class GoogleCalendarEvent(BaseModel):
     summary: str
     # what else? location? description? canceled/deleted?
 
+
 class Tag(BaseModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
+
 
 class MyDiaryImage(BaseModel):
     uid: uuid.UUID
@@ -37,6 +114,7 @@ class MyDiaryImage(BaseModel):
     filepath: Union[str, Path]
     description: str = None
     created_at: datetime = None
+
 
 class MyDiaryDay(BaseModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
@@ -47,7 +125,13 @@ class MyDiaryDay(BaseModel):
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
     spotify_songs: List[SpotifyTrack] = []  # Spotify songs played on this day
-    pocket_articles: List[PocketArticle] = []  # interactions with Pocket articles on this day
+    pocket_articles: List[
+        PocketArticle
+    ] = []  # interactions with Pocket articles on this day
     google_calendar_events: List[GoogleCalendarEvent] = []
-    rating: Optional[int]  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
-    flagged: bool = False  # flagged for inspection, in the case of some potential problem
+    rating: Optional[
+        int
+    ]  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
+    flagged: bool = (
+        False  # flagged for inspection, in the case of some potential problem
+    )

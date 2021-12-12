@@ -14,11 +14,15 @@ def test_env_loaded():
     assert "SPOTIPY_CLIENT_SECRET" in os.environ
 
 
-# def test_spotify_api_call():
-#     scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
-#     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scopes))
-#     r = sp.current_user_recently_played()
-#     assert 'items' in r
+def test_spotify_api_call():
+    from mydiary.spotify_connector import MyDiarySpotify
+    mydiary_spotify = MyDiarySpotify()
+    assert isinstance(mydiary_spotify.sp, spotipy.Spotify)
+    assert mydiary_spotify.sp.auth_manager is not None
+    cached_token = mydiary_spotify.sp.auth_manager.cache_handler.get_cached_token()
+    assert cached_token is not None
+    r = mydiary_spotify.sp.current_user_recently_played()
+    assert 'items' in r
 
 
 def test_spotify_track(rootdir):

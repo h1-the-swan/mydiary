@@ -1,0 +1,1 @@
+This folder contains cached info for API refresh tokens (for Spotify and Google Calendar). The contents should not be committed to version control.

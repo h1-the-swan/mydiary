@@ -20,6 +20,11 @@ tmp*
 
 googlecalendar/token.json
 
+token_cache/*
+!token_cache/README.md
+
 .cache
 
 dist/
+
+data/
