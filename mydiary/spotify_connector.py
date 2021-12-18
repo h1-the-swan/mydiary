@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pendulum
 from timeit import default_timer as timer
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 try:
     from humanfriendly import format_timespan
@@ -48,12 +48,12 @@ class MyDiarySpotify:
                 ),
             )
 
-    def get_tracks_for_day(self, dt: datetime):
+    def get_tracks_for_day(self, dt: datetime) -> List[SpotifyTrack]:
         # Note that the Spotify API only returns the last 50 played songs. So this won't work well for historical dates, or if you played a lot of songs per day.
         tracks = []
         r = self.sp.current_user_recently_played()
-        for t in r['items']:
-            dt_track = pendulum.parse(t['played_at'])
+        for t in r["items"]:
+            dt_track = pendulum.parse(t["played_at"])
             if dt_track.in_timezone(dt.timezone).date() == dt.date():
                 tracks.append(SpotifyTrack.from_spotify_track(t))
         return tracks

@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Dict, Union, Optional
 from enum import Enum, IntEnum
+import pendulum
 from pydantic import BaseModel, Field
 from datetime import datetime, date
 from pendulum import now
@@ -34,11 +35,22 @@ class SpotifyTrack(BaseModel):
             played_at=played_at,
         )
 
+    def to_markdown(self, timezone=None) -> str:
+        if self.played_at:
+            played_at = pendulum.instance(self.played_at)
+            if timezone:
+                played_at = played_at.in_timezone(timezone)
+            played_at = f"{played_at : %H:%M:%S}"
+        else:
+            played_at = ""
+        return f"[{self.name}]({self.uri}) | {self.artist_name} | {played_at}"
+
 
 class PocketStatusEnum(IntEnum):
     UNREAD = 0
     ARCHIVED = 1
     SHOULD_BE_DELETED = 2
+
 
 class PocketArticle(BaseModel):
     id: str
@@ -95,11 +107,32 @@ class PocketArticle(BaseModel):
         )
 
 
-# TODO
 class GoogleCalendarEvent(BaseModel):
     id: str
     summary: str
-    # what else? location? description? canceled/deleted?
+    location: Optional[str] = None
+    description: Optional[str] = None
+    start: datetime
+    end: datetime
+    # what else? canceled/deleted?
+
+    @classmethod
+    def from_gcal_api_event(cls, event: Dict) -> "GoogleCalendarEvent":
+        # Parse a Google calendar event from the API
+        id = event["id"]
+        summary = event["summary"]
+        location = event.get("location", None)
+        description = event.get("description", None)
+        start = datetime.fromisoformat(event["start"]["dateTime"])
+        end = datetime.fromisoformat(event["end"]["dateTime"])
+        return cls(
+            id=id,
+            summary=summary,
+            location=location,
+            description=description,
+            start=start,
+            end=end,
+        )
 
 
 class Tag(BaseModel):
@@ -124,7 +157,7 @@ class MyDiaryDay(BaseModel):
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
-    spotify_songs: List[SpotifyTrack] = []  # Spotify songs played on this day
+    spotify_tracks: List[SpotifyTrack] = []  # Spotify songs played on this day
     pocket_articles: List[
         PocketArticle
     ] = []  # interactions with Pocket articles on this day
@@ -135,3 +168,12 @@ class MyDiaryDay(BaseModel):
     flagged: bool = (
         False  # flagged for inspection, in the case of some potential problem
     )
+
+    def spotify_tracks_markdown(self, timezone=None) -> Union[str, None]:
+        if not self.spotify_tracks:
+            return None
+        header = "Name | Artist | Played At"
+        lines = [header] + "---- | ---- | ----"
+        for t in self.spotify_tracks:
+            lines.append(t.to_markdown(timezone=timezone))
+        return "\n".join(lines)

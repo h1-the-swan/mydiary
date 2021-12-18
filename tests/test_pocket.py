@@ -18,7 +18,7 @@ def test_pocket_api_call():
     r = mydiary_pocket.pocket_instance.get(count=1)
     assert len(r[0]['list']) == 1
 
-def test_api_article(rootdir):
+def test_pocket_article(rootdir):
     fp = Path(rootdir).joinpath("pocketitem.json")
     article_json = json.loads(fp.read_text())
     article = PocketArticle.from_pocket_item(article_json)
