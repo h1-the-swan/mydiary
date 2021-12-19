@@ -7,6 +7,7 @@ from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
 
+
 # TODO
 class SpotifyTrack(BaseModel):
     id: str
@@ -151,7 +152,7 @@ class MyDiaryImage(BaseModel):
 
 class MyDiaryDay(BaseModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
-    dt: date = now().date()
+    dt: pendulum.DateTime = now().start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
     joplin_note_id: str = None
@@ -169,11 +170,32 @@ class MyDiaryDay(BaseModel):
         False  # flagged for inspection, in the case of some potential problem
     )
 
+    @classmethod
+    def init(cls, dt: datetime = now().start_of("day")) -> "MyDiaryDay":
+        from .pocket_connector import MyDiaryPocket
+        from .spotify_connector import MyDiarySpotify
+
+        pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
+        spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt)
+        return cls(
+            dt=dt,
+            pocket_articles=pocket_articles,
+            spotify_tracks=spotify_tracks,
+        )
+
     def spotify_tracks_markdown(self, timezone=None) -> Union[str, None]:
         if not self.spotify_tracks:
             return None
         header = "Name | Artist | Played At"
-        lines = [header] + "---- | ---- | ----"
+        lines = [header, "---- | ---- | ----"]
         for t in self.spotify_tracks:
             lines.append(t.to_markdown(timezone=timezone))
         return "\n".join(lines)
+
+    def init_markdown(self) -> str:
+        md_template = '# {dt}\n\n## Words\n\n## Images\n\n## Pocket articles\n\n## Spotify tracks\n\n{spotify_tracks}'
+        spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
+        # TODO Pocket articles
+        # TODO Google calendar events
+        dt_string = self.dt.to_formatted_date_string()
+        return md_template.format(dt=dt_string, spotify_tracks=spotify_tracks)
