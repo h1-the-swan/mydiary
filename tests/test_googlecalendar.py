@@ -13,6 +13,7 @@ def test_env_loaded():
 
 def test_gcal_api_call():
     from mydiary.googlecalendar_connector import MyDiaryGCal
+    # TODO
 #     mydiary_pocket = MyDiaryPocket()
 #     r = mydiary_pocket.pocket_instance.get(count=1)
 #     assert len(r[0]['list']) == 1

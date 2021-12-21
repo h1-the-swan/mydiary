@@ -178,7 +178,7 @@ class MyDiaryDay(BaseModel):
     )
 
     @classmethod
-    def init(cls, dt: datetime = now().start_of("day")) -> "MyDiaryDay":
+    def from_dt(cls, dt: datetime = now().start_of("day")) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal

@@ -49,12 +49,14 @@ class MyDiaryPocket:
             'favorited': [],
         }
         r = self.pocket_instance.get(state="all", since=timestamp)
-        for item in r[0]["list"].values():
-            a = PocketArticle.from_pocket_item(item)
-            for k in articles.keys():
-                article_dt = getattr(a, f"time_{k}", None)
-                if article_dt:
-                    article_dt = pendulum.instance(article_dt)
-                    if article_dt.in_timezone(dt.timezone).date() == dt.date():
-                        articles[k].append(a)
+        items_dict = r[0]["list"]
+        if items_dict:
+            for item in r[0]["list"].values():
+                a = PocketArticle.from_pocket_item(item)
+                for k in articles.keys():
+                    article_dt = getattr(a, f"time_{k}", None)
+                    if article_dt:
+                        article_dt = pendulum.instance(article_dt)
+                        if article_dt.in_timezone(dt.timezone).date() == dt.date():
+                            articles[k].append(a)
         return articles
