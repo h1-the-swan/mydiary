@@ -39,14 +39,22 @@ class MyDiaryPocket:
             access_token = os.environ["POCKET_ACCESS_TOKEN"]
             self.pocket_instance = Pocket(consumer_key, access_token)
 
-    def get_articles_for_day(self, dt: datetime) -> List[PocketArticle]:
+    def get_articles_for_day(self, dt: datetime) -> Dict[str, List[PocketArticle]]:
         dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
         timestamp = dt.int_timestamp
-        articles = []
+        articles = {
+            'added': [],
+            # 'updated': [],
+            'read': [],
+            'favorited': [],
+        }
         r = self.pocket_instance.get(state="all", since=timestamp)
         for item in r[0]["list"].values():
             a = PocketArticle.from_pocket_item(item)
-            article_dt = pendulum.instance(a.time_updated)
-            if article_dt.in_timezone(dt.timezone).date() == dt.date():
-                articles.append(a)
+            for k in articles.keys():
+                article_dt = getattr(a, f"time_{k}", None)
+                if article_dt:
+                    article_dt = pendulum.instance(article_dt)
+                    if article_dt.in_timezone(dt.timezone).date() == dt.date():
+                        articles[k].append(a)
         return articles

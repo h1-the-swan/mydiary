@@ -8,7 +8,6 @@ from pendulum import now
 from pathlib import Path
 
 
-# TODO
 class SpotifyTrack(BaseModel):
     id: str
     name: str
@@ -107,6 +106,9 @@ class PocketArticle(BaseModel):
             time_favorited=time_favorited,
         )
 
+    def to_markdown(self) -> str:
+        return f"[{self.resolved_title}]({self.url})"
+
 
 class GoogleCalendarEvent(BaseModel):
     id: str
@@ -135,6 +137,11 @@ class GoogleCalendarEvent(BaseModel):
             end=end,
         )
 
+    def to_markdown(self) -> str:
+        # header = "Start | End | Summary"
+        fmt = "%H:%M:%S"
+        return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
+
 
 class Tag(BaseModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
@@ -159,9 +166,9 @@ class MyDiaryDay(BaseModel):
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
     spotify_tracks: List[SpotifyTrack] = []  # Spotify songs played on this day
-    pocket_articles: List[
-        PocketArticle
-    ] = []  # interactions with Pocket articles on this day
+    pocket_articles: Dict[
+        str, List[PocketArticle]
+    ] = {}  # interactions with Pocket articles on this day
     google_calendar_events: List[GoogleCalendarEvent] = []
     rating: Optional[
         int
@@ -174,28 +181,58 @@ class MyDiaryDay(BaseModel):
     def init(cls, dt: datetime = now().start_of("day")) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
+        from .googlecalendar_connector import MyDiaryGCal
 
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
         spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt)
+        google_calendar_events = MyDiaryGCal().get_events_for_day(dt)
         return cls(
             dt=dt,
             pocket_articles=pocket_articles,
             spotify_tracks=spotify_tracks,
+            google_calendar_events=google_calendar_events,
         )
 
-    def spotify_tracks_markdown(self, timezone=None) -> Union[str, None]:
+    def init_markdown(self) -> str:
+        md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
+        google_calendar_events = self.google_calendar_events_markdown()
+        pocket_articles = self.pocket_articles_markdown()
+        spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
+        dt_string = self.dt.to_formatted_date_string()
+        return md_template.format(
+            dt=dt_string,
+            google_calendar_events=google_calendar_events,
+            pocket_articles=pocket_articles,
+            spotify_tracks=spotify_tracks,
+        )
+
+    def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:
-            return None
+            return "None"
         header = "Name | Artist | Played At"
         lines = [header, "---- | ---- | ----"]
         for t in self.spotify_tracks:
             lines.append(t.to_markdown(timezone=timezone))
         return "\n".join(lines)
 
-    def init_markdown(self) -> str:
-        md_template = '# {dt}\n\n## Words\n\n## Images\n\n## Pocket articles\n\n## Spotify tracks\n\n{spotify_tracks}'
-        spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
-        # TODO Pocket articles
-        # TODO Google calendar events
-        dt_string = self.dt.to_formatted_date_string()
-        return md_template.format(dt=dt_string, spotify_tracks=spotify_tracks)
+    def google_calendar_events_markdown(self) -> str:
+        if not self.google_calendar_events:
+            return "None"
+        header = "Start | End | Summary"
+        lines = [header, "---- | ---- | ----"]
+        for e in self.google_calendar_events:
+            lines.append(e.to_markdown())
+        return "\n".join(lines)
+
+    def pocket_articles_markdown(self) -> str:
+        if not self.pocket_articles or not any(self.pocket_articles.values()):
+            return "None"
+        lines = []
+        for k, articles in self.pocket_articles.items():
+            if articles is not None and len(articles) > 0:
+                lines.append(f"{k.title()}:")  # heading
+                for a in articles:
+                    lines.append(a.to_markdown())
+                # add a newline onto the last one in this section
+                lines[-1] += "\n"
+        return "\n".join(lines)
