@@ -54,7 +54,7 @@ class MyDiaryGCal:
                         # you'll need to authorize access again. the procedure is currently in googlecalendar-auth-example.ipynb
                         self.auth_error = exc
                         raise
-                    with open("token.json", "w") as token:
+                    with open(gcal_token_file, "w") as token:
                         token.write(creds.to_json())
                 else:
                     raise RuntimeError(

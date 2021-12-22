@@ -1,0 +1,26 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"uuuuuuuuuuuuuuuu\"",
+  "id": "uuuuuuuuuuuuuuuuuuuuuuuuuu",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+  "created": "2021-12-01T17:00:11.000Z",
+  "updated": "2021-12-01T17:00:11.979Z",
+  "summary": "Holiday in the Park!",
+  "description": " \n \n \n \n\n \n \nIt&#8217;s back! Join our fun free, festival of lights, featuring:\n \n \n\n\n \nLuminarias! \n \n \nWalk the pathways of Volunteer Park lit by over 600 glowing luminarias. \n\n\n \n \n\n\n \nMusic! \n \n \nListen to live joyful music: \n \n \n6:00 PM  STRUM: Seattle&#8217;s Totally Relaxed Ukulele Musicians \n \n \n7:00 PM  The Dickens Carolers \n\n\n \n \n\n\n \nTreats! \n \n \nEnjoy free cookies and cocoa courtesy of Aegis Living on Madison. \n \n \n\n\n \n \n\n\n \nFun! \n \n \nKids can have fun at our children&#8217;s activity booth Please be patient &#8211; limited space available due to COVID requirements. \n \n \nThe Volunteer Park Conservatory will also be open with limited capacity. \n \n \n \n\n\n \n \n\n\n \nStay safe! \n \n \nProof of vaccination or a recent negative COVID test for everyone 12 years or older is required by King County to attend this event. CLICK HERE FOR MORE INFORMATION \n\n\n \n \n\n \n \n\n\n \nVolunteer! \n \n \nWe need all the help we can get to make the return of Holiday in the Park fun and safe for everyone! Dif (View Full Event Description Here: https://volunteerparktrust.org/event/holiday-2021/)",
+  "location": "Volunteer Park, 1247 15th Ave E., Seattle, Washington, 98112, United States",
+  "creator": { "email": "jason.portenoy@gmail.com", "self": true },
+  "organizer": { "email": "jason.portenoy@gmail.com", "self": true },
+  "start": {
+    "dateTime": "2021-12-09T18:00:00-08:00",
+    "timeZone": "America/Los_Angeles"
+  },
+  "end": {
+    "dateTime": "2021-12-09T20:00:00-08:00",
+    "timeZone": "America/Los_Angeles"
+  },
+  "iCalUID": "uuuuuuuuuuuuuuuuuuuuuuuuuu@google.com",
+  "sequence": 0,
+  "reminders": { "useDefault": true },
+  "eventType": "default"
+}

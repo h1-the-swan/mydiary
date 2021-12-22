@@ -26,12 +26,12 @@ def main(args):
     try:
         mydiary_joplin = MyDiaryJoplin()
         if not mydiary_joplin.server_is_running():
-            logger.debug("starting Joplin server")
+            logger.info("starting Joplin server")
             mydiary_joplin.start_server()
 
-        logger.debug("starting Joplin sync")
+        logger.info("starting Joplin sync")
         mydiary_joplin.sync()
-        logger.debug("sync complete")
+        logger.info("sync complete")
 
         today = pendulum.today()
         day = MyDiaryDay.from_dt(today)
@@ -41,13 +41,13 @@ def main(args):
             'title': day.dt.strftime("%Y-%m-%d"),
             'body': day.init_markdown(),
         }
-        logger.debug(f"creating note: {data['title']}")
+        logger.info(f"creating note: {data['title']}")
         r_post_note = mydiary_joplin.post_note(data)
-        logger.debug(f"done. status code: {r_post_note.status_code}")
+        logger.info(f"done. status code: {r_post_note.status_code}")
 
-        logger.debug("starting Joplin sync")
+        logger.info("starting Joplin sync")
         mydiary_joplin.sync()
-        logger.debug("sync complete")
+        logger.info("sync complete")
     finally:
         mydiary_joplin.teardown()
 
