@@ -1,6 +1,8 @@
 import uuid
 from typing import List, Dict, Union, Optional
 from enum import Enum, IntEnum
+from requests import Response
+from google.auth.transport import requests
 import pendulum
 from pydantic import BaseModel, Field
 from datetime import datetime, date
@@ -126,8 +128,8 @@ class GoogleCalendarEvent(BaseModel):
         summary = event["summary"]
         location = event.get("location", None)
         description = event.get("description", None)
-        start = datetime.fromisoformat(event["start"]["dateTime"])
-        end = datetime.fromisoformat(event["end"]["dateTime"])
+        start = cls.get_datetime_or_date(event["start"])
+        end = cls.get_datetime_or_date(event["end"])
         return cls(
             id=id,
             summary=summary,
@@ -137,10 +139,40 @@ class GoogleCalendarEvent(BaseModel):
             end=end,
         )
 
+    @classmethod
+    def get_datetime_or_date(self, obj) -> datetime:
+        if 'dateTime' in obj:
+            return datetime.fromisoformat(obj['dateTime'])
+        elif 'date' in obj:
+            return datetime.fromisoformat(obj['date'])
+        else:
+            raise ValueError(f'passed object {obj} does not have key "dateTime" or "date"')
+
     def to_markdown(self) -> str:
         # header = "Start | End | Summary"
         fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
+
+class JoplinNote(BaseModel):
+    id: str
+    parent_id: str  # notebook id
+    title: str
+    body: str  # in markdown
+    created_time: datetime
+    updated_time: datetime
+
+    @classmethod
+    def from_api_response(cls, r: Union[Response, Dict]) -> 'JoplinNote':
+        if isinstance(r, Response):
+            r = r.json()
+        return cls(
+            id=r['id'],
+            parent_id=r['parent_id'],
+            title=r['title'],
+            body=r['body'],
+            created_time=datetime.fromtimestamp(r['created_time'] / 1000),
+            updated_time=datetime.fromtimestamp(r['updated_time'] / 1000),
+        )
 
 
 class Tag(BaseModel):
@@ -192,6 +224,13 @@ class MyDiaryDay(BaseModel):
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
         )
+
+    def get_joplin_note_id(self) -> Union[str, None]:
+        from .joplin_connector import MyDiaryJoplin
+        with MyDiaryJoplin() as mj:
+            note_id = mj.get_note_id_by_date(self.dt)
+        return note_id
+
 
     def init_markdown(self) -> str:
         md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"

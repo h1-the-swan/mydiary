@@ -1,5 +1,7 @@
 import os, json
 from pathlib import Path
+
+import pendulum
 from mydiary.models import GoogleCalendarEvent
 
 from dotenv import load_dotenv, find_dotenv
@@ -13,17 +15,21 @@ def test_env_loaded():
 
 def test_gcal_api_call():
     from mydiary.googlecalendar_connector import MyDiaryGCal
-    # TODO
-#     mydiary_pocket = MyDiaryPocket()
-#     r = mydiary_pocket.pocket_instance.get(count=1)
-#     assert len(r[0]['list']) == 1
+    dt = pendulum.datetime(year=2018, month=8, day=30)
+    dt = pendulum.datetime(year=2018, month=8, day=30, tz='America/Los_Angeles')
+    events = MyDiaryGCal().get_events_for_day(dt)
+    event = events[0]
+    assert dt.is_same_day(event.start)
+    assert dt.is_same_day(event.end)
 
-# def test_pocket_article(rootdir):
-#     fp = Path(rootdir).joinpath("pocketitem.json")
-#     article_json = json.loads(fp.read_text())
-#     article = PocketArticle.from_pocket_item(article_json)
-#     assert article.status == PocketStatusEnum.UNREAD
-#     assert article.favorite is False
+def test_gcal_event(rootdir):
+    fp = Path(rootdir).joinpath("gcalevent.json")
+    article_json = json.loads(fp.read_text())
+    event = GoogleCalendarEvent.from_gcal_api_event(article_json)
+    assert event.summary == "Holiday in the Park!"
+    assert 'seattle' in event.location.lower()
+    assert pendulum.instance(event.start).in_tz('America/Los_Angeles') == event.start
+    assert pendulum.instance(event.end).in_tz('America/Los_Angeles') == event.end
 
     
 

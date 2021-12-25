@@ -63,7 +63,8 @@ class MyDiaryGCal:
             self.service = build("calendar", "v3", credentials=creds)
 
     def get_events_for_day(self, dt: datetime):
-        dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
+        # dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
+        dt = pendulum.instance(dt).start_of('day')
         dt_max = dt.add(days=1)
         calendarId = "primary"
         # TODO this only gets events that start and end on the given date. should probably get all events that start on or before date and end on or after date
