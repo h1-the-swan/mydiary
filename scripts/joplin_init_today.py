@@ -56,7 +56,7 @@ if __name__ == "__main__":
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(name)s.%(lineno)d %(levelname)s : %(message)s", datefmt="%H:%M:%S"))
     root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO)
+    logger.setLevel(logging.INFO)
     logger.info(" ".join(sys.argv))
     logger.info( '{:%Y-%m-%d %H:%M:%S}'.format(datetime.now()) )
     logger.info("pid: {}".format(os.getpid()))
@@ -66,7 +66,8 @@ if __name__ == "__main__":
     global args
     args = parser.parse_args()
     if args.debug:
-        root_logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        logging.getLogger('mydiary').setLevel(logging.DEBUG)
         logger.debug('debug mode is on')
     main(args)
     total_end = timer()

@@ -2,16 +2,19 @@
 
 DESCRIPTION = """Joplin API (local instance)"""
 
-import sys, os, time
+import sys, os, time, json, re
 import requests
 import subprocess
+import hashlib
 from pathlib import Path
 from datetime import date, datetime
+from time import sleep
 import pendulum
 from timeit import default_timer as timer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from mydiary.models import JoplinNote
+from .core import reduce_image_size
+from .models import JoplinNote
 
 try:
     from humanfriendly import format_timespan
@@ -36,8 +39,16 @@ JOPLIN_AUTH_TOKEN = os.environ["JOPLIN_AUTH_TOKEN"]
 # for testing purposes. we'll probably want to get this from an environment variable.
 JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 
+JOPLIN_CONFIG = {
+    "locale": "en_US",
+    "dateFormat": "YYYY-MM-DD",
+    "timeFormat": "HH:mm",
+}
+
+
 def title_from_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d")
+
 
 class MyDiaryJoplin:
     def __init__(
@@ -45,6 +56,9 @@ class MyDiaryJoplin:
         token: Optional[str] = None,
         server_process: Optional[subprocess.Popen] = None,
         notebook_id: str = JOPLIN_NOTEBOOK_ID,
+        init_config: bool = True,
+        # quiet: bool = True,
+        last_sync: Optional[pendulum.DateTime] = None,
     ) -> None:
         self.base_url = JOPLIN_BASE_URL
         self.token = token
@@ -52,15 +66,20 @@ class MyDiaryJoplin:
             self.token = JOPLIN_AUTH_TOKEN
         self.server_process = server_process
         self.notebook_id = notebook_id
+        # self.quiet = quiet
+        self.last_sync = last_sync
 
-    def __enter__(self) -> 'MyDiaryJoplin':
+        if init_config is True:
+            self.config()
+
+    def __enter__(self) -> "MyDiaryJoplin":
         """This allows this class to be used as a context manager.
 
         ```
         with MyDiaryJoplin() as mj:
             mj.get_note(note_id)
         ```
-        """        
+        """
         if not self.server_is_running():
             self.start_server()
         return self
@@ -69,6 +88,14 @@ class MyDiaryJoplin:
         # this is called after the context manager ends
         self.teardown()
 
+    def config(self, conf: Dict[str, str] = JOPLIN_CONFIG, timeout: int = 20) -> None:
+        for k, v in conf.items():
+            p = subprocess.run(
+                ["joplin", "config", k, v],
+                timeout=timeout,
+            )
+            p.check_returncode()
+
     def server_is_running(self) -> bool:
         try:
             r = requests.get(f"{self.base_url}/ping")
@@ -76,29 +103,43 @@ class MyDiaryJoplin:
             return False
         return r.ok
 
-    def start_server(self) -> None:
+    def _start_server(self) -> None:
+        _stdout = subprocess.PIPE
         self.server_process = subprocess.Popen(
             ["joplin", "server", "start"],
-            stdout=subprocess.DEVNULL,
+            stdout=_stdout,
             stderr=subprocess.STDOUT,
         )
+
+    def start_server(self) -> None:
+        self._start_server()
+        # wait until server process writes to stdout, which it does when it has started
+        line = self.server_process.stdout.readline()
+        logger.debug(line)
+        sleep(0.5)
 
     def teardown(self) -> None:
         if self.server_process is not None:
             self.server_process.terminate()
 
-    def sync(self, quiet=True, timeout: int = 20) -> None:
+    def sync(self, timeout: int = 20) -> None:
         # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
-        if quiet is True:
-            _stdout = subprocess.DEVNULL
-        else:
-            _stdout = None
-        subprocess.run(
+        pattern = re.compile(r"Completed: (\d.*)\(")
+        p = subprocess.run(
             ["joplin", "sync"],
-            stdout=_stdout,
-            stderr=subprocess.STDOUT,
+            capture_output=True,
+            encoding="utf8",
             timeout=timeout,
         )
+        for line in p.stdout.splitlines():
+            m = pattern.search(line)
+            if m:
+                dt_str = m.group(1).strip()
+                try:
+                    dt = pendulum.parse(dt_str, tz="local")
+                    self.last_sync = dt
+                except pendulum.parsing.ParserError:
+                    pass
 
     def post_note(self, data: Dict[str, Any]):
         return requests.post(
@@ -140,3 +181,53 @@ class MyDiaryJoplin:
         }
         r = requests.get(f"{self.base_url}/notes/{id}", params=params)
         return JoplinNote.from_api_response(r)
+
+    def create_resource(
+        self,
+        data: bytes,
+        title: str = None,
+        ext: str = "jpg",
+    ) -> requests.Response:
+        hash = hashlib.md5()
+        hash.update(data)
+        if title is None:
+            title = hash.hexdigest()
+        if ext and ext.startswith("."):
+            ext = ext[1:]
+        props = {
+            "id": hash.hexdigest(),
+            "filename": f"{hash.hexdigest()}.{ext}",
+            "title": title,
+        }
+        response = requests.post(
+            f"{self.base_url}/resources",
+            files={
+                "data": (
+                    f"{hash.hexdigest()}.{ext}",
+                    data,
+                    "multipart/form-data",
+                )
+            },
+            data={"props": json.dumps(props)},
+            params={"token": self.token},
+        )
+        return response
+
+    def reduce_image_size(
+        self,
+        resource_id: str,
+        size: Tuple[int, int] = (512, 512),
+        delete_original: bool = True,
+    ) -> None:
+        resource_file = requests.get(
+            f"{JOPLIN_BASE_URL}/resources/{resource_id}/file",
+            params={"token": self.token},
+        )
+        image_bytes = reduce_image_size(resource_file.content, size)
+        r = self.create_resource(data=image_bytes.getvalue())
+        if delete_original is True:
+            requests.delete(
+                f"{JOPLIN_BASE_URL}/resources/{resource_id}",
+                params={"token": self.token},
+            )
+        return r
