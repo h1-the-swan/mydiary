@@ -49,7 +49,7 @@ class MarkdownDoc:
         # sections = OrderedDict()
         this_section = []
         this_section_title = ""
-        this_section_txt = ""
+        # this_section_txt = ""
         for line in markdown_text.split("\n"):
             if line.startswith("```"):
                 protect_flag = not protect_flag
