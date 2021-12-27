@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Dict, Union, Optional
+from typing import Any, List, Dict, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
 from google.auth.transport import requests
@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
+
+import logging
+
+root_logger = logging.getLogger()
+logger = root_logger.getChild(__name__)
 
 
 class SpotifyTrack(BaseModel):
@@ -70,29 +75,29 @@ class PocketArticle(BaseModel):
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
         # Parse a Pocket article from the Pocket API
         id = item["item_id"]
-        given_title = item["given_title"]
-        resolved_title = item["resolved_title"]
-        url = item["resolved_url"]
-        favorite = int(item["favorite"])
+        given_title = item.get("given_title", "")
+        resolved_title = item.get("resolved_title", "")
+        url = item.get("resolved_url", "")
+        favorite = int(item.get("favorite", "0"))
         status = int(item["status"])
         time_added = (
             datetime.fromtimestamp(int(item["time_added"]))
-            if int(item["time_added"]) != 0
+            if "time_added" in item and int(item["time_added"]) != 0
             else None
         )
         time_updated = (
             datetime.fromtimestamp(int(item["time_updated"]))
-            if int(item["time_updated"]) != 0
+            if "time_updated" in item and int(item["time_updated"]) != 0
             else None
         )
         time_read = (
             datetime.fromtimestamp(int(item["time_read"]))
-            if int(item["time_read"]) != 0
+            if "time_read" in item and int(item["time_read"]) != 0
             else None
         )
         time_favorited = (
             datetime.fromtimestamp(int(item["time_favorited"]))
-            if int(item["time_favorited"]) != 0
+            if "time_favorited" in item and int(item["time_favorited"]) != 0
             else None
         )
         return cls(
@@ -141,17 +146,20 @@ class GoogleCalendarEvent(BaseModel):
 
     @classmethod
     def get_datetime_or_date(self, obj) -> datetime:
-        if 'dateTime' in obj:
-            return datetime.fromisoformat(obj['dateTime'])
-        elif 'date' in obj:
-            return datetime.fromisoformat(obj['date'])
+        if "dateTime" in obj:
+            return datetime.fromisoformat(obj["dateTime"])
+        elif "date" in obj:
+            return datetime.fromisoformat(obj["date"])
         else:
-            raise ValueError(f'passed object {obj} does not have key "dateTime" or "date"')
+            raise ValueError(
+                f'passed object {obj} does not have key "dateTime" or "date"'
+            )
 
     def to_markdown(self) -> str:
         # header = "Start | End | Summary"
         fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
+
 
 class JoplinNote(BaseModel):
     id: str
@@ -162,16 +170,16 @@ class JoplinNote(BaseModel):
     updated_time: datetime
 
     @classmethod
-    def from_api_response(cls, r: Union[Response, Dict]) -> 'JoplinNote':
+    def from_api_response(cls, r: Union[Response, Dict]) -> "JoplinNote":
         if isinstance(r, Response):
             r = r.json()
         return cls(
-            id=r['id'],
-            parent_id=r['parent_id'],
-            title=r['title'],
-            body=r['body'],
-            created_time=datetime.fromtimestamp(r['created_time'] / 1000),
-            updated_time=datetime.fromtimestamp(r['updated_time'] / 1000),
+            id=r["id"],
+            parent_id=r["parent_id"],
+            title=r["title"],
+            body=r["body"],
+            created_time=datetime.fromtimestamp(r["created_time"] / 1000),
+            updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
         )
 
 
@@ -194,6 +202,7 @@ class MyDiaryDay(BaseModel):
     dt: pendulum.DateTime = now().start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
+    joplin_connector: Optional[Any] = None
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
@@ -210,7 +219,7 @@ class MyDiaryDay(BaseModel):
     )
 
     @classmethod
-    def from_dt(cls, dt: datetime = now().start_of("day")) -> "MyDiaryDay":
+    def from_dt(cls, dt: datetime = now().start_of("day"), **kwargs) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
@@ -223,14 +232,17 @@ class MyDiaryDay(BaseModel):
             pocket_articles=pocket_articles,
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
+            **kwargs,
         )
 
     def get_joplin_note_id(self) -> Union[str, None]:
         from .joplin_connector import MyDiaryJoplin
-        with MyDiaryJoplin() as mj:
-            note_id = mj.get_note_id_by_date(self.dt)
-        return note_id
 
+        if isinstance(self.joplin_connector, MyDiaryJoplin):
+            return self.joplin_connector.get_note_id_by_date(self.dt)
+        else:
+            with MyDiaryJoplin() as mj:
+                return mj.get_note_id_by_date(self.dt)
 
     def init_markdown(self) -> str:
         md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"

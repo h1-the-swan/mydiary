@@ -53,6 +53,8 @@ class MyDiaryPocket:
         if items_dict:
             for item in r[0]["list"].values():
                 a = PocketArticle.from_pocket_item(item)
+                if a.status == "SHOULD_BE_DELETED":
+                    continue
                 for k in articles.keys():
                     article_dt = getattr(a, f"time_{k}", None)
                     if article_dt:

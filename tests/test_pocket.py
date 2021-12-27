@@ -24,7 +24,3 @@ def test_pocket_article(rootdir):
     article = PocketArticle.from_pocket_item(article_json)
     assert article.status == PocketStatusEnum.UNREAD
     assert article.favorite is False
-
-    
-
-

@@ -4,6 +4,7 @@ DESCRIPTION = """Make edits to Markdown docs, prioritizing making sure nothing i
 
 from collections import OrderedDict
 from typing import Any, Generator, List, Tuple
+import difflib
 
 import logging
 
@@ -32,7 +33,7 @@ class MarkdownDoc:
 
     def split_into_sections(
         self, markdown_text: str, level=2
-    ) -> Generator[Tuple[str, str], None, None]:
+    ) -> Generator[Tuple[str, List[str]], None, None]:
         """This is a very simple way of splitting the markdown text into sections.
         It will not handle edge cases very well.
 
@@ -40,9 +41,9 @@ class MarkdownDoc:
             markdown_text (str): full text in Markdown format
             level (int, optional): Heading level to split by. Defaults to 2, meaning "## <Heading label>"
 
-        Returns:
-            List[str]: list of original text split into sections (with e.g. "## " removed)
-        """
+        Yields:
+            Generator[Tuple[str, List[str]], None, None]: Tuple of (section title, list of lines)
+        """        
         heading_indicator = "#" * level
         protect_flag = False
         # sections = OrderedDict()
@@ -55,25 +56,58 @@ class MarkdownDoc:
             if protect_flag is False and line.startswith(heading_indicator + " "):
                 # sections.append("\n".join(this_section))
                 # sections[this_section_title] = "\n".join(this_section)
-                this_section_txt = "\n".join(this_section)
-                yield this_section_title, this_section_txt
+                # this_section_txt = "\n".join(this_section)
+                yield this_section_title, this_section
                 this_section = [line]
                 this_section_title = line.strip(heading_indicator).strip()
             else:
                 this_section.append(line)
         # sections.append("\n".join(this_section))
-        this_section_txt = "\n".join(this_section)
-        yield this_section_title, this_section_txt
+        # this_section_txt = "\n".join(this_section)
+        yield this_section_title, this_section
 
 
 class MarkdownSection:
-    def __init__(self, txt: str, title: str = "", parent: Any = None, level=2) -> None:
-        self.txt = txt
+    def __init__(self, lines: List[str], title: str = "", parent: Any = None, level=2) -> None:
+        self.lines = lines
         self.title = title
         self.parent = parent
         self.level = level
+
+        self.txt = "\n".join(self.lines)
+        self.content = self.get_content()
+    
+    def get_content(self) -> str:
+        content_lines = self.lines[1:]
+        content = "\n".join(content_lines)
+        content = content.strip()
+        return content
 
     def __repr__(self) -> str:
         txt_repr = self.txt[:50] + "..." if len(self.txt) > 50 else self.txt
         txt_repr = txt_repr.replace("\n", "\\")
         return f"{self.__class__}({txt_repr})"
+
+    def update(self, new_txt: str) -> None:
+        if not new_txt or new_txt == "None":
+            # no new text to replace. do nothing
+            return
+        if self.txt == new_txt:
+            # new text is the same as old text. do nothing
+            return
+        replace = False
+        if not self.content or self.content == "None":
+            # no old text exists. safe to replace
+            replace = True
+        else:
+            s = difflib.SequenceMatcher(None, self.lines, new_txt.splitlines())
+            tags = [opcode[0] for opcode in s.get_opcodes()]
+            if all(tag in ['equal', 'insert'] for tag in tags):
+                # no merge conflicts (nothing to delete or insert). safe to replace
+                replace = True  
+        if replace is True:
+            self.txt = new_txt
+            self.lines = self.txt.splitlines()
+            self.content = self.get_content()
+            return
+        raise RuntimeError("could not update text")

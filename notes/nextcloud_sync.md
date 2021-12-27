@@ -3,7 +3,7 @@ With `nextcloud-docker` running (with docker-compose), find the local IP address
 Set in the WSL Joplin instance:
 
 ```sh
-joplin config sync.5.path http://192.168.0.107:8080/remote.php/webdav/Joplin
+joplin config sync.5.path http://192.168.0.107:48916/remote.php/webdav/Joplin
 ```
 
 Also change in the nextcloud-docker `config.php` file (under 'trusted_domains'), and docker-compose restart if necessary.
