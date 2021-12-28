@@ -182,6 +182,13 @@ class MyDiaryJoplin:
         r = requests.get(f"{self.base_url}/notes/{id}", params=params)
         return JoplinNote.from_api_response(r)
 
+    def update_note_body(self, note_id: str, new_body: str):
+        return requests.put(
+            f"{self.base_url}/notes/{note_id}",
+            json={"body": new_body},
+            params={"token": self.token},
+        )
+
     def create_resource(
         self,
         data: bytes,

@@ -18,18 +18,30 @@ class MarkdownDoc:
         txt: str,
         parent: Any = None,
     ) -> None:
-        self.txt = txt
+        # self.txt = txt
         self.parent = parent
 
         self.sections = [
             MarkdownSection(sec, title, parent=self, level=2)
-            for title, sec in self.split_into_sections(self.txt, level=2)
+            for title, sec in self.split_into_sections(txt, level=2)
         ]
+
+    @property
+    def txt(self):
+        return "\n".join([section.txt for section in self.sections])
 
     def __repr__(self) -> str:
         txt_repr = self.txt[:50] + "..." if len(self.txt) > 50 else self.txt
         txt_repr = txt_repr.replace("\n", "\\")
         return f"{self.__class__}({txt_repr})"
+
+    def get_section_by_title(self, title: str) -> "MarkdownSection":
+        s = [sec for sec in self.sections if sec.title == title]
+        if len(s) < 1:
+            raise KeyError(f"could not find section with title {title}")
+        elif len(s) > 1:
+            raise KeyError(f"ERROR: more than one section found with title {title}")
+        return s[0]
 
     def split_into_sections(
         self, markdown_text: str, level=2
@@ -43,7 +55,7 @@ class MarkdownDoc:
 
         Yields:
             Generator[Tuple[str, List[str]], None, None]: Tuple of (section title, list of lines)
-        """        
+        """
         heading_indicator = "#" * level
         protect_flag = False
         # sections = OrderedDict()
@@ -68,7 +80,9 @@ class MarkdownDoc:
 
 
 class MarkdownSection:
-    def __init__(self, lines: List[str], title: str = "", parent: Any = None, level=2) -> None:
+    def __init__(
+        self, lines: List[str], title: str = "", parent: Any = None, level=2
+    ) -> None:
         self.lines = lines
         self.title = title
         self.parent = parent
@@ -76,7 +90,7 @@ class MarkdownSection:
 
         self.txt = "\n".join(self.lines)
         self.content = self.get_content()
-    
+
     def get_content(self) -> str:
         content_lines = self.lines[1:]
         content = "\n".join(content_lines)
@@ -88,13 +102,14 @@ class MarkdownSection:
         txt_repr = txt_repr.replace("\n", "\\")
         return f"{self.__class__}({txt_repr})"
 
-    def update(self, new_txt: str) -> None:
-        if not new_txt or new_txt == "None":
+    def update(self, new_txt: str) -> str:
+        new_sec = MarkdownSection(new_txt.splitlines())
+        if not new_sec.content or new_sec.content == "None":
             # no new text to replace. do nothing
-            return
+            return "no update"
         if self.txt == new_txt:
             # new text is the same as old text. do nothing
-            return
+            return "no update"
         replace = False
         if not self.content or self.content == "None":
             # no old text exists. safe to replace
@@ -102,12 +117,19 @@ class MarkdownSection:
         else:
             s = difflib.SequenceMatcher(None, self.lines, new_txt.splitlines())
             tags = [opcode[0] for opcode in s.get_opcodes()]
-            if all(tag in ['equal', 'insert'] for tag in tags):
+            if all(tag in ["equal", "insert"] for tag in tags):
                 # no merge conflicts (nothing to delete or insert). safe to replace
-                replace = True  
+                replace = True
+            else:
+                logger.debug(tags)
         if replace is True:
             self.txt = new_txt
             self.lines = self.txt.splitlines()
             self.content = self.get_content()
-            return
+            return "updated"
+        # logger.debug(new_txt)
+        # from difflib import Differ
+        # logger.debug(MarkdownSection(new_txt.splitlines()).content)
+        # for x in Differ().compare(self.lines, new_txt.splitlines()):
+        #     logger.debug(x)
         raise RuntimeError("could not update text")

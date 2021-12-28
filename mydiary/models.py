@@ -114,7 +114,13 @@ class PocketArticle(BaseModel):
         )
 
     def to_markdown(self) -> str:
-        return f"[{self.resolved_title}]({self.url})"
+        if self.resolved_title:
+            title = self.resolved_title
+        elif self.given_title:
+            title = self.given_title
+        else:
+            title = "Unknown title"
+        return f"[{title}]({self.url})"
 
 
 class GoogleCalendarEvent(BaseModel):
@@ -239,10 +245,11 @@ class MyDiaryDay(BaseModel):
         from .joplin_connector import MyDiaryJoplin
 
         if isinstance(self.joplin_connector, MyDiaryJoplin):
-            return self.joplin_connector.get_note_id_by_date(self.dt)
+            self.joplin_note_id =  self.joplin_connector.get_note_id_by_date(self.dt)
         else:
             with MyDiaryJoplin() as mj:
-                return mj.get_note_id_by_date(self.dt)
+                self.joplin_note_id = mj.get_note_id_by_date(self.dt)
+        return self.joplin_note_id
 
     def init_markdown(self) -> str:
         md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"

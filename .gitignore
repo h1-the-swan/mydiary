@@ -28,3 +28,5 @@ token_cache/*
 dist/
 
 data/
+
+tests/images
