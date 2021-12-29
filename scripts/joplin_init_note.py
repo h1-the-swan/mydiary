@@ -25,6 +25,7 @@ from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
 
 JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
+# JOPLIN_NOTEBOOK_ID = "b2494842bba94ef3b429f682c4e3386f"
 
 
 def main(args):
@@ -49,14 +50,14 @@ def main(args):
                 f"Joplin note already exists for date {dt.to_date_string()} (note id: {existing_id})!"
             )
 
-        data = {
-            "id": day.uid.hex,
-            "parent_id": JOPLIN_NOTEBOOK_ID,
-            "title": day.dt.strftime("%Y-%m-%d"),
-            "body": day.init_markdown(),
-        }
-        logger.info(f"creating note: {data['title']}")
-        r_post_note = mydiary_joplin.post_note(data)
+        title = day.dt.strftime("%Y-%m-%d")
+        body = day.init_markdown()
+        id = day.uid.hex
+        parent_id = mydiary_joplin.get_subfolder_id(str(day.dt.year))
+        logger.info(f"creating note: {title}")
+        r_post_note = mydiary_joplin.post_note(
+            title=title, body=body, id=id, parent_id=parent_id
+        )
         logger.info(f"done. status code: {r_post_note.status_code}")
 
         logger.info("starting Joplin sync")

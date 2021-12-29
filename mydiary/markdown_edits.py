@@ -36,7 +36,7 @@ class MarkdownDoc:
         return f"{self.__class__}({txt_repr})"
 
     def get_section_by_title(self, title: str) -> "MarkdownSection":
-        s = [sec for sec in self.sections if sec.title == title]
+        s = [sec for sec in self.sections if sec.title.lower() == title.lower()]
         if len(s) < 1:
             raise KeyError(f"could not find section with title {title}")
         elif len(s) > 1:
@@ -115,7 +115,7 @@ class MarkdownSection:
             # no old text exists. safe to replace
             replace = True
         else:
-            s = difflib.SequenceMatcher(None, self.lines, new_txt.splitlines())
+            s = difflib.SequenceMatcher(None, self.content.splitlines(), new_sec.content.splitlines())
             tags = [opcode[0] for opcode in s.get_opcodes()]
             if all(tag in ["equal", "insert"] for tag in tags):
                 # no merge conflicts (nothing to delete or insert). safe to replace
@@ -127,9 +127,9 @@ class MarkdownSection:
             self.lines = self.txt.splitlines()
             self.content = self.get_content()
             return "updated"
-        # logger.debug(new_txt)
-        # from difflib import Differ
-        # logger.debug(MarkdownSection(new_txt.splitlines()).content)
-        # for x in Differ().compare(self.lines, new_txt.splitlines()):
-        #     logger.debug(x)
+        logger.debug(new_txt)
+        from difflib import Differ
+        logger.debug(MarkdownSection(new_txt.splitlines()).content)
+        for x in Differ().compare(self.lines, new_txt.splitlines()):
+            logger.debug(x)
         raise RuntimeError("could not update text")

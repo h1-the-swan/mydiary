@@ -166,6 +166,27 @@ class GoogleCalendarEvent(BaseModel):
         fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
 
+class JoplinFolder(BaseModel):
+    """This is actually a notebook. Internally notebooks are called "folders".
+    See https://joplinapp.org/api/references/rest_api/
+    """    
+    id: str
+    title: str
+    created_time: datetime
+    updated_time: datetime
+    parent_id: str
+
+    @classmethod
+    def from_api_response(cls, r: Union[Response, Dict]) -> "JoplinFolder":
+        if isinstance(r, Response):
+            r = r.json()
+        return cls(
+            id=r["id"],
+            title=r["title"],
+            created_time=datetime.fromtimestamp(r["created_time"] / 1000),
+            updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
+            parent_id=r["parent_id"],
+        )
 
 class JoplinNote(BaseModel):
     id: str
@@ -245,7 +266,7 @@ class MyDiaryDay(BaseModel):
         from .joplin_connector import MyDiaryJoplin
 
         if isinstance(self.joplin_connector, MyDiaryJoplin):
-            self.joplin_note_id =  self.joplin_connector.get_note_id_by_date(self.dt)
+            self.joplin_note_id = self.joplin_connector.get_note_id_by_date(self.dt)
         else:
             with MyDiaryJoplin() as mj:
                 self.joplin_note_id = mj.get_note_id_by_date(self.dt)
