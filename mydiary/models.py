@@ -163,7 +163,12 @@ class GoogleCalendarEvent(BaseModel):
 
     def to_markdown(self) -> str:
         # header = "Start | End | Summary"
-        fmt = "%H:%M:%S"
+        start = pendulum.instance(self.start)
+        end = pendulum.instance(self.end)
+        if not start.is_same_day(end):
+            fmt = "%Y-%m-%d %H:%M:%S"
+        else:
+            fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
 
 class JoplinFolder(BaseModel):

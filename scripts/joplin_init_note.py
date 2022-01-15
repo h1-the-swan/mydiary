@@ -53,10 +53,18 @@ def main(args):
         title = day.dt.strftime("%Y-%m-%d")
         body = day.init_markdown()
         id = day.uid.hex
-        parent_id = mydiary_joplin.get_subfolder_id(str(day.dt.year))
+        subfolder_title = str(day.dt.year)
+        subfolder_id = mydiary_joplin.get_subfolder_id(subfolder_title)
+        if subfolder_id is None:
+            logger.info(f'"{subfolder_title}" subfolder (subnotebook) not found.')
+            logger.info(f'creating subfolder "{subfolder_title}"')
+            r_create_subfolder = mydiary_joplin.create_subfolder(subfolder_title)
+            r_create_subfolder.raise_for_status()
+            logger.debug(f"created subfolder. response: {r_create_subfolder.json()}")
+            subfolder_id = r_create_subfolder.json()['id']
         logger.info(f"creating note: {title}")
         r_post_note = mydiary_joplin.post_note(
-            title=title, body=body, id=id, parent_id=parent_id
+            title=title, body=body, id=id, parent_id=subfolder_id
         )
         logger.info(f"done. status code: {r_post_note.status_code}")
 

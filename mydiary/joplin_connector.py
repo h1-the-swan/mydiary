@@ -125,6 +125,15 @@ class MyDiaryJoplin:
                 f"More than one subfolder with title {title} found under parent notebook {self.notebook_id}"
             )
 
+    def create_subfolder(self, title: str) -> requests.Response:
+        data = {
+            "title": title,
+            "parent_id": self.notebook_id,
+        }
+        return requests.post(
+            f"{self.base_url}/folders", json=data, params={"token": self.token}
+        )
+
     def config(self, conf: Dict[str, str] = JOPLIN_CONFIG, timeout: int = 20) -> None:
         for k, v in conf.items():
             p = subprocess.run(
@@ -168,15 +177,19 @@ class MyDiaryJoplin:
             encoding="utf8",
             timeout=timeout,
         )
+        success = False
         for line in p.stdout.splitlines():
             m = pattern.search(line)
             if m:
+                success = True
                 dt_str = m.group(1).strip()
                 try:
                     dt = pendulum.parse(dt_str, tz="local")
                     self.last_sync = dt
                 except pendulum.parsing.ParserError:
                     pass
+        if not success:
+            raise RuntimeError("Joplin sync was unsuccessful")
 
     def post_note(
         self,
