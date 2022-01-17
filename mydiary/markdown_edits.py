@@ -5,6 +5,7 @@ DESCRIPTION = """Make edits to Markdown docs, prioritizing making sure nothing i
 from collections import OrderedDict
 from typing import Any, Generator, List, Tuple
 import difflib
+import re
 
 import logging
 
@@ -102,7 +103,13 @@ class MarkdownSection:
         txt_repr = txt_repr.replace("\n", "\\")
         return f"{self.__class__}({txt_repr})"
 
-    def update(self, new_txt: str) -> str:
+    def __str__(self) -> str:
+        return self.txt
+
+    def get_resource_ids(self) -> List[str]:
+        return re.findall(r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", self.content)
+
+    def update(self, new_txt: str, force: bool = False) -> str:
         new_sec = MarkdownSection(new_txt.splitlines())
         if not new_sec.content or new_sec.content == "None":
             # no new text to replace. do nothing
@@ -110,23 +117,28 @@ class MarkdownSection:
         if self.txt == new_txt:
             # new text is the same as old text. do nothing
             return "no update"
-        replace = False
-        if not self.content or self.content == "None":
-            # no old text exists. safe to replace
+
+        if force is True:
             replace = True
         else:
-            s = difflib.SequenceMatcher(None, self.content.splitlines(), new_sec.content.splitlines())
-            tags = [opcode[0] for opcode in s.get_opcodes()]
-            if all(tag in ["equal", "insert"] for tag in tags):
-                # no merge conflicts (nothing to delete or insert). safe to replace
+            replace = False
+            if not self.content or self.content == "None":
+                # no old text exists. safe to replace
                 replace = True
             else:
-                logger.debug(tags)
+                s = difflib.SequenceMatcher(None, self.content.splitlines(), new_sec.content.splitlines())
+                tags = [opcode[0] for opcode in s.get_opcodes()]
+                if all(tag in ["equal", "insert"] for tag in tags):
+                    # no merge conflicts (nothing to delete or insert). safe to replace
+                    replace = True
+                else:
+                    logger.debug(tags)
         if replace is True:
             self.txt = new_txt
             self.lines = self.txt.splitlines()
             self.content = self.get_content()
             return "updated"
+
         logger.debug(new_txt)
         from difflib import Differ
         logger.debug(MarkdownSection(new_txt.splitlines()).content)

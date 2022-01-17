@@ -234,7 +234,7 @@ class MyDiaryDay(BaseModel):
     dt: pendulum.DateTime = now().start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
-    joplin_connector: Optional[Any] = None
+    joplin_connector: Any = Field(None, exclude=True)
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []

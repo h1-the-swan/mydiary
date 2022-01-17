@@ -25,7 +25,7 @@ from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.markdown_edits import MarkdownDoc
 
-JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
+# JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 
 
 def main(args):
@@ -36,9 +36,7 @@ def main(args):
     else:
         dt = pendulum.parse(args.date, tz=args.timezone)
 
-    with MyDiaryJoplin(
-        init_config=False, notebook_id=JOPLIN_NOTEBOOK_ID
-    ) as mydiary_joplin:
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         logger.info("starting Joplin sync")
         mydiary_joplin.sync()
         logger.info("sync complete")

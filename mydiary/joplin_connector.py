@@ -11,7 +11,7 @@ from datetime import date, datetime
 from time import sleep
 import pendulum
 from timeit import default_timer as timer
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Collection, Dict, List, Optional, Tuple, Union
 
 from .core import reduce_image_size
 from .models import JoplinNote, JoplinFolder
@@ -35,9 +35,10 @@ load_dotenv(find_dotenv())
 
 JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
 JOPLIN_AUTH_TOKEN = os.environ["JOPLIN_AUTH_TOKEN"]
+JOPLIN_NOTEBOOK_ID = os.environ.get("JOPLIN_NOTEBOOK_ID", None)
 
 # for testing purposes. we'll probably want to get this from an environment variable.
-JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
+# JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 # JOPLIN_NOTEBOOK_ID = "b2494842bba94ef3b429f682c4e3386f"
 
 JOPLIN_CONFIG = {
@@ -56,7 +57,7 @@ class MyDiaryJoplin:
         self,
         token: Optional[str] = None,
         server_process: Optional[subprocess.Popen] = None,
-        notebook_id: str = JOPLIN_NOTEBOOK_ID,
+        notebook_id: Optional[str] = None,
         init_config: bool = True,
         # quiet: bool = True,
         last_sync: Optional[pendulum.DateTime] = None,
@@ -69,6 +70,8 @@ class MyDiaryJoplin:
             self.token = JOPLIN_AUTH_TOKEN
         self.server_process = server_process
         self.notebook_id = notebook_id
+        if not self.notebook_id:
+            self.notebook_id = JOPLIN_NOTEBOOK_ID
         # self.quiet = quiet
         self.last_sync = last_sync
 
@@ -125,7 +128,13 @@ class MyDiaryJoplin:
                 f"More than one subfolder with title {title} found under parent notebook {self.notebook_id}"
             )
 
-    def create_subfolder(self, title: str) -> requests.Response:
+    def create_subfolder(self, title: str, force: bool = False) -> requests.Response:
+        if force is False:
+            existing_id = self.get_subfolder_id(title)
+            if existing_id is not None:
+                raise RuntimeError(
+                    f"subfolder {title} already exists! subfolder id: {existing_id}"
+                )
         data = {
             "title": title,
             "parent_id": self.notebook_id,
@@ -212,7 +221,9 @@ class MyDiaryJoplin:
             f"{self.base_url}/notes", json=data, params={"token": self.token}
         )
 
-    def get_note_id_by_title(self, title) -> str:
+    def get_note_id_by_title(
+        self, title, parent_notebook_id: Optional[str] = None
+    ) -> str:
         params = {
             "token": self.token,
             "query": f'notebook:"{self.parent_notebook.title}" title:"{title}"',
@@ -221,8 +232,9 @@ class MyDiaryJoplin:
         items = r.json()["items"]
         if not items:
             return None
-        # TODO: fix below (doesn't work for subsubfolders)
-        items = [item for item in items if item["parent_id"] == self.notebook_id]
+        if not parent_notebook_id:
+            parent_notebook_id = self.notebook_id
+        items = [item for item in items if item["parent_id"] == parent_notebook_id]
         if not items:
             return None
         if len(items) > 1:
@@ -231,7 +243,9 @@ class MyDiaryJoplin:
 
     def get_note_id_by_date(self, dt: datetime) -> str:
         title = title_from_date(dt)
-        return self.get_note_id_by_title(title)
+        subfolder_title = str(dt.year)
+        subfolder_id = self.get_subfolder_id(subfolder_title)
+        return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
     def get_note(self, id: str) -> JoplinNote:
         fields = [
@@ -273,6 +287,7 @@ class MyDiaryJoplin:
             "filename": f"{hash.hexdigest()}.{ext}",
             "title": title,
         }
+        logger.debug(f"creating resource. id: {props['id']} | title: {props['title']}")
         response = requests.post(
             f"{self.base_url}/resources",
             files={
@@ -321,15 +336,24 @@ class MyDiaryJoplin:
         return r
 
     def delete_resource(
-        self, resource_id: str, force: bool = False
+        self,
+        resource_id: str,
+        force: bool = False,
+        ignore_id: Optional[Union[str, Collection[str]]] = None,
     ) -> requests.Response:
+        if ignore_id is None:
+            ignore_id = set()
+        elif isinstance(ignore_id, str):
+            ignore_id = [ignore_id]
+        ignore_id = set(ignore_id)
+
         if force is False:
             r = requests.get(
                 f"{self.base_url}/resources/{resource_id}/notes",
                 params={"token": self.token},
             )
             r_items = r.json().get("items", [])
-            if len(r_items) > 0:
+            if len(r_items) > 0 and set(item.get("id") for item in r_items) != ignore_id:
                 raise RuntimeError(
                     f"Error while deleting resource {resource_id}: resource is associated with one or more notes. Set force=True to delete anyway"
                 )

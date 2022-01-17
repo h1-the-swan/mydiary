@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = """initialize a journal entry in Joplin for a day"""
+DESCRIPTION = """Shrink images in a daily Joplin journal entry"""
 
 import sys, os, time
 from pathlib import Path
@@ -23,9 +23,9 @@ logger = root_logger.getChild(__name__)
 
 from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.markdown_edits import MarkdownDoc
 
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
-# JOPLIN_NOTEBOOK_ID = "b2494842bba94ef3b429f682c4e3386f"
 
 
 def main(args):
@@ -36,39 +36,52 @@ def main(args):
     else:
         dt = pendulum.parse(args.date, tz=args.timezone)
 
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+    with MyDiaryJoplin(
+        init_config=False
+    ) as mydiary_joplin:
         logger.info("starting Joplin sync")
         mydiary_joplin.sync()
         logger.info("sync complete")
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
 
         existing_id = day.get_joplin_note_id()
-        if existing_id:
+        if not existing_id:
             raise RuntimeError(
-                f"Joplin note already exists for date {dt.to_date_string()} (note id: {existing_id})!"
+                f"Joplin note does not already exist for date {dt.to_date_string()}!"
             )
+        note = mydiary_joplin.get_note(existing_id)
+        md_note = MarkdownDoc(note.body, parent=note)
 
-        title = day.dt.strftime("%Y-%m-%d")
-        body = day.init_markdown()
-        id = day.uid.hex
-        subfolder_title = str(day.dt.year)
-        subfolder_id = mydiary_joplin.get_subfolder_id(subfolder_title)
-        if subfolder_id is None:
-            logger.info(f'"{subfolder_title}" subfolder (subnotebook) not found.')
-            logger.info(f'creating subfolder "{subfolder_title}"')
-            r_create_subfolder = mydiary_joplin.create_subfolder(subfolder_title)
-            r_create_subfolder.raise_for_status()
-            logger.debug(f"created subfolder. response: {r_create_subfolder.json()}")
-            subfolder_id = r_create_subfolder.json()["id"]
-        logger.info(f"creating note: {title}")
-        r_post_note = mydiary_joplin.post_note(
-            title=title, body=body, id=id, parent_id=subfolder_id
-        )
-        logger.info(f"done. status code: {r_post_note.status_code}")
+        sec_images = md_note.get_section_by_title("images")
+        resource_ids = sec_images.get_resource_ids()
+        if resource_ids:
+            new_ids = []
+            new_txt = sec_images.txt
+            logger.info(f"reducing image size for {len(resource_ids)} images...")
+            for resource_id in resource_ids:
+                logger.debug(f"old resource id: {resource_id}")
+                r = mydiary_joplin.reduce_image_size(resource_id)
+                r.raise_for_status()
+                new_id = r.json()["id"]
+                logger.debug(f"new resource id: {new_id}")
+                new_ids.append(new_id)
+                new_txt = new_txt.replace(resource_id, new_id)
+            sec_images.update(new_txt, force=True)
+            logger.info(f"updating note: {note.title}")
+            r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
+            r_put_note.raise_for_status()
 
-        logger.info("starting Joplin sync")
-        mydiary_joplin.sync()
-        logger.info("sync complete")
+            logger.info("deleting old images")
+            for resource_id in resource_ids:
+                r = mydiary_joplin.delete_resource(resource_id, ignore_id=note.id)
+                r.raise_for_status()
+                logger.debug(f"deleted resource {resource_id}")
+
+            logger.info("starting Joplin sync")
+            mydiary_joplin.sync()
+            logger.info("sync complete")
+        else:
+            logger.info("no images found. no updates made")
 
 
 if __name__ == "__main__":
