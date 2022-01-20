@@ -48,11 +48,17 @@ class MyDiarySpotify:
                 ),
             )
 
-    def get_tracks_for_day(self, dt: datetime) -> List[SpotifyTrack]:
+    def get_tracks_for_day(self, items: List[Dict], dt: datetime) -> List[SpotifyTrack]:
+        """get the spotify tracks for a given day from an input list, and convert them to SpotifyTrack objects
+
+        Args:
+            items (List[Dict]): list of spotify tracks from the Spotify API
+            dt (datetime): date to match
+
+        """
         # Note that the Spotify API only returns the last 50 played songs. So this won't work well for historical dates, or if you played a lot of songs per day.
         tracks = []
-        r = self.sp.current_user_recently_played()
-        for t in r["items"]:
+        for t in items:
             dt_track = pendulum.parse(t["played_at"])
             if dt_track.in_timezone(dt.timezone).date() == dt.date():
                 tracks.append(SpotifyTrack.from_spotify_track(t))

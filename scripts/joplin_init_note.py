@@ -37,6 +37,8 @@ def main(args):
         dt = pendulum.parse(args.date, tz=args.timezone)
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        if args.nextcloud_path:
+            mydiary_joplin.config({"sync.5.path": args.nextcloud_path})
         logger.info("starting Joplin sync")
         mydiary_joplin.sync()
         logger.info("sync complete")
@@ -100,6 +102,7 @@ if __name__ == "__main__":
         default="local",
         help='Specify which timezone to use (e.g. "America/Los_Angeles"). Default: "local"',
     )
+    parser.add_argument("--nextcloud-path", help="path for nextcloud syncing. e.g., http://192.168.0.111:48916/remote.php/webdav/Joplin")
     parser.add_argument("--debug", action="store_true", help="output debugging info")
     global args
     args = parser.parse_args()

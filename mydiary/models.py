@@ -20,7 +20,9 @@ class SpotifyTrack(BaseModel):
     name: str
     artist_name: str
     uri: str
-    played_at: datetime = None
+    played_at: Optional[datetime] = None
+    context_type: Optional[str] = None
+    context_uri: Optional[str] = None
 
     @classmethod
     def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
@@ -34,12 +36,17 @@ class SpotifyTrack(BaseModel):
         track_name = track_data["name"]
         track_artist = ", ".join([artist["name"] for artist in track_data["artists"]])
         track_uri = track_data["uri"]
+        track_context = t.get("context", None)
+        context_type = track_context["type"] if track_context else None
+        context_uri = track_context["uri"] if track_context else None
         return cls(
             id=track_id,
             name=track_name,
             artist_name=track_artist,
             uri=track_uri,
             played_at=played_at,
+            context_type=context_type,
+            context_uri=context_uri,
         )
 
     def to_markdown(self, timezone=None) -> str:
@@ -171,10 +178,12 @@ class GoogleCalendarEvent(BaseModel):
             fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
 
+
 class JoplinFolder(BaseModel):
     """This is actually a notebook. Internally notebooks are called "folders".
     See https://joplinapp.org/api/references/rest_api/
-    """    
+    """
+
     id: str
     title: str
     created_time: datetime
@@ -192,6 +201,7 @@ class JoplinFolder(BaseModel):
             updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
             parent_id=r["parent_id"],
         )
+
 
 class JoplinNote(BaseModel):
     id: str
@@ -257,8 +267,13 @@ class MyDiaryDay(BaseModel):
         from .googlecalendar_connector import MyDiaryGCal
 
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
-        spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt)
+
+        mydiary_spotify = MyDiarySpotify()
+        r = mydiary_spotify.sp.current_user_recently_played()
+        spotify_tracks = mydiary_spotify.get_tracks_for_day(r["items"], dt)
+
         google_calendar_events = MyDiaryGCal().get_events_for_day(dt)
+
         return cls(
             dt=dt,
             pocket_articles=pocket_articles,

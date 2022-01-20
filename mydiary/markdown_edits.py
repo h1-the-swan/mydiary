@@ -12,6 +12,9 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
+# match (english-language) hashtags between 1 and 30 characters long
+# https://stackoverflow.com/questions/42065872/regex-for-a-valid-hashtag
+pattern_hashtag = re.compile(r"(^|\B)#(?![0-9_]+\b)([a-zA-Z0-9_]{1,30})(\b|\r)")
 
 class MarkdownDoc:
     def __init__(
