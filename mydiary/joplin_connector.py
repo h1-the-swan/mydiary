@@ -3,6 +3,7 @@
 DESCRIPTION = """Joplin API (local instance)"""
 
 import sys, os, time, json, re
+from numpy import bytes_
 import requests
 import subprocess
 import hashlib
@@ -302,12 +303,28 @@ class MyDiaryJoplin:
         )
         return response
 
-    def reduce_image_size(
+    def _reduce_size_recurse(
+        self, data, size: Tuple[int, int], bytes_threshold: int = 60000
+    ):
+        logger.debug(f"reducing image using size parameter: {size}")
+        new_data = reduce_image_size(data, size)
+        if len(new_data) > bytes_threshold:
+            size = (int(size[0] * 0.9), int(size[1] * 0.9))
+            logger.debug(
+                f"tried to reduce image size but new image ({len(new_data)} bytes) is still over threshold ({bytes_threshold} bytes). trying again with size parameter {size}"
+            )
+            return self._reduce_size_recurse(data, size, bytes_threshold)
+        else:
+            logger.debug(f"reduced image to {len(new_data)} bytes")
+            return new_data
+
+    def joplin_reduce_image_size(
         self,
         resource_id: str,
         size: Tuple[int, int] = (512, 512),
+        bytes_threshold: int = 60000,
         delete_original: bool = False,
-    ) -> requests.Response:
+    ) -> Union[requests.Response, None]:
         # check to make sure image isn't associated with more than one note
         r = requests.get(
             f"{self.base_url}/resources/{resource_id}/notes",
@@ -328,8 +345,15 @@ class MyDiaryJoplin:
             f"{self.base_url}/resources/{resource_id}/file",
             params={"token": self.token},
         )
-        image_bytes = reduce_image_size(resource_file.content, size)
-        r = self.create_resource(data=image_bytes.getvalue())
+        image_bytes: bytes = resource_file.content
+        if len(image_bytes) > bytes_threshold:
+            image_bytes = self._reduce_size_recurse(image_bytes, size, bytes_threshold)
+        else:
+            logger.debug(
+                f"did not reduce the size of image (resource id: {resource_id} because it was already under the threshold ({bytes_threshold} bytes)"
+            )
+            return None
+        r = self.create_resource(data=image_bytes)
         if delete_original is True:
             logger.debug(f"deleting original image: {resource_id}")
             self.delete_resource(resource_id, force=True)
@@ -353,7 +377,10 @@ class MyDiaryJoplin:
                 params={"token": self.token},
             )
             r_items = r.json().get("items", [])
-            if len(r_items) > 0 and set(item.get("id") for item in r_items) != ignore_id:
+            if (
+                len(r_items) > 0
+                and set(item.get("id") for item in r_items) != ignore_id
+            ):
                 raise RuntimeError(
                     f"Error while deleting resource {resource_id}: resource is associated with one or more notes. Set force=True to delete anyway"
                 )

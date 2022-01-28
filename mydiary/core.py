@@ -30,5 +30,5 @@ def reduce_image_size(
     im.thumbnail(size)
     image_bytes = BytesIO()
     im.save(image_bytes, format=im.format)
-    return image_bytes
+    return image_bytes.getvalue()
 

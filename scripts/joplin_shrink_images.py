@@ -36,9 +36,7 @@ def main(args):
     else:
         dt = pendulum.parse(args.date, tz=args.timezone)
 
-    with MyDiaryJoplin(
-        init_config=False
-    ) as mydiary_joplin:
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         logger.info("starting Joplin sync")
         mydiary_joplin.sync()
         logger.info("sync complete")
@@ -56,16 +54,20 @@ def main(args):
         resource_ids = sec_images.get_resource_ids()
         if resource_ids:
             new_ids = []
+            to_delete = []
             new_txt = sec_images.txt
             logger.info(f"reducing image size for {len(resource_ids)} images...")
             for resource_id in resource_ids:
                 logger.debug(f"old resource id: {resource_id}")
-                r = mydiary_joplin.reduce_image_size(resource_id)
+                r = mydiary_joplin.joplin_reduce_image_size(
+                    resource_id, bytes_threshold=60000
+                )
                 r.raise_for_status()
                 new_id = r.json()["id"]
                 logger.debug(f"new resource id: {new_id}")
                 new_ids.append(new_id)
                 new_txt = new_txt.replace(resource_id, new_id)
+                to_delete.append(resource_id)
             sec_images.update(new_txt, force=True)
             logger.info(f"updating note: {note.title}")
             r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
