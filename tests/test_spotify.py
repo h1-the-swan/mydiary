@@ -29,7 +29,7 @@ def test_spotify_track(rootdir):
     fp = Path(rootdir).joinpath("spotifytrack.json")
     track_json = json.loads(fp.read_text())
     track = SpotifyTrack(
-        id=track_json["track"]["id"],
+        spotify_id=track_json["track"]["id"],
         name=track_json["track"]["name"],
         artist_name=track_json["track"]["artists"][0]["name"],
         uri=track_json["track"]["uri"],

@@ -4,7 +4,7 @@ from enum import Enum, IntEnum
 from requests import Response
 from google.auth.transport import requests
 import pendulum
-from pydantic import BaseModel, Field
+from sqlmodel import Field, SQLModel
 from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
@@ -15,12 +15,12 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 
-class SpotifyTrack(BaseModel):
-    id: str
-    name: str
-    artist_name: str
+class SpotifyTrack(SQLModel):
+    spotify_id: str = Field(index=True)
+    name: str = Field(index=True)
+    artist_name: str = Field(index=True)
     uri: str
-    played_at: Optional[datetime] = None
+    played_at: Optional[datetime] = Field(default=None, index=True)
     context_type: Optional[str] = None
     context_uri: Optional[str] = None
 
@@ -40,7 +40,7 @@ class SpotifyTrack(BaseModel):
         context_type = track_context["type"] if track_context else None
         context_uri = track_context["uri"] if track_context else None
         return cls(
-            id=track_id,
+            spotify_id=track_id,
             name=track_name,
             artist_name=track_artist,
             uri=track_uri,
@@ -66,7 +66,7 @@ class PocketStatusEnum(IntEnum):
     SHOULD_BE_DELETED = 2
 
 
-class PocketArticle(BaseModel):
+class PocketArticle(SQLModel):
     id: str
     given_title: str
     resolved_title: str
@@ -130,7 +130,7 @@ class PocketArticle(BaseModel):
         return f"[{title}]({self.url})"
 
 
-class GoogleCalendarEvent(BaseModel):
+class GoogleCalendarEvent(SQLModel):
     id: str
     summary: str
     location: Optional[str] = None
@@ -179,7 +179,7 @@ class GoogleCalendarEvent(BaseModel):
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
 
 
-class JoplinFolder(BaseModel):
+class JoplinFolder(SQLModel):
     """This is actually a notebook. Internally notebooks are called "folders".
     See https://joplinapp.org/api/references/rest_api/
     """
@@ -203,7 +203,7 @@ class JoplinFolder(BaseModel):
         )
 
 
-class JoplinNote(BaseModel):
+class JoplinNote(SQLModel):
     id: str
     parent_id: str  # notebook id
     title: str
@@ -225,12 +225,12 @@ class JoplinNote(BaseModel):
         )
 
 
-class Tag(BaseModel):
+class Tag(SQLModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
 
 
-class MyDiaryImage(BaseModel):
+class MyDiaryImage(SQLModel):
     uid: uuid.UUID
     hash: bytes
     name: str
@@ -239,7 +239,7 @@ class MyDiaryImage(BaseModel):
     created_at: datetime = None
 
 
-class MyDiaryDay(BaseModel):
+class MyDiaryDay(SQLModel):
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     dt: pendulum.DateTime = now().start_of("day")
     tags: List[Tag] = []
