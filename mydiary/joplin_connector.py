@@ -246,6 +246,7 @@ class MyDiaryJoplin:
         title = title_from_date(dt)
         subfolder_title = str(dt.year)
         subfolder_id = self.get_subfolder_id(subfolder_title)
+        logger.debug(f"getting note id (title={title}, parent_notebook_id={subfolder_id})")
         return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
     def get_note(self, id: str) -> JoplinNote:

@@ -9,7 +9,7 @@ from sqlmodel.pool import StaticPool
 from mydiary.spotify_history import SpotifyTrackHistory, SpotifyTrackHistoryCreate
 
 
-@pytest.fixture(name="session")
+@pytest.fixture(name="db_session")
 def session_fixture():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -18,14 +18,14 @@ def session_fixture():
     with Session(engine) as session:
         yield session
 
-def test_add_spotify_track_history_to_database(rootdir: str, session: Session):
+def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session):
     fp = Path(rootdir).joinpath("spotifytrack.json")
     track_json = json.loads(fp.read_text())
     spotify_track = SpotifyTrackHistoryCreate.from_spotify_track(track_json)
     db_track = SpotifyTrackHistory.from_orm(spotify_track)
-    session.add(db_track)
-    session.commit()
-    session.refresh(db_track)
+    db_session.add(db_track)
+    db_session.commit()
+    db_session.refresh(db_track)
 
     assert track_json["track"]["id"] == db_track.spotify_id
     assert track_json["track"]["name"] == db_track.name
