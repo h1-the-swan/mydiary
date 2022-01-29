@@ -78,6 +78,10 @@ class PocketArticle(SQLModel):
     time_read: datetime = None
     time_favorited: datetime = None
 
+    @property
+    def pocket_url(self) -> str:
+        return f"https://getpocket.com/read/{self.id}"
+
     @classmethod
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
         # Parse a Pocket article from the Pocket API
@@ -127,7 +131,8 @@ class PocketArticle(SQLModel):
             title = self.given_title
         else:
             title = "Unknown title"
-        return f"[{title}]({self.url})"
+        pocket_link = f"[Pocket link]({self.pocket_url})"
+        return f"[{title}]({self.url}) ({pocket_link})"
 
 
 class GoogleCalendarEvent(SQLModel):
