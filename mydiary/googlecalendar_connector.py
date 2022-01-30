@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pendulum
 from timeit import default_timer as timer
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 try:
     from humanfriendly import format_timespan
@@ -28,6 +28,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google.oauth2.credentials import exceptions as GoogleOauthExceptions
 
+from .db import engine, Session, select
 from .models import GoogleCalendarEvent
 
 from dotenv import load_dotenv, find_dotenv
@@ -62,9 +63,9 @@ class MyDiaryGCal:
                     )
             self.service = build("calendar", "v3", credentials=creds)
 
-    def get_events_for_day(self, dt: datetime):
+    def get_events_for_day(self, dt: datetime) -> List[GoogleCalendarEvent]:
         # dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
-        dt = pendulum.instance(dt).start_of('day')
+        dt = pendulum.instance(dt).start_of("day")
         dt_max = dt.add(days=1)
         calendarId = "primary"
         # TODO this only gets events that start and end on the given date. should probably get all events that start on or before date and end on or after date
@@ -82,14 +83,17 @@ class MyDiaryGCal:
         events = events_result.get("items", [])
         return [GoogleCalendarEvent.from_gcal_api_event(e) for e in events]
 
-    # def get_articles_for_day(self, dt: datetime):
-    #     dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
-    #     timestamp = dt.int_timestamp
-    #     articles = []
-    #     r = self.pocket_instance.get(state='all', since=timestamp)
-    #     for item in r[0]['list'].values():
-    #         a = PocketArticle.from_pocket_item(item)
-    #         article_dt = pendulum.instance(a.time_updated)
-    #         if article_dt.in_timezone(dt.timezone).date() == dt.date():
-    #             articles.append(a)
-    #     return articles
+    def save_events_to_database(self, events: List[GoogleCalendarEvent]):
+        logger.info(f"saving {len(events)} google calendar events to database")
+        with Session(engine) as session:
+            num_updated = 0
+            for event in events:
+                existing_row = session.get(GoogleCalendarEvent, event.id)
+                if existing_row:
+                    session.delete(existing_row)
+                    num_updated += 1
+                session.add(event)
+            session.commit()
+            for event in events:
+                session.refresh(event)
+            logger.debug(f"{num_updated} events were already in the database and were updated")

@@ -26,6 +26,12 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
 
 from .models import SpotifyTrack
+from .spotify_history import (
+    SpotifyTrackHistory,
+    SpotifyTrackHistoryCreate,
+    SpotifyTrackHistoryRead,
+)
+from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
 
@@ -48,18 +54,47 @@ class MyDiarySpotify:
                 ),
             )
 
-    def get_tracks_for_day(self, items: List[Dict], dt: datetime) -> List[SpotifyTrack]:
-        """get the spotify tracks for a given day from an input list, and convert them to SpotifyTrack objects
+    def save_recent_tracks_to_database(self):
+        logger.info(
+            "getting recently played Spotify tracks from API and saving to database"
+        )
+        recent_tracks = self.sp.current_user_recently_played()["items"]
+        with Session(engine) as session:
+            num_added = 0
+            num_skipped = 0
+            for t in recent_tracks:
+                spotify_track = SpotifyTrackHistoryCreate.from_spotify_track(t)
+                stmt = (
+                    select(SpotifyTrackHistory)
+                    .where(SpotifyTrackHistory.spotify_id == spotify_track.spotify_id)
+                    .where(SpotifyTrackHistory.played_at == spotify_track.played_at)
+                )
+                existing_row = session.exec(stmt).one_or_none()
+                if existing_row:
+                    num_skipped += 1
+                    continue
+                session.add(SpotifyTrackHistory.from_orm(spotify_track))
+                num_added += 1
+            logger.debug(
+                f"skipped {num_skipped} tracks because they were already in the database"
+            )
+            logger.info(f"adding {num_added} new rows to database")
+            session.commit()
+
+    def get_tracks_for_day(self, dt: datetime) -> List[SpotifyTrack]:
+        """get the spotify tracks for a given day from the database
 
         Args:
-            items (List[Dict]): list of spotify tracks from the Spotify API
             dt (datetime): date to match
 
         """
-        # Note that the Spotify API only returns the last 50 played songs. So this won't work well for historical dates, or if you played a lot of songs per day.
-        tracks = []
-        for t in items:
-            dt_track = pendulum.parse(t["played_at"])
-            if dt_track.in_timezone(dt.timezone).date() == dt.date():
-                tracks.append(SpotifyTrack.from_spotify_track(t))
-        return tracks
+        dt = pendulum.instance(dt)
+        start = dt.start_of("day").in_timezone("UTC")
+        end = dt.end_of("day").in_timezone("UTC")
+        with Session(engine) as session:
+            stmt = (
+                select(SpotifyTrackHistory)
+                .where(SpotifyTrackHistory.played_at >= start)
+                .where(SpotifyTrackHistory.played_at <= end)
+            )
+            return session.exec(stmt).all()

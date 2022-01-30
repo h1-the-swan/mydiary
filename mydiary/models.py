@@ -5,9 +5,13 @@ from requests import Response
 from google.auth.transport import requests
 import pendulum
 from sqlmodel import Field, SQLModel
+from pydantic import validator
 from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
+
+from sqlalchemy import event
+from sqlalchemy.orm import reconstructor
 
 import logging
 
@@ -15,12 +19,19 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 
+def make_markdown_table_header(columns: List[str]) -> str:
+    sep = " | "
+    header = sep.join(columns)
+    header_sep = sep.join(["---"] * len(columns))
+    return "\n".join([header, header_sep])
+
+
 class SpotifyTrack(SQLModel):
     spotify_id: str = Field(index=True)
     name: str = Field(index=True)
     artist_name: str = Field(index=True)
     uri: str
-    played_at: Optional[datetime] = Field(default=None, index=True)
+    played_at: Optional[datetime] = Field(default=None, index=True)  # in UTC
     context_type: Optional[str] = None
     context_uri: Optional[str] = None
 
@@ -135,14 +146,24 @@ class PocketArticle(SQLModel):
         return f"[{title}]({self.url}) ({pocket_link})"
 
 
-class GoogleCalendarEvent(SQLModel):
-    id: str
-    summary: str
-    location: Optional[str] = None
+class GoogleCalendarEvent(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    summary: str = Field(index=True)
+    location: Optional[str] = Field(default=None, index=True)
     description: Optional[str] = None
-    start: datetime
-    end: datetime
+    start: pendulum.DateTime = Field(index=True)
+    end: pendulum.DateTime = Field(index=True)
+    start_timezone: str
+    end_timezone: str
     # what else? canceled/deleted?
+
+    @reconstructor
+    def init_on_load(self):
+        # Initialize the dates as pendulum instances in the case where the class is loaded from the database
+        if not isinstance(self.start, pendulum.DateTime):
+            self.start = pendulum.instance(self.start, tz=self.start_timezone)
+        if not isinstance(self.end, pendulum.DateTime):
+            self.end = pendulum.instance(self.end, tz=self.end_timezone)
 
     @classmethod
     def from_gcal_api_event(cls, event: Dict) -> "GoogleCalendarEvent":
@@ -160,14 +181,16 @@ class GoogleCalendarEvent(SQLModel):
             description=description,
             start=start,
             end=end,
+            start_timezone=start.timezone_name,
+            end_timezone=end.timezone_name,
         )
 
     @classmethod
-    def get_datetime_or_date(self, obj) -> datetime:
+    def get_datetime_or_date(self, obj) -> pendulum.DateTime:
         if "dateTime" in obj:
-            return datetime.fromisoformat(obj["dateTime"])
+            return pendulum.parse(obj["dateTime"]).in_timezone(tz=obj["timeZone"])
         elif "date" in obj:
-            return datetime.fromisoformat(obj["date"])
+            return pendulum.parse(obj["date"]).in_timezone(tz=obj["timeZone"])
         else:
             raise ValueError(
                 f'passed object {obj} does not have key "dateTime" or "date"'
@@ -175,13 +198,18 @@ class GoogleCalendarEvent(SQLModel):
 
     def to_markdown(self) -> str:
         # header = "Start | End | Summary"
-        start = pendulum.instance(self.start)
-        end = pendulum.instance(self.end)
-        if not start.is_same_day(end):
+        if not self.start.is_same_day(self.end):
             fmt = "%Y-%m-%d %H:%M:%S"
         else:
             fmt = "%H:%M:%S"
         return f"{self.start.strftime(fmt)} | {self.end.strftime(fmt)} | {self.summary}"
+
+
+@event.listens_for(GoogleCalendarEvent, "refresh")
+def gcal_on_refresh(target: GoogleCalendarEvent, context, attrs):
+    # init_on_load() is only called when an instances is created, not refreshed
+    # so this will make it run when a refresh happens
+    target.init_on_load()
 
 
 class JoplinFolder(SQLModel):
@@ -231,11 +259,13 @@ class JoplinNote(SQLModel):
 
 
 class Tag(SQLModel):
+    # TODO
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
 
 
 class MyDiaryImage(SQLModel):
+    # TODO: this isn't really implemented currently
     uid: uuid.UUID
     hash: bytes
     name: str
@@ -273,11 +303,11 @@ class MyDiaryDay(SQLModel):
 
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
 
-        mydiary_spotify = MyDiarySpotify()
-        r = mydiary_spotify.sp.current_user_recently_played()
-        spotify_tracks = mydiary_spotify.get_tracks_for_day(r["items"], dt)
+        spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt)
 
-        google_calendar_events = MyDiaryGCal().get_events_for_day(dt)
+        mydiary_gcal = MyDiaryGCal()
+        google_calendar_events = mydiary_gcal.get_events_for_day(dt)
+        mydiary_gcal.save_events_to_database(google_calendar_events)
 
         return cls(
             dt=dt,
@@ -313,8 +343,9 @@ class MyDiaryDay(SQLModel):
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:
             return "None"
-        header = "Name | Artist | Played At"
-        lines = [header, "---- | ---- | ----"]
+        columns = ["Name", "Artists", "Played At"]
+        header = make_markdown_table_header(columns)
+        lines = [header]
         for t in self.spotify_tracks:
             lines.append(t.to_markdown(timezone=timezone))
         return "\n".join(lines)
@@ -322,8 +353,9 @@ class MyDiaryDay(SQLModel):
     def google_calendar_events_markdown(self) -> str:
         if not self.google_calendar_events:
             return "None"
-        header = "Start | End | Summary"
-        lines = [header, "---- | ---- | ----"]
+        columns = ["Start", "End", "Summary"]
+        header = make_markdown_table_header(columns)
+        lines = [header]
         for e in self.google_calendar_events:
             lines.append(e.to_markdown())
         return "\n".join(lines)
@@ -340,3 +372,8 @@ class MyDiaryDay(SQLModel):
                 # add a newline onto the last one in this section
                 lines[-1] += "\n"
         return "\n".join(lines)
+
+
+class Dog(SQLModel, table=True):
+    uid: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(index=True)
