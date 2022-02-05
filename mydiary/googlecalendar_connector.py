@@ -96,4 +96,5 @@ class MyDiaryGCal:
             session.commit()
             for event in events:
                 session.refresh(event)
-            logger.debug(f"{num_updated} events were already in the database and were updated")
+            if num_updated > 0:
+                logger.debug(f"{num_updated} events were already in the database and were updated")

@@ -51,7 +51,7 @@ class MyDiaryPocket:
         r = self.pocket_instance.get(state="all", since=timestamp)
         items_dict = r[0]["list"]
         if items_dict:
-            for item in r[0]["list"].values():
+            for item in items_dict.values():
                 a = PocketArticle.from_pocket_item(item)
                 if a.status == "SHOULD_BE_DELETED":
                     continue

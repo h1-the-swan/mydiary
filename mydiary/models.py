@@ -4,7 +4,7 @@ from enum import Enum, IntEnum
 from requests import Response
 from google.auth.transport import requests
 import pendulum
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 from pydantic import validator
 from datetime import datetime, date
 from pendulum import now
@@ -71,6 +71,11 @@ class SpotifyTrack(SQLModel):
         return f"[{self.name}]({self.uri}) | {self.artist_name} | {played_at}"
 
 
+class PocketArticleTagLink(SQLModel):
+    article_id: str = Field(primary_key=True)
+    tag_id: str = Field(primary_key=True)
+
+
 class PocketStatusEnum(IntEnum):
     UNREAD = 0
     ARCHIVED = 1
@@ -88,6 +93,10 @@ class PocketArticle(SQLModel):
     time_updated: datetime = None
     time_read: datetime = None
     time_favorited: datetime = None
+
+    tags: List["Tag"] = Relationship(
+        back_populates="pocket_articles", link_model=PocketArticleTagLink
+    )
 
     @property
     def pocket_url(self) -> str:
@@ -262,6 +271,11 @@ class Tag(SQLModel):
     # TODO
     uid: uuid.UUID = Field(default_factory=uuid.uuid4)
     name: str
+    pocket_tag_id: Optional[str]
+
+    pocket_articles: Relationship(
+        back_populates="tags", link_model=PocketArticleTagLink
+    )
 
 
 class MyDiaryImage(SQLModel):
@@ -303,7 +317,9 @@ class MyDiaryDay(SQLModel):
 
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
 
-        spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt)
+        mydiary_spotify = MyDiarySpotify()
+        mydiary_spotify.save_recent_tracks_to_database()
+        spotify_tracks = mydiary_spotify.get_tracks_for_day(dt)
 
         mydiary_gcal = MyDiaryGCal()
         google_calendar_events = mydiary_gcal.get_events_for_day(dt)
