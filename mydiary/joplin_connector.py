@@ -232,10 +232,18 @@ class MyDiaryJoplin:
         r = requests.get(f"{self.base_url}/search", params=params)
         items = r.json()["items"]
         if not items:
+            logger.debug(f"no note found with title {title} (parent_notebook_id={parent_notebook_id}")
             return None
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
-        items = [item for item in items if item["parent_id"] == parent_notebook_id]
+
+        # search results can be a little wonky, so make sure that what we have match our query:
+        items = [
+            item
+            for item in items
+            if item["parent_id"] == parent_notebook_id and item["title"] == title
+        ]
+
         if not items:
             return None
         if len(items) > 1:
@@ -246,7 +254,9 @@ class MyDiaryJoplin:
         title = title_from_date(dt)
         subfolder_title = str(dt.year)
         subfolder_id = self.get_subfolder_id(subfolder_title)
-        logger.debug(f"getting note id (title={title}, parent_notebook_id={subfolder_id})")
+        logger.debug(
+            f"getting note id (title={title}, parent_notebook_id={subfolder_id})"
+        )
         return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
     def get_note(self, id: str) -> JoplinNote:
