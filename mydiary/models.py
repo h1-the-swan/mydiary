@@ -71,9 +71,9 @@ class SpotifyTrack(SQLModel):
         return f"[{self.name}]({self.uri}) | {self.artist_name} | {played_at}"
 
 
-class PocketArticleTagLink(SQLModel):
-    article_id: str = Field(primary_key=True)
-    tag_id: str = Field(primary_key=True)
+class PocketArticleTagLink(SQLModel, table=True):
+    article_id: str = Field(foreign_key="pocketarticle.id", primary_key=True)
+    tag_id: str = Field(foreign_key="tag.pocket_tag_id", primary_key=True)
 
 
 class PocketStatusEnum(IntEnum):
@@ -82,17 +82,20 @@ class PocketStatusEnum(IntEnum):
     SHOULD_BE_DELETED = 2
 
 
-class PocketArticle(SQLModel):
-    id: str
-    given_title: str
-    resolved_title: str
+class PocketArticle(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    given_title: str = Field(index=True)
+    resolved_title: str = Field(index=True)
     url: str
-    favorite: bool
+    favorite: bool = Field(index=True)
     status: PocketStatusEnum
-    time_added: datetime = None
-    time_updated: datetime = None
-    time_read: datetime = None
-    time_favorited: datetime = None
+    time_added: Optional[datetime] = Field(default=None, index=True)
+    time_updated: Optional[datetime] = Field(default=None, index=True)
+    time_read: Optional[datetime] = Field(default=None, index=True)
+    time_favorited: Optional[datetime] = Field(default=None, index=True)
+    listen_duration_estimate: Optional[int] = Field(default=None, index=True)
+    word_count: Optional[int] = Field(default=None, index=True)
+    excerpt: Optional[str] = None
 
     tags: List["Tag"] = Relationship(
         back_populates="pocket_articles", link_model=PocketArticleTagLink
@@ -164,6 +167,7 @@ class GoogleCalendarEvent(SQLModel, table=True):
     end: pendulum.DateTime = Field(index=True)
     start_timezone: str
     end_timezone: str
+    # new_test_col: Optional[str] = Field(default=None)
     # what else? canceled/deleted?
 
     @reconstructor
@@ -267,13 +271,13 @@ class JoplinNote(SQLModel):
         )
 
 
-class Tag(SQLModel):
+class Tag(SQLModel, table=True):
     # TODO
-    uid: uuid.UUID = Field(default_factory=uuid.uuid4)
-    name: str
-    pocket_tag_id: Optional[str]
+    uid: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str = Field(index=True)
+    pocket_tag_id: Optional[str] = Field(default=None, index=True)
 
-    pocket_articles: Relationship(
+    pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
     )
 
