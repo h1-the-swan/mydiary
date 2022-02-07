@@ -63,12 +63,15 @@ class MyDiaryGCal:
                     )
             self.service = build("calendar", "v3", credentials=creds)
 
+    def new_session(self, engine=engine):
+        with Session(engine) as session:
+            return session
+
     def get_events_for_day(self, dt: datetime) -> List[GoogleCalendarEvent]:
         # dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
         dt = pendulum.instance(dt).start_of("day")
         dt_max = dt.add(days=1)
         calendarId = "primary"
-        # TODO this only gets events that start and end on the given date. should probably get all events that start on or before date and end on or after date
         events_result = (
             self.service.events()
             .list(
@@ -83,18 +86,23 @@ class MyDiaryGCal:
         events = events_result.get("items", [])
         return [GoogleCalendarEvent.from_gcal_api_event(e) for e in events]
 
-    def save_events_to_database(self, events: List[GoogleCalendarEvent]):
+    def save_events_to_database(
+        self, events: List[GoogleCalendarEvent], session: Optional[Session] = None
+    ):
         logger.info(f"saving {len(events)} google calendar events to database")
-        with Session(engine) as session:
-            num_updated = 0
-            for event in events:
-                existing_row = session.get(GoogleCalendarEvent, event.id)
-                if existing_row:
-                    session.delete(existing_row)
-                    num_updated += 1
-                session.add(event)
-            session.commit()
-            for event in events:
-                session.refresh(event)
-            if num_updated > 0:
-                logger.debug(f"{num_updated} events were already in the database and were updated")
+        if session is None:
+            session = self.new_session()
+        num_updated = 0
+        for event in events:
+            existing_row = session.get(GoogleCalendarEvent, event.id)
+            if existing_row:
+                session.delete(existing_row)
+                num_updated += 1
+            session.add(event)
+        session.commit()
+        for event in events:
+            session.refresh(event)
+        if num_updated > 0:
+            logger.debug(
+                f"{num_updated} events were already in the database and were updated"
+            )

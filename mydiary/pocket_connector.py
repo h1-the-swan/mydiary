@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pendulum
 from timeit import default_timer as timer
-from typing import Dict, List, Optional
+from typing import Dict, Generator, Iterable, List, Optional, Tuple
 
 try:
     from humanfriendly import format_timespan
@@ -24,7 +24,8 @@ logger = root_logger.getChild(__name__)
 
 from pocket import Pocket
 
-from .models import PocketArticle
+from .db import engine, Session, select
+from .models import PocketArticle, Tag
 
 from dotenv import load_dotenv, find_dotenv
 
@@ -39,14 +40,18 @@ class MyDiaryPocket:
             access_token = os.environ["POCKET_ACCESS_TOKEN"]
             self.pocket_instance = Pocket(consumer_key, access_token)
 
+    def new_session(self, engine=engine):
+        with Session(engine) as session:
+            return session
+
     def get_articles_for_day(self, dt: datetime) -> Dict[str, List[PocketArticle]]:
         dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
         timestamp = dt.int_timestamp
         articles = {
-            'added': [],
+            "added": [],
             # 'updated': [],
-            'read': [],
-            'favorited': [],
+            "read": [],
+            "favorited": [],
         }
         r = self.pocket_instance.get(state="all", since=timestamp)
         items_dict = r[0]["list"]
@@ -62,3 +67,58 @@ class MyDiaryPocket:
                         if article_dt.in_timezone(dt.timezone).date() == dt.date():
                             articles[k].append(a)
         return articles
+
+    def yield_all_articles(
+        self,
+        state: str = "all",
+        detailType: str = "complete",
+        since: Optional[int] = None,
+        offset: int = 0,
+        count: int = 5000,
+    ) -> Iterable[PocketArticle]:
+        while True:
+            r = self.pocket_instance.get(
+                state=state,
+                detailType=detailType,
+                since=since,
+                offset=offset,
+                count=count,
+            )
+            if r[0]["status"] != 1:
+                break
+            items_dict: Dict = r[0]["list"]
+            for item in items_dict.values():
+                yield PocketArticle.from_pocket_item(item)
+
+            offset += count
+
+    def get_all_articles_from_api(
+        self,
+        state: str = "all",
+        detailType: str = "complete",
+        since: Optional[int] = None,
+        count: int = 5000,
+    ) -> List[PocketArticle]:
+        return list(
+            self.yield_all_articles(
+                state=state, detailType=detailType, since=since, count=count
+            )
+        )
+
+    def collect_tags(
+        self, article: PocketArticle, pocket_tags: List[str], session: Optional[Session] = None
+    ) -> PocketArticle:
+        if session is None:
+            session = self.new_session()
+        for tag_name in pocket_tags:
+            logger.debug(f"tag: {tag_name}")
+            tag = session.exec(
+                select(Tag).where(Tag.name == tag_name)
+            ).one_or_none()
+            if tag is None:
+                tag = Tag(name=tag_name)
+                # logger.debug(f"adding new Tag to database: {tag.name} | {tag.uid}")
+                session.add(tag)
+            article.tags.append(tag)
+        session.commit()
+        return article

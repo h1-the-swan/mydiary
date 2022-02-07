@@ -21,6 +21,14 @@ from sqlmodel import SQLModel
 from mydiary import models, spotify_history
 
 target_metadata = SQLModel.metadata
+naming_convection = {
+        "ix": "ix_%(column_0_label)s",
+        "uq": "uq_%(table_name)s_%(column_0_name)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
+        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+        "pk": "pk_%(table_name)s"
+      }
+target_metadata.naming_convention = naming_convection
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

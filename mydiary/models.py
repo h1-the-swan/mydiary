@@ -1,11 +1,11 @@
 import uuid
-from typing import Any, List, Dict, Union, Optional
+from typing import Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
 from google.auth.transport import requests
 import pendulum
 from sqlmodel import Field, Relationship, SQLModel
-from pydantic import validator
+from pydantic import validator, PrivateAttr
 from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
@@ -73,7 +73,7 @@ class SpotifyTrack(SQLModel):
 
 class PocketArticleTagLink(SQLModel, table=True):
     article_id: str = Field(foreign_key="pocketarticle.id", primary_key=True)
-    tag_id: str = Field(foreign_key="tag.pocket_tag_id", primary_key=True)
+    tag_id: uuid.UUID = Field(foreign_key="tag.uid", primary_key=True)
 
 
 class PocketStatusEnum(IntEnum):
@@ -96,6 +96,11 @@ class PocketArticle(SQLModel, table=True):
     listen_duration_estimate: Optional[int] = Field(default=None, index=True)
     word_count: Optional[int] = Field(default=None, index=True)
     excerpt: Optional[str] = None
+    top_image_url: Optional[str] = None
+
+    # private attribute -- will not be included in the database table
+    _pocket_item: Optional[Dict] = PrivateAttr()
+    _pocket_tags: Optional[List[Tuple]] = PrivateAttr()
 
     tags: List["Tag"] = Relationship(
         back_populates="pocket_articles", link_model=PocketArticleTagLink
@@ -134,7 +139,19 @@ class PocketArticle(SQLModel, table=True):
             if "time_favorited" in item and int(item["time_favorited"]) != 0
             else None
         )
-        return cls(
+        listen_duration_estimate = (
+            int(item["listen_duration_estimate"])
+            if "listen_duration_estimate" in item
+            else None
+        )
+        word_count = int(item["word_count"]) if "word_count" in item else None
+        excerpt = item.get("excerpt", None)
+        top_image_url = item.get("top_image_url", None)
+        if "tags" in item:
+            _pocket_tags = [t["tag"] for t in item["tags"].values()]
+        else:
+            _pocket_tags = []
+        ret = cls(
             id=id,
             given_title=given_title,
             resolved_title=resolved_title,
@@ -145,7 +162,19 @@ class PocketArticle(SQLModel, table=True):
             time_updated=time_updated,
             time_read=time_read,
             time_favorited=time_favorited,
+            listen_duration_estimate=listen_duration_estimate,
+            word_count=word_count,
+            excerpt=excerpt,
+            top_image_url=top_image_url,
         )
+        ret._pocket_item = item
+        ret._pocket_tags = _pocket_tags
+        return ret
+
+    def collect_tags(self, session: Optional["Session"] = None):
+        from .pocket_connector import MyDiaryPocket
+
+        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session)
 
     def to_markdown(self) -> str:
         if self.resolved_title:
@@ -275,7 +304,9 @@ class Tag(SQLModel, table=True):
     # TODO
     uid: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(index=True)
-    pocket_tag_id: Optional[str] = Field(default=None, index=True)
+    # pocket_tag_id: Optional[str] = Field(
+    #     default=None, index=True, sa_column_kwargs={"unique": True}
+    # )
 
     pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
