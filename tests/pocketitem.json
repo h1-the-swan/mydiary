@@ -1,1 +1,43 @@
-{"item_id": "3496035100", "resolved_id": "3496035100", "given_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902", "given_title": "Walmart will no longer sell toy cactus that raps about cocaine in Polish", "favorite": "0", "status": "0", "time_added": "1638641344", "time_updated": "1638641449", "time_read": "0", "time_favorited": "0", "sort_id": 2, "resolved_title": "A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale", "resolved_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902", "excerpt": "A woman from Brampton, Ontario named Ania Tanner recently bought her 15-month-old grandchild a dancing cactus toy from Walmart Canada that was advertised as providing educational value by singing songs in English, Spanish, and Polish to kids.", "is_article": "1", "is_index": "0", "has_video": "0", "has_image": "0", "word_count": "398", "lang": "en", "amp_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902/amp", "top_image_url": "https://i.kinja-img.com/gawker-media/image/upload/c_fill,f_auto,fl_progressive,g_center,h_675,pg_1,q_80,w_1200/544131ac1fec2be84f79f95bf888e25c.png", "tags": {"internet": {"item_id": "3496035100", "tag": "internet"}, "news": {"item_id": "3496035100", "tag": "news"}, "quickbites": {"item_id": "3496035100", "tag": "quickbites"}}, "authors": {"151254935": {"item_id": "3496035100", "author_id": "151254935", "name": "Reid McCarter", "url": "https://www.avclub.com/author/reidmccarter"}}, "domain_metadata": {"name": "The A.V. Club", "logo": "https://logo.clearbit.com/avclub.com?size=800", "greyscale_logo": "https://logo.clearbit.com/avclub.com?size=800&greyscale=true"}, "listen_duration_estimate": 154}
+{
+  "item_id": "3496035100",
+  "resolved_id": "3496035100",
+  "given_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902",
+  "given_title": "Walmart will no longer sell toy cactus that raps about cocaine in Polish",
+  "favorite": "0",
+  "status": "0",
+  "time_added": "1638641344",
+  "time_updated": "1638641449",
+  "time_read": "0",
+  "time_favorited": "0",
+  "sort_id": 2,
+  "resolved_title": "A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale",
+  "resolved_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902",
+  "excerpt": "A woman from Brampton, Ontario named Ania Tanner recently bought her 15-month-old grandchild a dancing cactus toy from Walmart Canada that was advertised as providing educational value by singing songs in English, Spanish, and Polish to kids.",
+  "is_article": "1",
+  "is_index": "0",
+  "has_video": "0",
+  "has_image": "0",
+  "word_count": "398",
+  "lang": "en",
+  "amp_url": "https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902/amp",
+  "top_image_url": "https://i.kinja-img.com/gawker-media/image/upload/c_fill,f_auto,fl_progressive,g_center,h_675,pg_1,q_80,w_1200/544131ac1fec2be84f79f95bf888e25c.png",
+  "tags": {
+    "internet": { "item_id": "3496035100", "tag": "internet" },
+    "news": { "item_id": "3496035100", "tag": "news" },
+    "quickbites": { "item_id": "3496035100", "tag": "quickbites" }
+  },
+  "authors": {
+    "151254935": {
+      "item_id": "3496035100",
+      "author_id": "151254935",
+      "name": "Reid McCarter",
+      "url": "https://www.avclub.com/author/reidmccarter"
+    }
+  },
+  "domain_metadata": {
+    "name": "The A.V. Club",
+    "logo": "https://logo.clearbit.com/avclub.com?size=800",
+    "greyscale_logo": "https://logo.clearbit.com/avclub.com?size=800&greyscale=true"
+  },
+  "listen_duration_estimate": 154
+}

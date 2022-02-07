@@ -68,7 +68,7 @@ class MyDiaryPocket:
                             articles[k].append(a)
         return articles
 
-    def yield_all_articles(
+    def yield_all_articles_from_api(
         self,
         state: str = "all",
         detailType: str = "complete",
@@ -100,25 +100,25 @@ class MyDiaryPocket:
         count: int = 5000,
     ) -> List[PocketArticle]:
         return list(
-            self.yield_all_articles(
+            self.yield_all_articles_from_api(
                 state=state, detailType=detailType, since=since, count=count
             )
         )
 
     def collect_tags(
-        self, article: PocketArticle, pocket_tags: List[str], session: Optional[Session] = None
+        self,
+        article: PocketArticle,
+        pocket_tags: List[str],
+        session: Optional[Session] = None,
     ) -> PocketArticle:
         if session is None:
             session = self.new_session()
         for tag_name in pocket_tags:
-            logger.debug(f"tag: {tag_name}")
-            tag = session.exec(
-                select(Tag).where(Tag.name == tag_name)
-            ).one_or_none()
+            tag = session.exec(select(Tag).where(Tag.name == tag_name)).one_or_none()
             if tag is None:
                 tag = Tag(name=tag_name)
-                # logger.debug(f"adding new Tag to database: {tag.name} | {tag.uid}")
-                session.add(tag)
+            tag.is_pocket_tag = True
+            session.add(tag)
             article.tags.append(tag)
         session.commit()
         return article

@@ -1,4 +1,3 @@
-import uuid
 from typing import Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
@@ -72,8 +71,8 @@ class SpotifyTrack(SQLModel):
 
 
 class PocketArticleTagLink(SQLModel, table=True):
-    article_id: str = Field(foreign_key="pocketarticle.id", primary_key=True)
-    tag_id: uuid.UUID = Field(foreign_key="tag.uid", primary_key=True)
+    article_id: int = Field(foreign_key="pocketarticle.id", primary_key=True)
+    tag_id: int = Field(foreign_key="tag.id", primary_key=True)
 
 
 class PocketStatusEnum(IntEnum):
@@ -83,7 +82,7 @@ class PocketStatusEnum(IntEnum):
 
 
 class PocketArticle(SQLModel, table=True):
-    id: str = Field(primary_key=True)
+    id: int = Field(primary_key=True)
     given_title: str = Field(index=True)
     resolved_title: str = Field(index=True)
     url: str
@@ -302,11 +301,9 @@ class JoplinNote(SQLModel):
 
 class Tag(SQLModel, table=True):
     # TODO
-    uid: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    # pocket_tag_id: Optional[str] = Field(
-    #     default=None, index=True, sa_column_kwargs={"unique": True}
-    # )
+    is_pocket_tag: bool = False
 
     pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
@@ -315,7 +312,7 @@ class Tag(SQLModel, table=True):
 
 class MyDiaryImage(SQLModel):
     # TODO: this isn't really implemented currently
-    uid: uuid.UUID
+    id: int
     hash: bytes
     name: str
     filepath: Union[str, Path]
@@ -324,7 +321,7 @@ class MyDiaryImage(SQLModel):
 
 
 class MyDiaryDay(SQLModel):
-    uid: uuid.UUID = Field(default_factory=uuid.uuid4)
+    id: Optional[int] = Field(default=None, primary_key=True)
     dt: pendulum.DateTime = now().start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
@@ -426,5 +423,5 @@ class MyDiaryDay(SQLModel):
 
 
 class Dog(SQLModel, table=True):
-    uid: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
