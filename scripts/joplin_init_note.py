@@ -52,7 +52,6 @@ def main(args):
 
         title = day.dt.strftime("%Y-%m-%d")
         body = day.init_markdown()
-        id = day.uid.hex
         subfolder_title = str(day.dt.year)
         subfolder_id = mydiary_joplin.get_subfolder_id(subfolder_title)
         if subfolder_id is None:
@@ -64,7 +63,7 @@ def main(args):
             subfolder_id = r_create_subfolder.json()["id"]
         logger.info(f"creating note: {title}")
         r_post_note = mydiary_joplin.post_note(
-            title=title, body=body, id=id, parent_id=subfolder_id
+            title=title, body=body, parent_id=subfolder_id
         )
         logger.info(f"done. status code: {r_post_note.status_code}")
 
