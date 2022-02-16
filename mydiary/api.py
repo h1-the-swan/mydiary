@@ -75,7 +75,7 @@ def read_pocket_articles(
         stmt = stmt.where(PocketArticle.status.in_(status))
     if tags:
         for t in tags:
-            stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))  # pylint: disable=no-member
+            stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
     
     if year is not None:
         # stmt = stmt.where(PocketArticle.time_added.year==year)
