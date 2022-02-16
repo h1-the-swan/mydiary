@@ -50,6 +50,10 @@ def main(args):
         note = mydiary_joplin.get_note(existing_id)
         md_note = MarkdownDoc(note.body, parent=note)
 
+        # sometimes the images are incorrectly located at the end of the doc
+        # in this case, move them to the "Images" section
+        # TODO: implement
+
         sec_images = md_note.get_section_by_title("images")
         resource_ids = sec_images.get_resource_ids()
         if resource_ids:

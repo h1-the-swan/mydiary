@@ -16,6 +16,7 @@ logger = root_logger.getChild(__name__)
 # https://stackoverflow.com/questions/42065872/regex-for-a-valid-hashtag
 pattern_hashtag = re.compile(r"(^|\B)#(?![0-9_]+\b)([a-zA-Z0-9_]{1,30})(\b|\r)")
 
+
 class MarkdownDoc:
     def __init__(
         self,
@@ -82,6 +83,10 @@ class MarkdownDoc:
         # this_section_txt = "\n".join(this_section)
         yield this_section_title, this_section
 
+    def refresh_all_sections(self):
+        for sec in self.sections:
+            sec.refresh()
+
 
 class MarkdownSection:
     def __init__(
@@ -92,6 +97,9 @@ class MarkdownSection:
         self.parent = parent
         self.level = level
 
+        self.refresh()
+
+    def refresh(self) -> None:
         self.txt = "\n".join(self.lines)
         self.content = self.get_content()
 
@@ -110,10 +118,12 @@ class MarkdownSection:
         return self.txt
 
     def get_resource_ids(self) -> List[str]:
+        # example of a resource id:
+        # "![](:/f04c1849b3e64b5ca151a737720s0132)"
         return re.findall(r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", self.content)
 
     def update(self, new_txt: str, force: bool = False) -> str:
-        new_sec = MarkdownSection(new_txt.splitlines())
+        new_sec = MarkdownSection(new_txt.split("\n"))
         if not new_sec.content or new_sec.content == "None":
             # no new text to replace. do nothing
             return "no update"
@@ -129,21 +139,25 @@ class MarkdownSection:
                 # no old text exists. safe to replace
                 replace = True
             else:
-                s = difflib.SequenceMatcher(None, self.content.splitlines(), new_sec.content.splitlines())
+                s = difflib.SequenceMatcher(
+                    None, self.content.splitlines(), new_sec.content.splitlines()
+                )
                 tags = [opcode[0] for opcode in s.get_opcodes()]
                 if all(tag in ["equal", "insert"] for tag in tags):
-                    # no merge conflicts (nothing to delete or insert). safe to replace
+                    # no merge conflicts (no lines are marked to delete or replace). safe to replace old text with new text
                     replace = True
                 else:
                     logger.debug(tags)
         if replace is True:
-            self.txt = new_txt
-            self.lines = self.txt.splitlines()
-            self.content = self.get_content()
+            # self.txt = new_txt
+            self.lines = new_txt.split("\n")
+            # self.content = self.get_content()
+            self.refresh()
             return "updated"
 
         logger.debug(new_txt)
         from difflib import Differ
+
         logger.debug(MarkdownSection(new_txt.splitlines()).content)
         for x in Differ().compare(self.lines, new_txt.splitlines()):
             logger.debug(x)
