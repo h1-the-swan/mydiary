@@ -39,9 +39,12 @@ def test_update_body(rootdir):
     md2 = MarkdownDoc(txt2)
     assert md2.txt == txt2
 
+    results = []
     for sec in md1.sections:
         update_txt = md2.get_section_by_title(sec.title).txt
         result = sec.update(update_txt)
         assert result in ["updated", "no update"]
+        results.append(result=="updated")
+    assert any(results)
 
     assert md1.txt == txt2
