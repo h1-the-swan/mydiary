@@ -227,11 +227,12 @@ class GoogleCalendarEvent(SQLModel, table=True):
         )
 
     @classmethod
-    def get_datetime_or_date(self, obj) -> pendulum.DateTime:
+    def get_datetime_or_date(self, obj: Dict) -> pendulum.DateTime:
+        tz = obj.get("timeZone", "local")
         if "dateTime" in obj:
-            return pendulum.parse(obj["dateTime"]).in_timezone(tz=obj["timeZone"])
+            return pendulum.parse(obj["dateTime"]).in_timezone(tz=tz)
         elif "date" in obj:
-            return pendulum.parse(obj["date"]).in_timezone(tz=obj["timeZone"])
+            return pendulum.parse(obj["date"]).in_timezone(tz=tz)
         else:
             raise ValueError(
                 f'passed object {obj} does not have key "dateTime" or "date"'
