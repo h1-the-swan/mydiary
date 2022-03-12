@@ -33,3 +33,5 @@ tests/images
 
 database.db
 *backup*.db
+
+cov*.xml
