@@ -35,3 +35,4 @@ database.db
 *backup*.db
 
 cov*.xml
+.coverage

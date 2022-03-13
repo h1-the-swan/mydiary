@@ -27,3 +27,7 @@ alembic revision --autogenerate -m "REVISION DESCRIPTION"
 
 alembic upgrade head
 ```
+
+## Code coverage
+
+`pytest --cov=mydiary tests/ --cov-report xml:cov.xml`
