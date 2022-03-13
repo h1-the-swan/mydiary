@@ -147,7 +147,7 @@ class MyDiaryJoplin:
     def config(self, conf: Dict[str, str] = JOPLIN_CONFIG, timeout: int = 20) -> None:
         for k, v in conf.items():
             p = subprocess.run(
-                ["joplin", "config", k, v],
+                ["npx", "joplin", "config", k, v],
                 timeout=timeout,
             )
             p.check_returncode()
@@ -162,7 +162,7 @@ class MyDiaryJoplin:
     def _start_server(self) -> None:
         _stdout = subprocess.PIPE
         self.server_process = subprocess.Popen(
-            ["joplin", "server", "start"],
+            ["npx", "joplin", "server", "start"],
             stdout=_stdout,
             stderr=subprocess.STDOUT,
         )
@@ -182,7 +182,7 @@ class MyDiaryJoplin:
         # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
         pattern = re.compile(r"Completed: (\d.*)\(")
         p = subprocess.run(
-            ["joplin", "sync"],
+            ["npx", "joplin", "sync"],
             capture_output=True,
             encoding="utf8",
             timeout=timeout,

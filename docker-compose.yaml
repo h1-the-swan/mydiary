@@ -1,0 +1,50 @@
+version: '3'
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend/mydiary:/usr/local/src/app/backend/mydiary
+      - ./backend/poetry.lock:/usr/local/src/app/backend/poetry.lock
+      - ./backend/pyproject.toml:/usr/local/src/app/backend/pyproject.toml
+    environment:
+      # This ensures that errors are printed as they occur, which
+      # makes debugging easier.
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - DEV_MODE=1
+    # command: ["main:app", "--host", "0.0.0.0", "--reload"]
+    # ports:
+    #     - 8888:8888
+  frontend:
+    build: ./frontend
+    # We can't mount the entire UI directory, since JavaScript dependencies
+    # (`node_modules`) live at that location.
+    volumes:
+      - ./frontend/src:/usr/local/src/app/frontend/src
+      - ./frontend/public:/usr/local/src/app/frontend/public
+      - ./frontend/build:/usr/local/src/app/frontend/build
+      - ./frontend/package.json:/usr/local/src/app/frontend/package.json
+      - ./frontend/tsconfig.json:/usr/local/src/app/frontend/tsconfig.json
+      - ./frontend/yarn.lock:/usr/local/src/app/frontend/yarn.lock
+      # We don't want to mount the codegen-generated api directory since it will
+      # be generated in Docker, so specify it as a persistent Docker named volume:
+      # https://stackoverflow.com/a/38601156
+      - docker_openapi:/usr/local/src/app/frontend/src/api
+    environment:
+      - NODE_ENV=development
+    # ports:
+    #     - 3000:3000
+    depends_on:
+      - backend
+  proxy:
+    image: nginx:1.17
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 8080:80
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  docker_openapi:

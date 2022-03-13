@@ -87,3 +87,6 @@ class MyDiaryGooglePhotos:
 
     def get_thumbnail_download_url(self, item, w=512, h=512) -> str:
         return f"{item['baseUrl']}=w{w}-h{h}"
+
+    def get_photo_download_url(self, item):
+        return f"{item['baseUrl']}=d"

@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import GoogleCalendarEvent, PocketStatusEnum, Tag, PocketArticle
+import uvicorn
 
 
 class GoogleCalendarEventRead(GoogleCalendarEvent):
@@ -28,7 +29,7 @@ def get_session():
         yield session
 
 
-app = FastAPI()
+app = FastAPI(title="mydiary", docs_url="/api/docs", openapi_url="/api")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
@@ -38,7 +39,7 @@ def read_gcal_events(
     *,
     session: Session = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, lte=100)
+    limit: int = Query(default=100, lte=100),
 ):
     events = session.exec(select(GoogleCalendarEvent).offset(offset).limit(limit)).all()
     return events
@@ -49,7 +50,7 @@ def read_tags(
     *,
     session: Session = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, lte=100)
+    limit: int = Query(default=100, lte=100),
 ):
     tags = session.exec(select(Tag).offset(offset).limit(limit)).all()
     return tags
@@ -76,12 +77,16 @@ def read_pocket_articles(
     if tags:
         for t in tags:
             stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
-    
+
     if year is not None:
         # stmt = stmt.where(PocketArticle.time_added.year==year)
         # The above doesn't work (maybe a SQLite issue?) so do this instead:
         dt = pendulum.datetime(year=year, month=1, day=1)
-        stmt = stmt.where(PocketArticle.time_added>=dt.start_of('year'))
-        stmt = stmt.where(PocketArticle.time_added<dt.end_of('year'))
+        stmt = stmt.where(PocketArticle.time_added >= dt.start_of("year"))
+        stmt = stmt.where(PocketArticle.time_added < dt.end_of("year"))
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
+
+
+if __name__ == "__main__":
+    uvicorn.run("mydiary.api:app", host="0.0.0.0", reload=True, port=8080)

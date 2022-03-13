@@ -8,9 +8,9 @@ from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 from mydiary.models import PocketArticle, PocketStatusEnum, Tag
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 
 @pytest.fixture(name="db_session")

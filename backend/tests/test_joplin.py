@@ -3,11 +3,11 @@ from pathlib import Path
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.models import PocketArticle, PocketStatusEnum, JoplinNote
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
 import pytest
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 
 @pytest.fixture(scope="session")

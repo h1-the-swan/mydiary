@@ -4,9 +4,9 @@ from mydiary.models import SpotifyTrack
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 
 def test_env_loaded():

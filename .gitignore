@@ -20,8 +20,8 @@ tmp*
 
 googlecalendar/token.json
 
-token_cache/*
-!token_cache/README.md
+**/token_cache/*
+!**/token_cache/README.md
 
 .cache
 
@@ -29,7 +29,7 @@ dist/
 
 data/
 
-tests/images
+**/tests/images
 
 database.db
 *backup*.db
