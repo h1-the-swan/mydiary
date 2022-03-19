@@ -1,7 +1,7 @@
 from datetime import datetime
 import pendulum
 from typing import List, Optional, Set
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 import pydantic
 from sqlalchemy import desc, all_
@@ -29,9 +29,14 @@ def get_session():
         yield session
 
 
-app = FastAPI(title="mydiary", docs_url="/api/docs", openapi_url="/api")
+# app = FastAPI()
+app = FastAPI(title="mydiary", root_path="/api", openapi_url="/api")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
+
+# @app.get("/api/app")
+# def read_main(request: Request):
+#     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
 
 
 @app.get("/gcal/events", response_model=List[GoogleCalendarEventRead])
@@ -89,4 +94,6 @@ def read_pocket_articles(
 
 
 if __name__ == "__main__":
-    uvicorn.run("mydiary.api:app", host="0.0.0.0", reload=True, port=8080)
+    uvicorn.run(
+        "mydiary.api:app", proxy_headers=True, host="0.0.0.0", reload=True, port=8888
+    )

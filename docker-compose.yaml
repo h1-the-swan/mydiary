@@ -6,12 +6,15 @@ services:
       - ./backend/mydiary:/usr/local/src/app/backend/mydiary
       - ./backend/poetry.lock:/usr/local/src/app/backend/poetry.lock
       - ./backend/pyproject.toml:/usr/local/src/app/backend/pyproject.toml
+      # specify joplin data as a persistent docker volume (defined below)
+      - joplin_data:/root/.config/joplin
     environment:
       # This ensures that errors are printed as they occur, which
       # makes debugging easier.
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
       - DEV_MODE=1
+      - JOPLIN_AUTH_TOKEN
     # command: ["main:app", "--host", "0.0.0.0", "--reload"]
     # ports:
     #     - 8888:8888
@@ -48,3 +51,4 @@ services:
 
 volumes:
   docker_openapi:
+  joplin_data:
