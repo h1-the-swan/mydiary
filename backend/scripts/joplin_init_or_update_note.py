@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = """initialize a journal entry in Joplin for a day"""
+DESCRIPTION = """initialize a journal entry in Joplin for a day, or update it if it already exists"""
 
 import sys, os, time
 from pathlib import Path
@@ -44,7 +44,7 @@ def main(args):
         logger.info("sync complete")
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
 
-        day.init_joplin_note(post_sync=True)
+        day.init_or_update_joplin_note(post_sync=True)
 
 
 if __name__ == "__main__":
@@ -76,7 +76,10 @@ if __name__ == "__main__":
         default="local",
         help='Specify which timezone to use (e.g. "America/Los_Angeles"). Default: "local"',
     )
-    parser.add_argument("--nextcloud-path", help="path for nextcloud syncing. e.g., http://192.168.0.111:48916/remote.php/webdav/Joplin")
+    parser.add_argument(
+        "--nextcloud-path",
+        help="path for nextcloud syncing. e.g., http://192.168.0.111:48916/remote.php/webdav/Joplin",
+    )
     parser.add_argument("--debug", action="store_true", help="output debugging info")
     global args
     args = parser.parse_args()

@@ -23,7 +23,6 @@ logger = root_logger.getChild(__name__)
 
 from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
-from mydiary.markdown_edits import MarkdownDoc
 
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 
@@ -42,38 +41,7 @@ def main(args):
         logger.info("sync complete")
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
 
-        existing_id = day.get_joplin_note_id()
-        if not existing_id:
-            raise RuntimeError(
-                f"Joplin note does not already exist for date {dt.to_date_string()}!"
-            )
-        note = mydiary_joplin.get_note(existing_id)
-        md_note = MarkdownDoc(note.body, parent=note)
-        md_new = MarkdownDoc(day.init_markdown())
-
-        need_to_update = False
-        for sec in md_note.sections:
-            try:
-                update_txt = md_new.get_section_by_title(sec.title).txt
-            except KeyError:
-                logger.debug(f"section {sec.title} not found in new text. skipping")
-                continue
-            result = sec.update(update_txt)
-            if result == "updated":
-                need_to_update = True
-            logger.debug(f"section {sec.title}: {result}")
-
-        if need_to_update is True:
-            logger.info(f"updating note: {note.title}")
-            r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
-            logger.info(f"done. status code: {r_put_note.status_code}")
-
-            logger.info("starting Joplin sync")
-            mydiary_joplin.sync()
-            logger.info("sync complete")
-
-        else:
-            logger.info("no updates made")
+        day.update_joplin_note(post_sync=True)
 
 
 if __name__ == "__main__":

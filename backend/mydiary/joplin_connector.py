@@ -230,10 +230,7 @@ class MyDiaryJoplin:
             "query": f'notebook:"{self.parent_notebook.title}" title:"{title}"',
         }
         r = requests.get(f"{self.base_url}/search", params=params)
-        items = r.json()["items"]
-        if not items:
-            logger.debug(f"no note found with title {title} (parent_notebook_id={parent_notebook_id}")
-            return None
+        items = r.json().get("items", [])
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
 
@@ -245,9 +242,14 @@ class MyDiaryJoplin:
         ]
 
         if not items:
-            return None
+            logger.debug(
+                f"no note found with title {title} (parent_notebook_id={parent_notebook_id})"
+            )
+            return "does_not_exist"
+
         if len(items) > 1:
             raise RuntimeError(f"more than one note found with title {title}")
+
         return items[0]["id"]
 
     def get_note_id_by_date(self, dt: datetime) -> str:

@@ -343,7 +343,7 @@ class MyDiaryDay(SQLModel):
     )
 
     @classmethod
-    def from_dt(cls, dt: datetime = now().start_of("day"), **kwargs) -> "MyDiaryDay":
+    def from_dt(cls, dt: datetime = now().start_of("day"), spotify_sync: bool = True, **kwargs) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
@@ -351,7 +351,8 @@ class MyDiaryDay(SQLModel):
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
 
         mydiary_spotify = MyDiarySpotify()
-        mydiary_spotify.save_recent_tracks_to_database()
+        if spotify_sync is True:
+            mydiary_spotify.save_recent_tracks_to_database()
         spotify_tracks = mydiary_spotify.get_tracks_for_day(dt)
 
         mydiary_gcal = MyDiaryGCal()
@@ -421,6 +422,109 @@ class MyDiaryDay(SQLModel):
                 # add a newline onto the last one in this section
                 lines[-1] += "\n"
         return "\n".join(lines)
+
+    def update_joplin_note(self, joplin_connector=None, post_sync=True):
+        from .joplin_connector import MyDiaryJoplin
+        from .markdown_edits import MarkdownDoc
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+        if self.joplin_note_id == "does_not_exist":
+            raise RuntimeError(
+                f"Joplin note does not already exist for date {self.dt.to_date_string()}!"
+            )
+
+        note = self.joplin_connector.get_note(self.joplin_note_id)
+        md_note = MarkdownDoc(note.body, parent=note)
+        md_new = MarkdownDoc(self.init_markdown())
+
+        need_to_update = False
+        for sec in md_note.sections:
+            try:
+                update_txt = md_new.get_section_by_title(sec.title).txt
+            except KeyError:
+                logger.debug(f"section {sec.title} not found in new text. skipping")
+                continue
+            result = sec.update(update_txt)
+            if result == "updated":
+                need_to_update = True
+            logger.debug(f"section {sec.title}: {result}")
+
+        if need_to_update is True:
+            logger.info(f"updating note: {note.title}")
+            r_put_note = self.joplin_connector.update_note_body(note.id, md_note.txt)
+            logger.info(f"done. status code: {r_put_note.status_code}")
+
+            if post_sync is True:
+                logger.info("starting Joplin sync")
+                self.joplin_connector.sync()
+                logger.info("sync complete")
+
+        else:
+            logger.info("no updates made")
+
+    def init_joplin_note(self, joplin_connector=None, post_sync=True):
+        from .joplin_connector import MyDiaryJoplin
+        from .markdown_edits import MarkdownDoc
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+        if self.joplin_note_id != "does_not_exist":
+            raise RuntimeError(
+                f"Joplin note already exists for date {self.dt.to_date_string()} (note id: {self.joplin_note_id})!"
+            )
+
+        title = self.dt.strftime("%Y-%m-%d")
+        body = self.init_markdown()
+        subfolder_title = str(self.dt.year)
+        subfolder_id = self.joplin_connector.get_subfolder_id(subfolder_title)
+        if subfolder_id is None:
+            logger.info(f'"{subfolder_title}" subfolder (subnotebook) not found.')
+            logger.info(f'creating subfolder "{subfolder_title}"')
+            r_create_subfolder = self.joplin_connector.create_subfolder(subfolder_title)
+            r_create_subfolder.raise_for_status()
+            logger.debug(f"created subfolder. response: {r_create_subfolder.json()}")
+            subfolder_id = r_create_subfolder.json()["id"]
+        logger.info(f"creating note: {title}")
+        r_post_note = self.joplin_connector.post_note(
+            title=title, body=body, parent_id=subfolder_id
+        )
+        logger.info(f"done. status code: {r_post_note.status_code}")
+
+        if post_sync is True:
+            logger.info("starting Joplin sync")
+            self.joplin_connector.sync()
+            logger.info("sync complete")
+
+        # fill in the note id
+        self.get_joplin_note_id()
+
+    def init_or_update_joplin_note(self, joplin_connector=None, post_sync=True):
+        from .joplin_connector import MyDiaryJoplin
+        from .markdown_edits import MarkdownDoc
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+
+        if self.joplin_note_id == "does_not_exist":
+            self.init_joplin_note(post_sync=post_sync)
+        elif self.joplin_note_id:
+            self.update_joplin_note(post_sync=post_sync)
+        else:
+            # this should not happen
+            raise RuntimeError(f"error when checking if Joplin note already exists (date: {self.dt}")
 
 
 class Dog(SQLModel, table=True):
