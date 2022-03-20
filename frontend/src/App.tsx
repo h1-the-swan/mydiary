@@ -1,15 +1,8 @@
 import React, { FC } from "react";
-import {
-  Layout,
-  Menu,
-  Table,
-  TableColumnGroupType,
-  TableColumnProps,
-  TableColumnType,
-  TableProps,
-} from "antd";
+import { Layout, Menu } from "antd";
 import "./App.css";
-import { PocketArticleRead, useReadPocketArticles, useReadTags } from "./api";
+import { Link, Route, Routes } from "react-router-dom";
+import PocketArticles from "./routes/pocketArticles";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -48,36 +41,6 @@ const { Header, Content, Footer, Sider } = Layout;
 //   return <div>{items}</div>;
 // };
 
-const PocketArticlesTable = () => {
-  const { data: articles, isLoading } = useReadPocketArticles(
-    {},
-    {
-      query: {
-        select: (d) => d.data,
-      },
-    }
-  );
-  if (!articles) return null;
-  const columns: TableColumnType<PocketArticleRead>[] = [
-    {
-      title: "id",
-      dataIndex: "id",
-      key: "id",
-    },
-    {
-      title: "given_title",
-      dataIndex: "given_title",
-      key: "given_title",
-    },
-    {
-      title: "resolved_title",
-      dataIndex: "resolved_title",
-      key: "resolved_title",
-    },
-  ];
-  return <Table dataSource={articles} columns={columns} />;
-};
-
 const App: FC = () => (
   <Layout>
     <Sider
@@ -92,7 +55,9 @@ const App: FC = () => (
     >
       <div className="logo" />
       <Menu theme="dark" mode="inline" defaultSelectedKeys={["4"]}>
-        <Menu.Item key="1">nav 1</Menu.Item>
+        <Menu.Item key="1">
+          <Link to={"/pocket/articles"}>Pocket Articles</Link>
+        </Menu.Item>
         <Menu.Item key="2">nav 2</Menu.Item>
         <Menu.Item key="3">nav 3</Menu.Item>
         <Menu.Item key="4">nav 4</Menu.Item>
@@ -108,12 +73,12 @@ const App: FC = () => (
           className="site-layout-background"
           style={{ padding: 24, minHeight: 360 }}
         >
-          <PocketArticlesTable />
+          <Routes>
+            <Route path="/pocket/articles" element={<PocketArticles />}></Route>
+          </Routes>
         </div>
       </Content>
-      <Footer style={{ textAlign: "center" }}>
-        Ant Design ©2018 Created by Ant UED
-      </Footer>
+      <Footer style={{ textAlign: "center" }}>Jason mydiary</Footer>
     </Layout>
   </Layout>
 );

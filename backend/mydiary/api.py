@@ -66,7 +66,7 @@ def read_pocket_articles(
     *,
     session: Session = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, lte=100),
+    limit: int = Query(default=100),
     status: Optional[Set[int]] = Query(None),
     tags: Optional[Set[str]] = Query(None, description="Tag names"),  # tag names
     year: Optional[int] = Query(None, description="Year added"),
