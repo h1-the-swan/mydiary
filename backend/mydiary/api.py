@@ -39,7 +39,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 #     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
 
 
-@app.get("/gcal/events", response_model=List[GoogleCalendarEventRead])
+@app.get("/gcal/events", operation_id="readGCalEvents", response_model=List[GoogleCalendarEventRead])
 def read_gcal_events(
     *,
     session: Session = Depends(get_session),
@@ -50,7 +50,7 @@ def read_gcal_events(
     return events
 
 
-@app.get("/tags", response_model=List[TagRead])
+@app.get("/tags", operation_id="readTags", response_model=List[TagRead])
 def read_tags(
     *,
     session: Session = Depends(get_session),
@@ -61,7 +61,7 @@ def read_tags(
     return tags
 
 
-@app.get("/pocket/articles", response_model=List[PocketArticleRead])
+@app.get("/pocket/articles", operation_id="readPocketArticles", response_model=List[PocketArticleRead])
 def read_pocket_articles(
     *,
     session: Session = Depends(get_session),
