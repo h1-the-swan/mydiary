@@ -7,6 +7,8 @@ services:
       - ./backend/poetry.lock:/usr/local/src/app/backend/poetry.lock
       - ./backend/pyproject.toml:/usr/local/src/app/backend/pyproject.toml
       - ./backend/token_cache:/usr/local/src/app/backend/token_cache
+      - ./backend/tests:/usr/local/src/app/backend/tests
+      - ./backend/pytest.ini:/usr/local/src/app/backend/pytest.ini
       # specify joplin data as a persistent docker volume (defined below)
       - joplin_data:/root/.config/joplin
     env_file:
@@ -35,10 +37,6 @@ services:
       - ./frontend/package.json:/usr/local/src/app/frontend/package.json
       - ./frontend/tsconfig.json:/usr/local/src/app/frontend/tsconfig.json
       - ./frontend/yarn.lock:/usr/local/src/app/frontend/yarn.lock
-      # We don't want to mount the codegen-generated api directory since it will
-      # be generated in Docker, so specify it as a persistent Docker named volume:
-      # https://stackoverflow.com/a/38601156
-      - docker_openapi:/usr/local/src/app/frontend/src/api
     environment:
       - NODE_ENV=development
     # ports:
@@ -56,5 +54,4 @@ services:
       - frontend
 
 volumes:
-  docker_openapi:
   joplin_data:

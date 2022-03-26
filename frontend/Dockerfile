@@ -28,4 +28,4 @@ ENV NODE_ENV $NODE_ENV
 # EXPOSE 3000
 
 ENTRYPOINT [ "yarn" ]
-CMD [ "start" ]
+CMD [ "generateAndStart" ]

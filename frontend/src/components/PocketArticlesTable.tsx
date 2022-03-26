@@ -26,7 +26,6 @@ export default function PocketArticlesTable() {
           {value}
         </a>
       ),
-      //return f"https://getpocket.com/read/{self.id}"
     },
     {
       title: "Title",

@@ -1,7 +1,7 @@
 module.exports = {
-    grants: {
+    mydiary: {
         input: {
-            target: '../backend/api.json',
+            target: './api.json',
         },
         output: {
             target: './src/api.ts',

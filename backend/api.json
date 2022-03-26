@@ -1,1 +1,335 @@
-{"openapi": "3.0.2", "info": {"title": "mydiary", "version": "0.1.0"}, "paths": {"/gcal/events": {"get": {"summary": "Read Gcal Events", "operationId": "readGCalEvents", "parameters": [{"required": false, "schema": {"title": "Offset", "type": "integer", "default": 0}, "name": "offset", "in": "query"}, {"required": false, "schema": {"title": "Limit", "type": "integer", "default": 100, "lte": 100}, "name": "limit", "in": "query"}], "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"title": "Response Read Gcal Events Gcal Events Get", "type": "array", "items": {"$ref": "#/components/schemas/GoogleCalendarEventRead"}}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/tags": {"get": {"summary": "Read Tags", "operationId": "readTags", "parameters": [{"required": false, "schema": {"title": "Offset", "type": "integer", "default": 0}, "name": "offset", "in": "query"}, {"required": false, "schema": {"title": "Limit", "type": "integer", "default": 100, "lte": 100}, "name": "limit", "in": "query"}], "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"title": "Response Read Tags Tags Get", "type": "array", "items": {"$ref": "#/components/schemas/TagRead"}}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}, "/pocket/articles": {"get": {"summary": "Read Pocket Articles", "operationId": "readPocketArticles", "parameters": [{"required": false, "schema": {"title": "Offset", "type": "integer", "default": 0}, "name": "offset", "in": "query"}, {"required": false, "schema": {"title": "Limit", "type": "integer", "default": 100, "lte": 100}, "name": "limit", "in": "query"}, {"required": false, "schema": {"title": "Status", "uniqueItems": true, "type": "array", "items": {"type": "integer"}}, "name": "status", "in": "query"}, {"description": "Tag names", "required": false, "schema": {"title": "Tags", "uniqueItems": true, "type": "array", "items": {"type": "string"}, "description": "Tag names"}, "name": "tags", "in": "query"}, {"description": "Year added", "required": false, "schema": {"title": "Year", "type": "integer", "description": "Year added"}, "name": "year", "in": "query"}], "responses": {"200": {"description": "Successful Response", "content": {"application/json": {"schema": {"title": "Response Read Pocket Articles Pocket Articles Get", "type": "array", "items": {"$ref": "#/components/schemas/PocketArticleRead"}}}}}, "422": {"description": "Validation Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HTTPValidationError"}}}}}}}}, "components": {"schemas": {"GoogleCalendarEventRead": {"title": "GoogleCalendarEventRead", "required": ["id", "summary", "start", "end", "start_timezone", "end_timezone"], "type": "object", "properties": {"id": {"title": "Id", "type": "string"}, "summary": {"title": "Summary", "type": "string"}, "location": {"title": "Location", "type": "string"}, "description": {"title": "Description", "type": "string"}, "start": {"title": "Start", "type": "string", "format": "date-time"}, "end": {"title": "End", "type": "string", "format": "date-time"}, "start_timezone": {"title": "Start Timezone", "type": "string"}, "end_timezone": {"title": "End Timezone", "type": "string"}}}, "HTTPValidationError": {"title": "HTTPValidationError", "type": "object", "properties": {"detail": {"title": "Detail", "type": "array", "items": {"$ref": "#/components/schemas/ValidationError"}}}}, "PocketArticleRead": {"title": "PocketArticleRead", "required": ["id", "given_title", "resolved_title", "url", "favorite", "status", "tags"], "type": "object", "properties": {"id": {"title": "Id", "type": "integer"}, "given_title": {"title": "Given Title", "type": "string"}, "resolved_title": {"title": "Resolved Title", "type": "string"}, "url": {"title": "Url", "type": "string"}, "favorite": {"title": "Favorite", "type": "boolean"}, "status": {"$ref": "#/components/schemas/PocketStatusEnum"}, "time_added": {"title": "Time Added", "type": "string", "format": "date-time"}, "time_updated": {"title": "Time Updated", "type": "string", "format": "date-time"}, "time_read": {"title": "Time Read", "type": "string", "format": "date-time"}, "time_favorited": {"title": "Time Favorited", "type": "string", "format": "date-time"}, "listen_duration_estimate": {"title": "Listen Duration Estimate", "type": "integer"}, "word_count": {"title": "Word Count", "type": "integer"}, "excerpt": {"title": "Excerpt", "type": "string"}, "top_image_url": {"title": "Top Image Url", "type": "string"}, "tags": {"title": "Tags", "type": "array", "items": {"$ref": "#/components/schemas/TagRead"}}}}, "PocketStatusEnum": {"title": "PocketStatusEnum", "enum": [0, 1, 2], "type": "integer", "description": "An enumeration."}, "TagRead": {"title": "TagRead", "required": ["name", "id"], "type": "object", "properties": {"id": {"title": "Id", "type": "integer"}, "name": {"title": "Name", "type": "string"}, "is_pocket_tag": {"title": "Is Pocket Tag", "type": "boolean", "default": false}}}, "ValidationError": {"title": "ValidationError", "required": ["loc", "msg", "type"], "type": "object", "properties": {"loc": {"title": "Location", "type": "array", "items": {"type": "string"}}, "msg": {"title": "Message", "type": "string"}, "type": {"title": "Error Type", "type": "string"}}}}}}
+{
+  "openapi": "3.0.2",
+  "info": { "title": "mydiary", "version": "0.1.0" },
+  "paths": {
+    "/gcal/events": {
+      "get": {
+        "summary": "Read Gcal Events",
+        "operationId": "readGCalEvents",
+        "parameters": [
+          {
+            "required": false,
+            "schema": { "title": "Offset", "type": "integer", "default": 0 },
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Limit",
+              "type": "integer",
+              "default": 100,
+              "lte": 100
+            },
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Read Gcal Events Gcal Events Get",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GoogleCalendarEventRead"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tags": {
+      "get": {
+        "summary": "Read Tags",
+        "operationId": "readTags",
+        "parameters": [
+          {
+            "required": false,
+            "schema": { "title": "Offset", "type": "integer", "default": 0 },
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Limit",
+              "type": "integer",
+              "default": 100,
+              "lte": 100
+            },
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Read Tags Tags Get",
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/TagRead" }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pocket/articles": {
+      "get": {
+        "summary": "Read Pocket Articles",
+        "operationId": "readPocketArticles",
+        "parameters": [
+          {
+            "required": false,
+            "schema": { "title": "Offset", "type": "integer", "default": 0 },
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": { "title": "Limit", "type": "integer", "default": 100 },
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Status",
+              "uniqueItems": true,
+              "type": "array",
+              "items": { "type": "integer" }
+            },
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "description": "Tag names",
+            "required": false,
+            "schema": {
+              "title": "Tags",
+              "uniqueItems": true,
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tag names"
+            },
+            "name": "tags",
+            "in": "query"
+          },
+          {
+            "description": "Year added",
+            "required": false,
+            "schema": {
+              "title": "Year",
+              "type": "integer",
+              "description": "Year added"
+            },
+            "name": "year",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Read Pocket Articles Pocket Articles Get",
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/PocketArticleRead" }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/googlephotos/thumbnails/{dt}": {
+      "get": {
+        "summary": "Google Photos Thumbnails Url",
+        "operationId": "googlePhotosThumbnailUrls",
+        "parameters": [
+          {
+            "required": true,
+            "schema": { "title": "Dt", "type": "string" },
+            "name": "dt",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": { "application/json": { "schema": {} } }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GoogleCalendarEventRead": {
+        "title": "GoogleCalendarEventRead",
+        "required": [
+          "id",
+          "summary",
+          "start",
+          "end",
+          "start_timezone",
+          "end_timezone"
+        ],
+        "type": "object",
+        "properties": {
+          "id": { "title": "Id", "type": "string" },
+          "summary": { "title": "Summary", "type": "string" },
+          "location": { "title": "Location", "type": "string" },
+          "description": { "title": "Description", "type": "string" },
+          "start": {
+            "title": "Start",
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": { "title": "End", "type": "string", "format": "date-time" },
+          "start_timezone": { "title": "Start Timezone", "type": "string" },
+          "end_timezone": { "title": "End Timezone", "type": "string" }
+        }
+      },
+      "HTTPValidationError": {
+        "title": "HTTPValidationError",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ValidationError" }
+          }
+        }
+      },
+      "PocketArticleRead": {
+        "title": "PocketArticleRead",
+        "required": [
+          "id",
+          "given_title",
+          "resolved_title",
+          "url",
+          "favorite",
+          "status",
+          "tags"
+        ],
+        "type": "object",
+        "properties": {
+          "id": { "title": "Id", "type": "integer" },
+          "given_title": { "title": "Given Title", "type": "string" },
+          "resolved_title": { "title": "Resolved Title", "type": "string" },
+          "url": { "title": "Url", "type": "string" },
+          "favorite": { "title": "Favorite", "type": "boolean" },
+          "status": { "$ref": "#/components/schemas/PocketStatusEnum" },
+          "time_added": {
+            "title": "Time Added",
+            "type": "string",
+            "format": "date-time"
+          },
+          "time_updated": {
+            "title": "Time Updated",
+            "type": "string",
+            "format": "date-time"
+          },
+          "time_read": {
+            "title": "Time Read",
+            "type": "string",
+            "format": "date-time"
+          },
+          "time_favorited": {
+            "title": "Time Favorited",
+            "type": "string",
+            "format": "date-time"
+          },
+          "listen_duration_estimate": {
+            "title": "Listen Duration Estimate",
+            "type": "integer"
+          },
+          "word_count": { "title": "Word Count", "type": "integer" },
+          "excerpt": { "title": "Excerpt", "type": "string" },
+          "top_image_url": { "title": "Top Image Url", "type": "string" },
+          "tags": {
+            "title": "Tags",
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TagRead" }
+          }
+        }
+      },
+      "PocketStatusEnum": {
+        "title": "PocketStatusEnum",
+        "enum": [0, 1, 2],
+        "type": "integer",
+        "description": "An enumeration."
+      },
+      "TagRead": {
+        "title": "TagRead",
+        "required": ["name", "id"],
+        "type": "object",
+        "properties": {
+          "id": { "title": "Id", "type": "integer" },
+          "name": { "title": "Name", "type": "string" },
+          "is_pocket_tag": {
+            "title": "Is Pocket Tag",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "ValidationError": {
+        "title": "ValidationError",
+        "required": ["loc", "msg", "type"],
+        "type": "object",
+        "properties": {
+          "loc": {
+            "title": "Location",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "msg": { "title": "Message", "type": "string" },
+          "type": { "title": "Error Type", "type": "string" }
+        }
+      }
+    }
+  }
+}

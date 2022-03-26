@@ -9,6 +9,7 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import GoogleCalendarEvent, PocketStatusEnum, Tag, PocketArticle
+from .googlephotos_connector import MyDiaryGooglePhotos
 import uvicorn
 
 
@@ -39,7 +40,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 #     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
 
 
-@app.get("/gcal/events", operation_id="readGCalEvents", response_model=List[GoogleCalendarEventRead])
+@app.get(
+    "/gcal/events",
+    operation_id="readGCalEvents",
+    response_model=List[GoogleCalendarEventRead],
+)
 def read_gcal_events(
     *,
     session: Session = Depends(get_session),
@@ -61,7 +66,11 @@ def read_tags(
     return tags
 
 
-@app.get("/pocket/articles", operation_id="readPocketArticles", response_model=List[PocketArticleRead])
+@app.get(
+    "/pocket/articles",
+    operation_id="readPocketArticles",
+    response_model=List[PocketArticleRead],
+)
 def read_pocket_articles(
     *,
     session: Session = Depends(get_session),
@@ -91,6 +100,23 @@ def read_pocket_articles(
         stmt = stmt.where(PocketArticle.time_added < dt.end_of("year"))
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
+
+
+@app.get(
+    "/googlephotos/thumbnails/{dt}",
+    operation_id="googlePhotosThumbnailUrls",
+    response_model=List[str],
+)
+def google_photos_thumbnails_url(dt: str) -> List[str]:
+    dt = pendulum.parse(dt)
+    mydiary_googlephotos = MyDiaryGooglePhotos()
+    items = mydiary_googlephotos.query_photos_api_for_day(dt)
+    return [mydiary_googlephotos.get_thumbnail_download_url(item) for item in items]
+
+
+@app.get("/generate_openapi_json")
+def send_api_json():
+    return app.openapi()
 
 
 if __name__ == "__main__":

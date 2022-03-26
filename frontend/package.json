@@ -24,6 +24,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "generate": "orval --config ../orval.config.js",
+    "generateAndStart": "node ./scripts/generateAPI.mjs && orval --config ./orval.config.js && yarn start",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

@@ -205,3 +205,77 @@ export const useReadPocketArticles = <TData = AsyncReturnType<typeof readPocketA
 }
 
 
+/**
+ * @summary Google Photos Thumbnails Url
+ */
+export const googlePhotosThumbnailUrls = (
+    dt: string, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<string[]>> => {
+    return axios.get(
+      `/googlephotos/thumbnails/${dt}`,options
+    );
+  }
+
+
+export const getGooglePhotosThumbnailUrlsQueryKey = (dt: string,) => [`/googlephotos/thumbnails/${dt}`];
+
+    
+export const useGooglePhotosThumbnailUrls = <TData = AsyncReturnType<typeof googlePhotosThumbnailUrls>, TError = AxiosError<HTTPValidationError>>(
+ dt: string, options?: { query?:UseQueryOptions<AsyncReturnType<typeof googlePhotosThumbnailUrls>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getGooglePhotosThumbnailUrlsQueryKey(dt);
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof googlePhotosThumbnailUrls>> = () => googlePhotosThumbnailUrls(dt, axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof googlePhotosThumbnailUrls>, TError, TData>(queryKey, queryFn, {enabled: !!(dt), ...queryOptions})
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Send Api Json
+ */
+export const sendApiJsonGenerateOpenapiJsonGet = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.get(
+      `/generate_openapi_json`,options
+    );
+  }
+
+
+export const getSendApiJsonGenerateOpenapiJsonGetQueryKey = () => [`/generate_openapi_json`];
+
+    
+export const useSendApiJsonGenerateOpenapiJsonGet = <TData = AsyncReturnType<typeof sendApiJsonGenerateOpenapiJsonGet>, TError = AxiosError<unknown>>(
+  options?: { query?:UseQueryOptions<AsyncReturnType<typeof sendApiJsonGenerateOpenapiJsonGet>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getSendApiJsonGenerateOpenapiJsonGetQueryKey();
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof sendApiJsonGenerateOpenapiJsonGet>> = () => sendApiJsonGenerateOpenapiJsonGet(axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof sendApiJsonGenerateOpenapiJsonGet>, TError, TData>(queryKey, queryFn, queryOptions)
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
