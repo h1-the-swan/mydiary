@@ -35,9 +35,9 @@ from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 
 class MyDiarySpotify:

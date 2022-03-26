@@ -6,15 +6,21 @@ services:
       - ./backend/mydiary:/usr/local/src/app/backend/mydiary
       - ./backend/poetry.lock:/usr/local/src/app/backend/poetry.lock
       - ./backend/pyproject.toml:/usr/local/src/app/backend/pyproject.toml
+      - ./backend/token_cache:/usr/local/src/app/backend/token_cache
       # specify joplin data as a persistent docker volume (defined below)
       - joplin_data:/root/.config/joplin
+    env_file:
+      - ./backend/.env
     environment:
       # This ensures that errors are printed as they occur, which
       # makes debugging easier.
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
       - DEV_MODE=1
-      - JOPLIN_AUTH_TOKEN
+      # override these variables from the .env file:
+      - SPOTIFY_TOKEN_CACHE_PATH=/usr/local/src/app/backend/token_cache/spotify.json
+      - GOOGLECALENDAR_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlecalendar_token.json
+      - GOOGLEPHOTOS_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlephotos_token.json
     # command: ["main:app", "--host", "0.0.0.0", "--reload"]
     # ports:
     #     - 8888:8888

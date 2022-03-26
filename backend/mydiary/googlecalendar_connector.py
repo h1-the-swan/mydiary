@@ -31,9 +31,9 @@ from google.oauth2.credentials import exceptions as GoogleOauthExceptions
 from .db import engine, Session, select
 from .models import GoogleCalendarEvent
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 
 class MyDiaryGCal:

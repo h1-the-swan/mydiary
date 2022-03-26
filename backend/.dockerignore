@@ -9,3 +9,5 @@
 Dockerfile
 
 poetry.toml
+
+.env

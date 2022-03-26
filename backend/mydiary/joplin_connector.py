@@ -30,9 +30,9 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
 JOPLIN_AUTH_TOKEN = os.environ["JOPLIN_AUTH_TOKEN"]

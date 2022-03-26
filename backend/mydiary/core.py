@@ -11,9 +11,9 @@ from pathlib import Path
 from PIL import Image
 from io import BytesIO
 
-from dotenv import load_dotenv, find_dotenv
+# from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(find_dotenv())
+# load_dotenv(find_dotenv())
 
 # from pocket import Pocket
 
