@@ -8,7 +8,13 @@ from sqlalchemy import desc, all_
 from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
-from .models import GoogleCalendarEvent, PocketStatusEnum, Tag, PocketArticle
+from .models import (
+    GoogleCalendarEvent,
+    PocketStatusEnum,
+    Tag,
+    PocketArticle,
+    GooglePhotosThumbnail,
+)
 from .googlephotos_connector import MyDiaryGooglePhotos
 import uvicorn
 
@@ -105,13 +111,20 @@ def read_pocket_articles(
 @app.get(
     "/googlephotos/thumbnails/{dt}",
     operation_id="googlePhotosThumbnailUrls",
-    response_model=List[str],
+    response_model=List[GooglePhotosThumbnail],
 )
-def google_photos_thumbnails_url(dt: str) -> List[str]:
+def google_photos_thumbnails_url(dt: str):
     dt = pendulum.parse(dt)
     mydiary_googlephotos = MyDiaryGooglePhotos()
     items = mydiary_googlephotos.query_photos_api_for_day(dt)
-    return [mydiary_googlephotos.get_thumbnail_download_url(item) for item in items]
+    return [
+        {
+            "url": mydiary_googlephotos.get_thumbnail_download_url(item),
+            "width": item["mediaMetadata"]["width"],
+            "height": item["mediaMetadata"]["height"],
+        }
+        for item in items
+    ]
 
 
 @app.get("/generate_openapi_json")

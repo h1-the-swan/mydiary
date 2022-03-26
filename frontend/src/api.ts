@@ -69,6 +69,12 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+export interface GooglePhotosThumbnail {
+  url: string;
+  width: number;
+  height: number;
+}
+
 export interface GoogleCalendarEventRead {
   id: string;
   summary: string;
@@ -210,7 +216,7 @@ export const useReadPocketArticles = <TData = AsyncReturnType<typeof readPocketA
  */
 export const googlePhotosThumbnailUrls = (
     dt: string, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<string[]>> => {
+ ): Promise<AxiosResponse<GooglePhotosThumbnail[]>> => {
     return axios.get(
       `/googlephotos/thumbnails/${dt}`,options
     );
