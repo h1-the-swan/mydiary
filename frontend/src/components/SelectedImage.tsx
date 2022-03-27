@@ -1,13 +1,14 @@
 // https://codesandbox.io/s/o7o241q09?file=/SelectedImage.js:0-2199
 
-// @ts-nocheck
-
 import React, { useState, useEffect } from "react";
+import { Image, ImageProps } from "antd";
+import { RenderImageProps, PhotoProps } from "react-photo-gallery";
+import { isElement } from "react-dom/test-utils";
 
-const Checkmark = ({ selected }) => (
+const Checkmark = (props: { selected: boolean }) => (
   <div
     style={
-      selected
+      props.selected
         ? { left: "4px", top: "4px", position: "absolute", zIndex: "1" }
         : { display: "none" }
     }
@@ -36,22 +37,29 @@ const selectedImgStyle = {
   transform: "translateZ(0px) scale3d(0.9, 0.9, 1)",
   transition: "transform .135s cubic-bezier(0.0,0.0,0.2,1),opacity linear .15s",
 };
-const cont = {
+const cont: any = {
   backgroundColor: "#eee",
   cursor: "pointer",
   overflow: "hidden",
   position: "relative",
 };
 
-const SelectedImage = ({
-  index,
-  photo,
-  margin,
-  direction,
-  top,
-  left,
-  selected,
-}) => {
+export interface IPhoto extends PhotoProps {
+  // sizes?: string;
+  // srcSet?: string;
+  selected?: boolean;
+}
+
+export interface ISelectedImage extends RenderImageProps {
+  photo: IPhoto;
+}
+
+// const SelectedImage = (props: RenderImageProps<{selected: boolean}>) => {
+//   const { index, photo, margin, direction, top, left, onClick, selected} = props;
+const SelectedImage = (props: ISelectedImage) => {
+  const {  index, photo, left, top, direction, onClick, margin } = props;
+  const { selected } = photo;
+
   const [isSelected, setIsSelected] = useState(selected);
   //calculate x,y scale
   const sx = (100 - (30 / photo.width) * 100) / 100;
@@ -64,7 +72,8 @@ const SelectedImage = ({
     cont.top = top;
   }
 
-  const handleOnClick = (e) => {
+  const handleOnClick = (e: any) => {
+    if (onClick) onClick(e, { index });
     setIsSelected(!isSelected);
   };
 
@@ -72,19 +81,29 @@ const SelectedImage = ({
     setIsSelected(selected);
   }, [selected]);
 
+  let { sizes, srcSet, ...photoProps } = photo;
+  sizes = Array.isArray(sizes) ? sizes.join(",") : sizes;
+  srcSet = Array.isArray(srcSet) ? srcSet.join(",") : srcSet
+  // delete photo.sizes;
+  // delete photo.srcSet;
+
+  
   return (
     <div
       style={{ margin, height: photo.height, width: photo.width, ...cont }}
       className={!isSelected ? "not-selected" : ""}
+      onClick={handleOnClick}
     >
       <Checkmark selected={isSelected ? true : false} />
-      <img
-        alt={photo.title}
+      <Image
+        preview={false}
+        // alt={photo.title}kk
         style={
           isSelected ? { ...imgStyle, ...selectedImgStyle } : { ...imgStyle }
         }
-        {...photo}
-        onClick={handleOnClick}
+        sizes={sizes}
+        srcSet={srcSet}
+        {...photoProps}
       />
       <style>{`.not-selected:hover{outline:2px solid #06befa}`}</style>
     </div>

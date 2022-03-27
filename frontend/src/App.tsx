@@ -78,7 +78,9 @@ const App: FC = () => (
         >
           <Routes>
             <Route path="/pocket/articles" element={<PocketArticles />}></Route>
-            <Route path="/googlephotos/thumbnail" element={<GooglePhotos />}></Route>
+            <Route path="/googlephotos/thumbnail" element={<GooglePhotos />}>
+              <Route path=":dt" element={<GooglePhotos />} />
+            </Route>
           </Routes>
         </div>
       </Content>
