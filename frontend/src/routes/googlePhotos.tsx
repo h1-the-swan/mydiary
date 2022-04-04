@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Form, Button } from "antd";
-import { useGooglePhotosThumbnailUrls } from "../api";
+import { useGooglePhotosAddToJoplin, useGooglePhotosThumbnailUrls } from "../api";
 import Gallery, { PhotoClickHandler } from "react-photo-gallery";
 import SelectedImage, { ISelectedImage } from "../components/SelectedImage";
 import { RenderImageProps, GalleryI } from "react-photo-gallery";
@@ -9,25 +9,33 @@ import { RenderImageProps, GalleryI } from "react-photo-gallery";
 const GooglePhotos = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<boolean[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
   const [form] = Form.useForm();
-  const params = useParams();
-  const { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(
-    params.dt || "2022-03-01",
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dt = searchParams.get("dt") || "2022-03-01";
+  let { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(
+    dt,
     {
       query: {
         select: (d) => d.data,
       },
     }
   );
+  const mutation = useGooglePhotosAddToJoplin();
+
+  useEffect(() => {
+    if (imgUrls) {
+      setPhotos(imgUrls?.map((item) => {
+      const { baseUrl, width, height } = item;
+      const url = `${baseUrl}=w512-h512`
+      return { src: url, width: width, height: height };
+      }));
+  }
+  }, [imgUrls]);
 
   const toggleSelectAll = () => {
     setSelectAll(!selectAll);
   };
-  const photos = imgUrls?.map((item) => {
-    const { url, width, height } = item;
-    return { src: url, width: width, height: height };
-  });
-
   useEffect(() => {
     if (imgUrls) {
       setSelectedIndices(new Array(imgUrls.length).fill(false));
@@ -56,7 +64,15 @@ const GooglePhotos = () => {
   );
 
   const onFinish = (values: any) => {
-    console.log(values);
+    const submitPhotos = [];
+    if (!imgUrls) return;
+    for (let i = 0; i < imgUrls.length; i++) {
+      if (selectedIndices[i] === true) {
+        submitPhotos.push(imgUrls[i])
+      }
+    }
+    console.log(submitPhotos);
+    mutation.mutate({dt: dt, data: submitPhotos});
   };
 
   const handleOnClick: PhotoClickHandler = (e, { index }) => {

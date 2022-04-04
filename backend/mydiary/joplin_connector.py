@@ -14,7 +14,7 @@ import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union
 
-from .core import reduce_image_size
+from .core import reduce_image_size, reduce_size_recurse
 from .models import JoplinNote, JoplinFolder
 
 try:
@@ -316,21 +316,6 @@ class MyDiaryJoplin:
         )
         return response
 
-    def _reduce_size_recurse(
-        self, data, size: Tuple[int, int], bytes_threshold: int = 60000
-    ):
-        logger.debug(f"reducing image using size parameter: {size}")
-        new_data = reduce_image_size(data, size)
-        if len(new_data) > bytes_threshold:
-            size = (int(size[0] * 0.9), int(size[1] * 0.9))
-            logger.debug(
-                f"tried to reduce image size but new image ({len(new_data)} bytes) is still over threshold ({bytes_threshold} bytes). trying again with size parameter {size}"
-            )
-            return self._reduce_size_recurse(data, size, bytes_threshold)
-        else:
-            logger.debug(f"reduced image to {len(new_data)} bytes")
-            return new_data
-
     def joplin_reduce_image_size(
         self,
         resource_id: str,
@@ -360,7 +345,7 @@ class MyDiaryJoplin:
         )
         image_bytes: bytes = resource_file.content
         if len(image_bytes) > bytes_threshold:
-            image_bytes = self._reduce_size_recurse(image_bytes, size, bytes_threshold)
+            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
         else:
             logger.debug(
                 f"did not reduce the size of image (resource id: {resource_id} because it was already under the threshold ({bytes_threshold} bytes)"

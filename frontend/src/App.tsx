@@ -1,7 +1,7 @@
 import React, { FC } from "react";
 import { Layout, Menu } from "antd";
 import "./App.css";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Route, Routes, useLocation, useResolvedPath } from "react-router-dom";
 import PocketArticles from "./routes/pocketArticles";
 import GooglePhotos from "./routes/googlePhotos";
 
@@ -42,51 +42,59 @@ const { Header, Content, Footer, Sider } = Layout;
 //   return <div>{items}</div>;
 // };
 
-const App: FC = () => (
-  <Layout>
-    <Sider
-      breakpoint="lg"
-      collapsedWidth="0"
-      onBreakpoint={(broken) => {
-        console.log(broken);
-      }}
-      onCollapse={(collapsed, type) => {
-        console.log(collapsed, type);
-      }}
-    >
-      <div className="logo" />
-      <Menu theme="dark" mode="inline" defaultSelectedKeys={["1"]}>
-        <Menu.Item key="1">
-          <Link to={"/pocket/articles"}>Pocket Articles</Link>
-        </Menu.Item>
-        <Menu.Item key="2">
-          <Link to={"/googlephotos/thumbnail"}>Google Photos</Link>
-        </Menu.Item>
-        <Menu.Item key="3">nav 3</Menu.Item>
-        <Menu.Item key="4">nav 4</Menu.Item>
-      </Menu>
-    </Sider>
+const App: FC = (props) => {
+  const location = useLocation();
+  const resolvedPath = useResolvedPath(location.pathname);
+  console.log(location);
+  console.log(resolvedPath);
+  return (
     <Layout>
-      <Header
-        className="site-layout-sub-header-background"
-        style={{ padding: 0 }}
-      />
-      <Content style={{ margin: "24px 16px 0" }}>
-        <div
-          className="site-layout-background"
-          style={{ padding: 24, minHeight: 360 }}
-        >
-          <Routes>
-            <Route path="/pocket/articles" element={<PocketArticles />}></Route>
-            <Route path="/googlephotos/thumbnail" element={<GooglePhotos />}>
-              <Route path=":dt" element={<GooglePhotos />} />
-            </Route>
-          </Routes>
-        </div>
-      </Content>
-      <Footer style={{ textAlign: "center" }}>Jason mydiary</Footer>
+      <Sider
+        breakpoint="lg"
+        collapsedWidth="0"
+        onBreakpoint={(broken) => {
+          console.log(broken);
+        }}
+        onCollapse={(collapsed, type) => {
+          console.log(collapsed, type);
+        }}
+      >
+        <div className="logo" />
+        <Menu theme="dark" mode="inline" defaultSelectedKeys={["1"]}>
+          <Menu.Item key="1">
+            <Link to={"/pocket/articles"}>Pocket Articles</Link>
+          </Menu.Item>
+          <Menu.Item key="2">
+            <Link to={"/googlephotos/thumbnail"}>Google Photos</Link>
+          </Menu.Item>
+          <Menu.Item key="3">nav 3</Menu.Item>
+          <Menu.Item key="4">nav 4</Menu.Item>
+        </Menu>
+      </Sider>
+      <Layout>
+        <Header
+          className="site-layout-sub-header-background"
+          style={{ padding: 0 }}
+        />
+        <Content style={{ margin: "24px 16px 0" }}>
+          <div
+            className="site-layout-background"
+            style={{ padding: 24, minHeight: 360 }}
+          >
+            <Routes>
+              <Route
+                path="/pocket/articles"
+                element={<PocketArticles />}
+              ></Route>
+              <Route path="/googlephotos/thumbnail" element={<GooglePhotos />}>
+              </Route>
+            </Routes>
+          </div>
+        </Content>
+        <Footer style={{ textAlign: "center" }}>Jason mydiary</Footer>
+      </Layout>
     </Layout>
-  </Layout>
-);
+  );
+};
 
 export default App;

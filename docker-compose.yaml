@@ -11,6 +11,9 @@ services:
       - ./backend/pytest.ini:/usr/local/src/app/backend/pytest.ini
       # specify joplin data as a persistent docker volume (defined below)
       - joplin_data:/root/.config/joplin
+      # use timezone information from host machine
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     env_file:
       - ./backend/.env
     environment:
@@ -37,6 +40,9 @@ services:
       - ./frontend/package.json:/usr/local/src/app/frontend/package.json
       - ./frontend/tsconfig.json:/usr/local/src/app/frontend/tsconfig.json
       - ./frontend/yarn.lock:/usr/local/src/app/frontend/yarn.lock
+      # use timezone information from host machine
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
       - NODE_ENV=development
     # ports:

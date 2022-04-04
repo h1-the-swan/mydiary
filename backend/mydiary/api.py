@@ -1,4 +1,6 @@
 from datetime import datetime
+import requests
+import io
 import pendulum
 from typing import List, Optional, Set
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -17,6 +19,11 @@ from .models import (
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 import uvicorn
+
+import logging
+
+root_logger = logging.getLogger()
+logger = root_logger.getChild(__name__)
 
 
 class GoogleCalendarEventRead(GoogleCalendarEvent):
@@ -117,14 +124,73 @@ def google_photos_thumbnails_url(dt: str):
     dt = pendulum.parse(dt)
     mydiary_googlephotos = MyDiaryGooglePhotos()
     items = mydiary_googlephotos.query_photos_api_for_day(dt)
-    return [
+    items = [
         {
-            "url": mydiary_googlephotos.get_thumbnail_download_url(item),
+            # "url": mydiary_googlephotos.get_thumbnail_download_url(item),
+            "baseUrl": item["baseUrl"],
             "width": item["mediaMetadata"]["width"],
             "height": item["mediaMetadata"]["height"],
+            "creationTime": pendulum.parse(item["mediaMetadata"]["creationTime"]),
         }
         for item in items
     ]
+    items.sort(key=lambda item: item["creationTime"])
+    return items
+
+@app.post("/googlephotos/add_to_joplin/{dt}",
+    operation_id="googlePhotosAddToJoplin",
+)
+def google_photos_add_to_joplin(dt: str, photos: List[GooglePhotosThumbnail]):
+    from mydiary import MyDiaryDay
+    from mydiary.joplin_connector import MyDiaryJoplin
+    from mydiary.markdown_edits import MarkdownDoc
+    from mydiary.core import reduce_size_recurse
+    dt = pendulum.parse(dt)
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        logger.info("starting Joplin sync")
+        mydiary_joplin.sync()
+        logger.info("sync complete")
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+
+        existing_id = day.get_joplin_note_id()
+        if existing_id == "does_not_exist":
+            raise RuntimeError(
+                f"Joplin note does not already exist for date {dt.to_date_string()}!"
+            )
+        note = mydiary_joplin.get_note(existing_id)
+        md_note = MarkdownDoc(note.body, parent=note)
+
+        sec_images = md_note.get_section_by_title("images")
+        resource_ids = sec_images.get_resource_ids()
+        if resource_ids:
+            raise RuntimeError()
+        size = (512, 512)
+        bytes_threshold = 60000
+        resource_ids = []
+        for photo in photos:
+            download_url = f"{photo.baseUrl}=d"
+            image_bytes_request = requests.get(download_url)
+            image_bytes: bytes = image_bytes_request.content
+            if len(image_bytes) > bytes_threshold:
+                image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
+            r = mydiary_joplin.create_resource(data=image_bytes)
+            r.raise_for_status()
+            resource_id = r.json()["id"]
+            resource_ids.append(f"![](:/{resource_id})")
+            logger.debug(f"new resource id: {resource_id}")
+
+        new_txt = sec_images.txt
+        new_txt += "\n"
+        new_txt += "\n\n".join(resource_ids)
+        new_txt += "\n"
+        sec_images.update(new_txt)
+        logger.info(f"updating note: {note.title}")
+        r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
+        r_put_note.raise_for_status()
+
+        logger.info("starting Joplin sync")
+        mydiary_joplin.sync()
+        logger.info("sync complete")
 
 
 @app.get("/generate_openapi_json")

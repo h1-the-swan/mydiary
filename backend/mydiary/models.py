@@ -532,6 +532,6 @@ class Dog(SQLModel, table=True):
     name: str = Field(index=True)
 
 class GooglePhotosThumbnail(SQLModel):
-    url: str
+    baseUrl: str
     width: int
     height: int

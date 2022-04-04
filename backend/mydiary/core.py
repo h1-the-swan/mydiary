@@ -11,6 +11,11 @@ from pathlib import Path
 from PIL import Image
 from io import BytesIO
 
+import logging
+
+root_logger = logging.getLogger()
+logger = root_logger.getChild(__name__)
+
 # from dotenv import load_dotenv, find_dotenv
 
 # load_dotenv(find_dotenv())
@@ -32,3 +37,18 @@ def reduce_image_size(
     im.save(image_bytes, format=im.format)
     return image_bytes.getvalue()
 
+
+def reduce_size_recurse(
+    data, size: Tuple[int, int], bytes_threshold: int = 60000
+):
+    logger.debug(f"reducing image using size parameter: {size}")
+    new_data = reduce_image_size(data, size)
+    if len(new_data) > bytes_threshold:
+        size = (int(size[0] * 0.9), int(size[1] * 0.9))
+        logger.debug(
+            f"tried to reduce image size but new image ({len(new_data)} bytes) is still over threshold ({bytes_threshold} bytes). trying again with size parameter {size}"
+        )
+        return reduce_size_recurse(data, size, bytes_threshold)
+    else:
+        logger.debug(f"reduced image to {len(new_data)} bytes")
+        return new_data

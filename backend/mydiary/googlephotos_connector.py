@@ -81,7 +81,7 @@ class MyDiaryGooglePhotos:
         # dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
         dt = pendulum.instance(dt).start_of("day")
         filters = {"dateFilter": {"dates": [self.get_api_date_obj(dt)]}}
-        r = self.service.mediaItems().search(body={"filters": filters}).execute()
+        r = self.service.mediaItems().search(body={"filters": filters, "pageSize": 100}).execute()
         mediaItems = r.get("mediaItems", [])
         return mediaItems
 
