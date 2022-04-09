@@ -1,11 +1,15 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Form, Button } from "antd";
-import { useGooglePhotosAddToJoplin, useGooglePhotosThumbnailUrls } from "../api";
+import { Form, Button, Alert } from "antd";
+import {
+  useGooglePhotosAddToJoplin,
+  useGooglePhotosThumbnailUrls,
+} from "../api";
 import JoplinSyncButton from "../components/JoplinSyncButton";
 import Gallery, { PhotoClickHandler } from "react-photo-gallery";
 import SelectedImage, { ISelectedImage } from "../components/SelectedImage";
 import { RenderImageProps, GalleryI } from "react-photo-gallery";
+import JoplinFindNote from "../components/JoplinFindNote";
 
 const GooglePhotos = () => {
   const [selectAll, setSelectAll] = useState(false);
@@ -14,24 +18,23 @@ const GooglePhotos = () => {
   const [form] = Form.useForm();
   const [searchParams, setSearchParams] = useSearchParams();
   const dt = searchParams.get("dt") || "2022-03-01";
-  let { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(
-    dt,
-    {
-      query: {
-        select: (d) => d.data,
-      },
-    }
-  );
+  let { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(dt, {
+    query: {
+      select: (d) => d.data,
+    },
+  });
   const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin();
 
   useEffect(() => {
     if (imgUrls) {
-      setPhotos(imgUrls?.map((item) => {
-      const { baseUrl, width, height } = item;
-      const url = `${baseUrl}=w512-h512`
-      return { src: url, width: width, height: height };
-      }));
-  }
+      setPhotos(
+        imgUrls?.map((item) => {
+          const { baseUrl, width, height } = item;
+          const url = `${baseUrl}=w512-h512`;
+          return { src: url, width: width, height: height };
+        })
+      );
+    }
   }, [imgUrls]);
 
   const toggleSelectAll = () => {
@@ -69,11 +72,11 @@ const GooglePhotos = () => {
     if (!imgUrls) return;
     for (let i = 0; i < imgUrls.length; i++) {
       if (selectedIndices[i] === true) {
-        submitPhotos.push(imgUrls[i])
+        submitPhotos.push(imgUrls[i]);
       }
     }
     console.log(submitPhotos);
-    mutationGooglePhotosAddToJoplin.mutate({dt: dt, data: submitPhotos});
+    mutationGooglePhotosAddToJoplin.mutate({ dt: dt, data: submitPhotos });
   };
 
   const handleOnClick: PhotoClickHandler = (e, { index }) => {
@@ -86,7 +89,7 @@ const GooglePhotos = () => {
     <span>Loading...</span>
   ) : photos ? (
     <main>
-      <JoplinSyncButton />
+      <JoplinFindNote dt={dt} />
       <Form form={form} onFinish={onFinish}>
         <Button onClick={toggleSelectAll}>toggle select all</Button>
         <Form.Item name="gallery">
@@ -98,9 +101,25 @@ const GooglePhotos = () => {
             />
           </div>
         </Form.Item>
-        <Button type="primary" htmlType="submit">
+        <Button
+          type="primary"
+          htmlType="submit"
+          loading={mutationGooglePhotosAddToJoplin.isLoading}
+        >
           Submit
         </Button>
+        {mutationGooglePhotosAddToJoplin.isError && (
+          <Alert
+            message={`Error: ${mutationGooglePhotosAddToJoplin.error.message}`}
+            type="error"
+          />
+        )}
+        {mutationGooglePhotosAddToJoplin.isSuccess && (
+          <Alert
+            message="Successfully added image(s) to Joplin note"
+            type="success"
+          />
+        )}
       </Form>
     </main>
   ) : null;

@@ -114,9 +114,11 @@ def read_pocket_articles(
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
 
+
 @app.post("/joplin/sync", operation_id="joplinSync")
 def joplin_sync():
     from mydiary.joplin_connector import MyDiaryJoplin
+
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         logger.info("starting Joplin sync")
         try:
@@ -125,6 +127,29 @@ def joplin_sync():
             raise HTTPException(status_code=500)
         logger.info("sync complete")
     return "sync complete"
+
+
+@app.get("/joplin/get_note_id/{dt}", operation_id="joplinGetNoteId", response_model=str)
+def joplin_get_note_id(dt: str) -> str:
+    from mydiary import MyDiaryDay
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    if dt == "today":
+        dt = pendulum.today()
+    elif dt == "yesterday":
+        dt = pendulum.yesterday()
+    else:
+        dt = pendulum.parse(dt)
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+
+        existing_id = day.get_joplin_note_id()
+        # if existing_id == "does_not_exist":
+        #     raise RuntimeError(
+        #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
+        #     )
+        return existing_id
+
 
 @app.get(
     "/googlephotos/thumbnails/{dt}",
@@ -154,7 +179,9 @@ def google_photos_thumbnails_url(dt: str):
     items.sort(key=lambda item: item["creationTime"])
     return items
 
-@app.post("/googlephotos/add_to_joplin/{dt}",
+
+@app.post(
+    "/googlephotos/add_to_joplin/{dt}",
     operation_id="googlePhotosAddToJoplin",
 )
 def google_photos_add_to_joplin(dt: str, photos: List[GooglePhotosThumbnail]):
@@ -162,6 +189,7 @@ def google_photos_add_to_joplin(dt: str, photos: List[GooglePhotosThumbnail]):
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse
+
     if dt == "today":
         dt = pendulum.today()
     elif dt == "yesterday":

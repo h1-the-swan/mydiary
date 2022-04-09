@@ -259,6 +259,46 @@ export const joplinSync = (
     }
     
 /**
+ * @summary Joplin Get Note Id
+ */
+export const joplinGetNoteId = (
+    dt: string, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<string>> => {
+    return axios.get(
+      `/joplin/get_note_id/${dt}`,options
+    );
+  }
+
+
+export const getJoplinGetNoteIdQueryKey = (dt: string,) => [`/joplin/get_note_id/${dt}`];
+
+    
+export type JoplinGetNoteIdQueryResult = NonNullable<AsyncReturnType<typeof joplinGetNoteId>>
+export type JoplinGetNoteIdQueryError = AxiosError<HTTPValidationError>
+
+export const useJoplinGetNoteId = <TData = AsyncReturnType<typeof joplinGetNoteId>, TError = AxiosError<HTTPValidationError>>(
+ dt: string, options?: { query?:UseQueryOptions<AsyncReturnType<typeof joplinGetNoteId>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getJoplinGetNoteIdQueryKey(dt);
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof joplinGetNoteId>> = () => joplinGetNoteId(dt, axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof joplinGetNoteId>, TError, TData>(queryKey, queryFn, {enabled: !!(dt), ...queryOptions})
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
  * @summary Google Photos Thumbnails Url
  */
 export const googlePhotosThumbnailUrls = (
