@@ -224,6 +224,41 @@ export const useReadPocketArticles = <TData = AsyncReturnType<typeof readPocketA
 
 
 /**
+ * @summary Joplin Sync
+ */
+export const joplinSync = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/joplin/sync`,undefined,options
+    );
+  }
+
+
+
+    export type JoplinSyncMutationResult = NonNullable<AsyncReturnType<typeof joplinSync>>
+    
+    export type JoplinSyncMutationError = AxiosError<unknown>
+
+    export const useJoplinSync = <TError = AxiosError<unknown>,
+    TVariables = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof joplinSync>, TError,TVariables, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options || {}
+
+      
+
+
+      const mutationFn: MutationFunction<AsyncReturnType<typeof joplinSync>, TVariables> = () => {
+          ;
+
+          return  joplinSync(axiosOptions)
+        }
+
+      return useMutation<AsyncReturnType<typeof joplinSync>, TError, TVariables, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
  * @summary Google Photos Thumbnails Url
  */
 export const googlePhotosThumbnailUrls = (

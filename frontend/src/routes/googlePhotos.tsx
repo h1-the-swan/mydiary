@@ -2,6 +2,7 @@ import React, { useCallback, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Form, Button } from "antd";
 import { useGooglePhotosAddToJoplin, useGooglePhotosThumbnailUrls } from "../api";
+import JoplinSyncButton from "../components/JoplinSyncButton";
 import Gallery, { PhotoClickHandler } from "react-photo-gallery";
 import SelectedImage, { ISelectedImage } from "../components/SelectedImage";
 import { RenderImageProps, GalleryI } from "react-photo-gallery";
@@ -21,7 +22,7 @@ const GooglePhotos = () => {
       },
     }
   );
-  const mutation = useGooglePhotosAddToJoplin();
+  const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin();
 
   useEffect(() => {
     if (imgUrls) {
@@ -72,7 +73,7 @@ const GooglePhotos = () => {
       }
     }
     console.log(submitPhotos);
-    mutation.mutate({dt: dt, data: submitPhotos});
+    mutationGooglePhotosAddToJoplin.mutate({dt: dt, data: submitPhotos});
   };
 
   const handleOnClick: PhotoClickHandler = (e, { index }) => {
@@ -85,6 +86,7 @@ const GooglePhotos = () => {
     <span>Loading...</span>
   ) : photos ? (
     <main>
+      <JoplinSyncButton />
       <Form form={form} onFinish={onFinish}>
         <Button onClick={toggleSelectAll}>toggle select all</Button>
         <Form.Item name="gallery">

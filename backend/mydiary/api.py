@@ -114,6 +114,17 @@ def read_pocket_articles(
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
 
+@app.post("/joplin/sync", operation_id="joplinSync")
+def joplin_sync():
+    from mydiary.joplin_connector import MyDiaryJoplin
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        logger.info("starting Joplin sync")
+        try:
+            mydiary_joplin.sync()
+        except RuntimeError:
+            raise HTTPException(status_code=500)
+        logger.info("sync complete")
+    return "sync complete"
 
 @app.get(
     "/googlephotos/thumbnails/{dt}",
@@ -121,7 +132,13 @@ def read_pocket_articles(
     response_model=List[GooglePhotosThumbnail],
 )
 def google_photos_thumbnails_url(dt: str):
-    dt = pendulum.parse(dt)
+    if dt == "today":
+        dt = pendulum.today()
+    elif dt == "yesterday":
+        dt = pendulum.yesterday()
+    else:
+        dt = pendulum.parse(dt)
+
     mydiary_googlephotos = MyDiaryGooglePhotos()
     items = mydiary_googlephotos.query_photos_api_for_day(dt)
     items = [
@@ -145,7 +162,12 @@ def google_photos_add_to_joplin(dt: str, photos: List[GooglePhotosThumbnail]):
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse
-    dt = pendulum.parse(dt)
+    if dt == "today":
+        dt = pendulum.today()
+    elif dt == "yesterday":
+        dt = pendulum.yesterday()
+    else:
+        dt = pendulum.parse(dt)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         logger.info("starting Joplin sync")
         mydiary_joplin.sync()
