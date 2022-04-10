@@ -4,6 +4,7 @@ import { useJoplinGetNoteId, useJoplinSync } from "../api";
 
 interface Props {
   dt: string;
+  setNoteId: (noteId: string) => any;
 }
 
 export default function JoplinFindNote(props: Props) {
@@ -13,6 +14,11 @@ export default function JoplinFindNote(props: Props) {
       queryKey: [lastSync],
     },
   });
+  useEffect(() => {
+    if (noteId.data) {
+      props.setNoteId(noteId.data.data);
+    }
+  }, [noteId, props]);
   const mutationJoplinSync = useJoplinSync({
     mutation: {
       onSuccess: () => setLastSync(new Date()),

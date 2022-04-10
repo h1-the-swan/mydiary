@@ -181,33 +181,17 @@ def google_photos_thumbnails_url(dt: str):
 
 
 @app.post(
-    "/googlephotos/add_to_joplin/{dt}",
+    "/googlephotos/add_to_joplin/{note_id}",
     operation_id="googlePhotosAddToJoplin",
 )
-def google_photos_add_to_joplin(dt: str, photos: List[GooglePhotosThumbnail]):
+def google_photos_add_to_joplin(note_id: str, photos: List[GooglePhotosThumbnail]):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse
 
-    if dt == "today":
-        dt = pendulum.today()
-    elif dt == "yesterday":
-        dt = pendulum.yesterday()
-    else:
-        dt = pendulum.parse(dt)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        logger.info("starting Joplin sync")
-        mydiary_joplin.sync()
-        logger.info("sync complete")
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
-
-        existing_id = day.get_joplin_note_id()
-        if existing_id == "does_not_exist":
-            raise RuntimeError(
-                f"Joplin note does not already exist for date {dt.to_date_string()}!"
-            )
-        note = mydiary_joplin.get_note(existing_id)
+        note = mydiary_joplin.get_note(note_id)
         md_note = MarkdownDoc(note.body, parent=note)
 
         sec_images = md_note.get_section_by_title("images")
@@ -250,5 +234,10 @@ def send_api_json():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "mydiary.api:app", proxy_headers=True, host="0.0.0.0", reload=True, port=8888
+        "mydiary.api:app",
+        proxy_headers=True,
+        host="0.0.0.0",
+        reload=True,
+        port=8888,
+        timeout_keep_alive=30,
     )

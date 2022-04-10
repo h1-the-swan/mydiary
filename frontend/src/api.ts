@@ -342,11 +342,11 @@ export const useGooglePhotosThumbnailUrls = <TData = AsyncReturnType<typeof goog
  * @summary Google Photos Add To Joplin
  */
 export const googlePhotosAddToJoplin = (
-    dt: string,
+    noteId: string,
     googlePhotosThumbnail: GooglePhotosThumbnail[], options?: AxiosRequestConfig
  ): Promise<AxiosResponse<unknown>> => {
     return axios.post(
-      `/googlephotos/add_to_joplin/${dt}`,
+      `/googlephotos/add_to_joplin/${noteId}`,
       googlePhotosThumbnail,options
     );
   }
@@ -359,20 +359,20 @@ export const googlePhotosAddToJoplin = (
 
     export const useGooglePhotosAddToJoplin = <TError = AxiosError<HTTPValidationError>,
     
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof googlePhotosAddToJoplin>, TError,{dt: string;data: GooglePhotosThumbnail[]}, TContext>, axios?: AxiosRequestConfig}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof googlePhotosAddToJoplin>, TError,{noteId: string;data: GooglePhotosThumbnail[]}, TContext>, axios?: AxiosRequestConfig}
 ) => {
       const {mutation: mutationOptions, axios: axiosOptions} = options || {}
 
       
 
 
-      const mutationFn: MutationFunction<AsyncReturnType<typeof googlePhotosAddToJoplin>, {dt: string;data: GooglePhotosThumbnail[]}> = (props) => {
-          const {dt,data} = props || {};
+      const mutationFn: MutationFunction<AsyncReturnType<typeof googlePhotosAddToJoplin>, {noteId: string;data: GooglePhotosThumbnail[]}> = (props) => {
+          const {noteId,data} = props || {};
 
-          return  googlePhotosAddToJoplin(dt,data,axiosOptions)
+          return  googlePhotosAddToJoplin(noteId,data,axiosOptions)
         }
 
-      return useMutation<AsyncReturnType<typeof googlePhotosAddToJoplin>, TError, {dt: string;data: GooglePhotosThumbnail[]}, TContext>(mutationFn, mutationOptions)
+      return useMutation<AsyncReturnType<typeof googlePhotosAddToJoplin>, TError, {noteId: string;data: GooglePhotosThumbnail[]}, TContext>(mutationFn, mutationOptions)
     }
     
 /**

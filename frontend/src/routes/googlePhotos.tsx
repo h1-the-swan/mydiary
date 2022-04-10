@@ -15,6 +15,7 @@ const GooglePhotos = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<boolean[]>([]);
   const [photos, setPhotos] = useState<any[]>([]);
+  const [noteId, setNoteId] = useState<string>();
   const [form] = Form.useForm();
   const [searchParams, setSearchParams] = useSearchParams();
   const dt = searchParams.get("dt") || "2022-03-01";
@@ -76,7 +77,12 @@ const GooglePhotos = () => {
       }
     }
     console.log(submitPhotos);
-    mutationGooglePhotosAddToJoplin.mutate({ dt: dt, data: submitPhotos });
+    if (submitPhotos && noteId) {
+      mutationGooglePhotosAddToJoplin.mutate({
+        noteId: noteId,
+        data: submitPhotos,
+      });
+    }
   };
 
   const handleOnClick: PhotoClickHandler = (e, { index }) => {
@@ -89,7 +95,7 @@ const GooglePhotos = () => {
     <span>Loading...</span>
   ) : photos ? (
     <main>
-      <JoplinFindNote dt={dt} />
+      <JoplinFindNote dt={dt} setNoteId={setNoteId} />
       <Form form={form} onFinish={onFinish}>
         <Button onClick={toggleSelectAll}>toggle select all</Button>
         <Form.Item name="gallery">
