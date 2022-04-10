@@ -4,6 +4,7 @@ import { Form, Button, Alert } from "antd";
 import {
   useGooglePhotosAddToJoplin,
   useGooglePhotosThumbnailUrls,
+  useJoplinSync,
 } from "../api";
 import JoplinSyncButton from "../components/JoplinSyncButton";
 import Gallery, { PhotoClickHandler } from "react-photo-gallery";
@@ -16,15 +17,28 @@ const GooglePhotos = () => {
   const [selectedIndices, setSelectedIndices] = useState<boolean[]>([]);
   const [photos, setPhotos] = useState<any[]>([]);
   const [noteId, setNoteId] = useState<string>();
+  const [lastSync, setLastSync] = useState<Date>();
   const [form] = Form.useForm();
   const [searchParams, setSearchParams] = useSearchParams();
-  const dt = searchParams.get("dt") || "2022-03-01";
+  if (!searchParams.get("dt")) {
+    setSearchParams({ dt: "yesterday" });
+  }
+  const dt = searchParams.get("dt") || "yesterday";
   let { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(dt, {
     query: {
       select: (d) => d.data,
     },
   });
-  const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin();
+  const mutationJoplinSync = useJoplinSync({
+    mutation: {
+      onSuccess: () => setLastSync(new Date()),
+    },
+  });
+  const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin({
+    mutation: {
+      onSuccess: () => mutationJoplinSync.mutate(),
+    },
+  });
 
   useEffect(() => {
     if (imgUrls) {
@@ -95,7 +109,15 @@ const GooglePhotos = () => {
     <span>Loading...</span>
   ) : photos ? (
     <main>
-      <JoplinFindNote dt={dt} setNoteId={setNoteId} />
+      {lastSync ? <p>{`Last Joplin sync: ${lastSync}`}</p> : null}
+      {mutationJoplinSync.isLoading && <p>Joplin: currently syncing...</p>}
+      <JoplinFindNote
+        dt={dt}
+        setNoteId={setNoteId}
+        lastSync={lastSync}
+        setLastSync={setLastSync}
+        mutationJoplinSync={mutationJoplinSync}
+      />
       <Form form={form} onFinish={onFinish}>
         <Button onClick={toggleSelectAll}>toggle select all</Button>
         <Form.Item name="gallery">
@@ -107,13 +129,15 @@ const GooglePhotos = () => {
             />
           </div>
         </Form.Item>
-        <Button
-          type="primary"
-          htmlType="submit"
-          loading={mutationGooglePhotosAddToJoplin.isLoading}
-        >
-          Submit
-        </Button>
+        {noteId && (
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={mutationGooglePhotosAddToJoplin.isLoading}
+          >
+            Submit
+          </Button>
+        )}
         {mutationGooglePhotosAddToJoplin.isError && (
           <Alert
             message={`Error: ${mutationGooglePhotosAddToJoplin.error.message}`}

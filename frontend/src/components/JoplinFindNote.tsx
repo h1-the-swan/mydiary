@@ -5,32 +5,30 @@ import { useJoplinGetNoteId, useJoplinSync } from "../api";
 interface Props {
   dt: string;
   setNoteId: (noteId: string) => any;
+  lastSync: Date | undefined,
+  setLastSync: (lastSync: Date) => any;
+  mutationJoplinSync: any;
 }
 
 export default function JoplinFindNote(props: Props) {
-  const [lastSync, setLastSync] = useState<Date>();
+  // const [lastSync, setLastSync] = useState<Date>();
+  const { lastSync, setLastSync, mutationJoplinSync } = props;
   const noteId = useJoplinGetNoteId(props.dt, {
     query: {
       queryKey: [lastSync],
     },
   });
   useEffect(() => {
-    if (noteId.data) {
+    if (noteId.data && noteId.data.data !== "does_not_exist") {
       props.setNoteId(noteId.data.data);
     }
   }, [noteId, props]);
-  const mutationJoplinSync = useJoplinSync({
-    mutation: {
-      onSuccess: () => setLastSync(new Date()),
-    },
-  });
 
   function handleButtonClick() {
     mutationJoplinSync.mutate();
   }
   return (
     <>
-      {lastSync ? <p>{`Last Joplin sync: ${lastSync}`}</p> : null}
       {noteId.isLoading && <span>Loading...</span>}
       {noteId.isError && <span>Error: {noteId.error.message}</span>}
       {noteId.isSuccess && (

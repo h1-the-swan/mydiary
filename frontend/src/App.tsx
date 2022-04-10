@@ -1,7 +1,13 @@
-import React, { FC } from "react";
+import React, { FC, useEffect, useState } from "react";
 import { Layout, Menu } from "antd";
 import "./App.css";
-import { Link, Route, Routes, useLocation, useResolvedPath } from "react-router-dom";
+import {
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useResolvedPath,
+} from "react-router-dom";
 import PocketArticles from "./routes/pocketArticles";
 import GooglePhotos from "./routes/googlePhotos";
 
@@ -42,11 +48,31 @@ const { Header, Content, Footer, Sider } = Layout;
 //   return <div>{items}</div>;
 // };
 
+interface IRoute {
+  path: string;
+  title: string;
+  element: JSX.Element;
+}
+
+const ROUTES: IRoute[] = [
+  {
+    path: "/pocket/articles",
+    title: "Pocket Articles",
+    element: <PocketArticles />,
+  },
+  {
+    path: "/googlephotos/thumbnail",
+    title: "Google Photos",
+    element: <GooglePhotos />,
+  },
+];
+
 const App: FC = (props) => {
   const location = useLocation();
   const resolvedPath = useResolvedPath(location.pathname);
   console.log(location);
   console.log(resolvedPath);
+  // const [currentPage, setCurrentPage] = useState<string>();
   return (
     <Layout>
       <Sider
@@ -60,15 +86,16 @@ const App: FC = (props) => {
         }}
       >
         <div className="logo" />
-        <Menu theme="dark" mode="inline" defaultSelectedKeys={["1"]}>
-          <Menu.Item key="1">
-            <Link to={"/pocket/articles"}>Pocket Articles</Link>
-          </Menu.Item>
-          <Menu.Item key="2">
-            <Link to={"/googlephotos/thumbnail"}>Google Photos</Link>
-          </Menu.Item>
-          <Menu.Item key="3">nav 3</Menu.Item>
-          <Menu.Item key="4">nav 4</Menu.Item>
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[resolvedPath.pathname]}
+        >
+          {ROUTES.map((r) => (
+            <Menu.Item key={r.path}>
+              <Link to={r.path}>{r.title}</Link>
+            </Menu.Item>
+          ))}
         </Menu>
       </Sider>
       <Layout>
@@ -82,12 +109,9 @@ const App: FC = (props) => {
             style={{ padding: 24, minHeight: 360 }}
           >
             <Routes>
-              <Route
-                path="/pocket/articles"
-                element={<PocketArticles />}
-              ></Route>
-              <Route path="/googlephotos/thumbnail" element={<GooglePhotos />}>
-              </Route>
+              {ROUTES.map((r) => (
+                <Route path={r.path} element={r.element}></Route>
+              ))}
             </Routes>
           </div>
         </Content>

@@ -116,7 +116,7 @@ def read_pocket_articles(
 
 
 @app.post("/joplin/sync", operation_id="joplinSync")
-def joplin_sync():
+async def joplin_sync():
     from mydiary.joplin_connector import MyDiaryJoplin
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
@@ -184,7 +184,7 @@ def google_photos_thumbnails_url(dt: str):
     "/googlephotos/add_to_joplin/{note_id}",
     operation_id="googlePhotosAddToJoplin",
 )
-def google_photos_add_to_joplin(note_id: str, photos: List[GooglePhotosThumbnail]):
+async def google_photos_add_to_joplin(note_id: str, photos: List[GooglePhotosThumbnail]):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
@@ -222,9 +222,7 @@ def google_photos_add_to_joplin(note_id: str, photos: List[GooglePhotosThumbnail
         r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
         r_put_note.raise_for_status()
 
-        logger.info("starting Joplin sync")
-        mydiary_joplin.sync()
-        logger.info("sync complete")
+        await joplin_sync()
 
 
 @app.get("/generate_openapi_json")
