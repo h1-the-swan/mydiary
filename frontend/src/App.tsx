@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import PocketArticles from "./routes/pocketArticles";
 import GooglePhotos from "./routes/googlePhotos";
+import SpotifyHistory from "./routes/spotifyHistory";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -64,6 +65,11 @@ const ROUTES: IRoute[] = [
     path: "/googlephotos/thumbnail",
     title: "Google Photos",
     element: <GooglePhotos />,
+  },
+  {
+    path: "/spotify/history",
+    title: "Spotify History",
+    element: <SpotifyHistory />,
   },
 ];
 

@@ -36,7 +36,7 @@ const GooglePhotos = () => {
   });
   const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin({
     mutation: {
-      onSuccess: () => mutationJoplinSync.mutate(),
+      onSuccess: () => mutationJoplinSync.mutate(),  // run sync
     },
   });
 

@@ -9,6 +9,8 @@ import pendulum
 from timeit import default_timer as timer
 from typing import Dict, Optional, List
 
+from sqlalchemy import desc
+
 try:
     from humanfriendly import format_timespan
 except ImportError:
@@ -104,5 +106,6 @@ class MyDiarySpotify:
             select(SpotifyTrackHistory)
             .where(SpotifyTrackHistory.played_at >= start)
             .where(SpotifyTrackHistory.played_at <= end)
+            .order_by(desc(SpotifyTrackHistory.played_at))
         )
         return session.exec(stmt).all()

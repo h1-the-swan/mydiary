@@ -1,4 +1,5 @@
 from datetime import datetime
+from mydiary.spotify_history import SpotifyTrackHistory, SpotifyTrackHistoryRead
 import requests
 import io
 import pendulum
@@ -44,7 +45,9 @@ def get_session():
 
 
 # app = FastAPI()
-app = FastAPI(title="mydiary", root_path="/api", openapi_url="/api")
+app = FastAPI(title="mydiary", root_path="/api", openapi_url="/api/openapi.json")
+# app = FastAPI(title="mydiary", openapi_url="/api")
+# app = FastAPI(title="mydiary", root_path="/api")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
@@ -113,6 +116,24 @@ def read_pocket_articles(
         stmt = stmt.where(PocketArticle.time_added < dt.end_of("year"))
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
+
+
+@app.get(
+    "/spotify/history",
+    operation_id="readSpotifyHistory",
+    response_model=List[SpotifyTrackHistoryRead],
+)
+async def read_spotify_history(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100),
+):
+    stmt = select(SpotifyTrackHistory).order_by(
+        desc(SpotifyTrackHistory.played_at)
+    )
+    tracks = session.exec(stmt.offset(offset).limit(limit)).all()
+    return tracks
 
 
 @app.post("/joplin/sync", operation_id="joplinSync")
@@ -184,7 +205,9 @@ def google_photos_thumbnails_url(dt: str):
     "/googlephotos/add_to_joplin/{note_id}",
     operation_id="googlePhotosAddToJoplin",
 )
-async def google_photos_add_to_joplin(note_id: str, photos: List[GooglePhotosThumbnail]):
+async def google_photos_add_to_joplin(
+    note_id: str, photos: List[GooglePhotosThumbnail]
+):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
