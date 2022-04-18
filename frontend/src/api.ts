@@ -40,14 +40,10 @@ export interface TagRead {
 }
 
 export interface SpotifyTrackHistoryRead {
-  spotify_id: string;
-  name: string;
-  artist_name: string;
-  uri: string;
-  played_at: string;
-  context_type?: string;
-  context_uri?: string;
   id: number;
+  played_at: string;
+  spotify_id: string;
+  context_uri?: string;
 }
 
 /**

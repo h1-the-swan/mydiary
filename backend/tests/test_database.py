@@ -2,6 +2,7 @@ import json
 import uuid
 import logging
 from pathlib import Path
+from mydiary.spotify_connector import MyDiarySpotify
 import pendulum
 import pytest
 
@@ -9,8 +10,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.spotify_history import SpotifyTrackHistory, SpotifyTrackHistoryCreate
-from mydiary.models import Dog, GoogleCalendarEvent, PocketArticle, PocketStatusEnum, Tag
+from mydiary.models import Dog, GoogleCalendarEvent, PocketArticle, PocketStatusEnum, Tag, SpotifyTrackHistory
 
 
 @pytest.fixture(name="db_session")
@@ -26,16 +26,18 @@ def session_fixture():
 def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session):
     fp = Path(rootdir).joinpath("spotifytrack.json")
     track_json = json.loads(fp.read_text())
-    spotify_track = SpotifyTrackHistoryCreate.from_spotify_track(track_json)
-    db_track = SpotifyTrackHistory.from_orm(spotify_track)
-    db_session.add(db_track)
+    spotify_track_history = SpotifyTrackHistory.from_spotify_track(track_json)
+    # db_track_history = SpotifyTrackHistory.from_orm(spotify_track_history)
+    db_session.add(spotify_track_history)
+    MyDiarySpotify().add_or_update_track_in_database(track_json, session=db_session, commit=False)
     db_session.commit()
-    db_session.refresh(db_track)
+    db_session.refresh(spotify_track_history)
 
-    assert track_json["track"]["id"] == db_track.spotify_id
-    assert track_json["track"]["name"] == db_track.name
+    assert track_json["track"]["id"] == spotify_track_history.spotify_id
+    assert track_json["track"]["id"] == spotify_track_history.track.spotify_id
+    assert track_json["track"]["name"] == spotify_track_history.track.name
     assert pendulum.parser.parse(track_json["played_at"]) == pendulum.instance(
-        db_track.played_at
+        spotify_track_history.played_at
     )
 
 

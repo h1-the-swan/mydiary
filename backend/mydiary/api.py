@@ -1,5 +1,4 @@
 from datetime import datetime
-from mydiary.spotify_history import SpotifyTrackHistory, SpotifyTrackHistoryRead
 import requests
 import io
 import pendulum
@@ -12,6 +11,9 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import (
+    SpotifyTrack,
+    SpotifyTrackHistory,
+    SpotifyContext,
     GoogleCalendarEvent,
     PocketStatusEnum,
     Tag,
@@ -37,6 +39,15 @@ class TagRead(Tag):
 
 class PocketArticleRead(PocketArticle):
     tags_: List[TagRead] = Field(alias="tags")
+
+
+class SpotifyTrackHistoryCreate(SpotifyTrackHistory):
+    pass
+
+
+class SpotifyTrackHistoryRead(SpotifyTrackHistory):
+    # id: int
+    id_: int = Field(alias="id")
 
 
 def get_session():
@@ -129,9 +140,7 @@ async def read_spotify_history(
     offset: int = 0,
     limit: int = Query(default=100),
 ):
-    stmt = select(SpotifyTrackHistory).order_by(
-        desc(SpotifyTrackHistory.played_at)
-    )
+    stmt = select(SpotifyTrackHistory).order_by(desc(SpotifyTrackHistory.played_at))
     tracks = session.exec(stmt.offset(offset).limit(limit)).all()
     return tracks
 

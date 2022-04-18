@@ -1,6 +1,6 @@
 import os, json
 from pathlib import Path
-from mydiary.models import SpotifyTrack
+from mydiary.models import SpotifyTrack, SpotifyTrackHistory
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -33,8 +33,11 @@ def test_spotify_track(rootdir):
         name=track_json["track"]["name"],
         artist_name=track_json["track"]["artists"][0]["name"],
         uri=track_json["track"]["uri"],
+    )
+    track_history = SpotifyTrackHistory(
+        spotify_id=track_json["track"]["id"],
         played_at=track_json["played_at"],
     )
     assert track.name == "Always"
     assert track.artist_name == "Erasure"
-    assert track.played_at.year == 2021
+    assert track_history.played_at.year == 2021

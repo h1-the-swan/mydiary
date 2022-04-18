@@ -4,6 +4,7 @@ services:
     build: ./backend
     volumes:
       - ./backend/mydiary:/usr/local/src/app/backend/mydiary
+      - ./backend/alembic/versions:/usr/local/src/app/backend/alembic/versions
       - ./backend/poetry.lock:/usr/local/src/app/backend/poetry.lock
       - ./backend/pyproject.toml:/usr/local/src/app/backend/pyproject.toml
       - ./backend/token_cache:/usr/local/src/app/backend/token_cache

@@ -27,12 +27,7 @@ logger = root_logger.getChild(__name__)
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
 
-from .models import SpotifyTrack
-from .spotify_history import (
-    SpotifyTrackHistory,
-    SpotifyTrackHistoryCreate,
-    SpotifyTrackHistoryRead,
-)
+from .models import SpotifyTrack, SpotifyTrackHistory
 from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
@@ -60,6 +55,26 @@ class MyDiarySpotify:
         with Session(engine) as session:
             return session
 
+    def add_or_update_track_in_database(
+        self, track: Dict, session: Optional[Session] = None, commit: bool = True
+    ) -> None:
+        if session is None:
+            session = self.new_session()
+        if "track" in track:
+            track_data = track["track"]
+        else:
+            track_data = track
+        db_track = session.get(SpotifyTrack, track_data["id"])
+        if db_track is None:
+            spotify_track = SpotifyTrack.from_spotify_track(track)
+            session.add(spotify_track)
+        else:
+            db_track = db_track.update_track_data(track_data)
+            # session.add(db_track)
+
+        if commit is True:
+            session.commit()
+
     def save_recent_tracks_to_database(self, session: Optional[Session] = None):
         logger.info(
             "getting recently played Spotify tracks from API and saving to database"
@@ -70,27 +85,30 @@ class MyDiarySpotify:
         num_added = 0
         num_skipped = 0
         for t in recent_tracks:
-            spotify_track = SpotifyTrackHistoryCreate.from_spotify_track(t)
+            spotify_track_history = SpotifyTrackHistory.from_spotify_track(t)
             stmt = (
                 select(SpotifyTrackHistory)
-                .where(SpotifyTrackHistory.spotify_id == spotify_track.spotify_id)
-                .where(SpotifyTrackHistory.played_at == spotify_track.played_at)
+                .where(
+                    SpotifyTrackHistory.spotify_id == spotify_track_history.spotify_id
+                )
+                .where(SpotifyTrackHistory.played_at == spotify_track_history.played_at)
             )
             existing_row = session.exec(stmt).one_or_none()
             if existing_row:
                 num_skipped += 1
                 continue
-            session.add(SpotifyTrackHistory.from_orm(spotify_track))
+            session.add(spotify_track_history)
+            self.add_or_update_track_in_database(t, session=session, commit=False)
             num_added += 1
         logger.debug(
             f"skipped {num_skipped} tracks because they were already in the database"
         )
-        logger.info(f"adding {num_added} new rows to database")
+        logger.info(f"adding {num_added} new rows (in spotifytrackhistory) to database")
         session.commit()
 
     def get_tracks_for_day(
         self, dt: datetime, session: Optional[Session] = None
-    ) -> List[SpotifyTrack]:
+    ) -> List[SpotifyTrackHistory]:
         """get the spotify tracks for a given day from the database
 
         Args:

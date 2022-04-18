@@ -111,6 +111,16 @@ class MyDiaryPocket:
         pocket_tags: List[str],
         session: Optional[Session] = None,
     ) -> PocketArticle:
+        """Add tags to database if they are not already there
+
+        Args:
+            article (PocketArticle): PocketArticle instance
+            pocket_tags (List[str]): list of tags
+            session (Optional[Session], optional): database session. Defaults to None.
+
+        Returns:
+            PocketArticle: the PocketArticle instance (unchanged)
+        """    
         if session is None:
             session = self.new_session()
         for tag_name in pocket_tags:

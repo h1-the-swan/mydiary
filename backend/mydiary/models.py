@@ -1,3 +1,4 @@
+from re import S
 from typing import Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
@@ -9,7 +10,7 @@ from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
 
-from sqlalchemy import event
+from sqlalchemy import event, UniqueConstraint
 from sqlalchemy.orm import reconstructor
 
 import logging
@@ -25,14 +26,63 @@ def make_markdown_table_header(columns: List[str]) -> str:
     return "\n".join([header, header_sep])
 
 
-class SpotifyTrack(SQLModel):
-    spotify_id: str = Field(index=True)
+class SpotifyTrack(SQLModel, table=True):
+    spotify_id: str = Field(primary_key=True)
     name: str = Field(index=True)
     artist_name: str = Field(index=True)
     uri: str
-    played_at: Optional[datetime] = Field(default=None, index=True)  # in UTC
-    context_type: Optional[str] = None
-    context_uri: Optional[str] = None
+
+    track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
+
+    @staticmethod
+    def parse_track(t: Dict) -> Dict:
+        # Parse a spotify track from the Spotify API
+        if "track" in t:
+            track_data = t["track"]
+        else:
+            track_data = t
+        return {
+            "track_id": track_data["id"],
+            "track_name": track_data["name"],
+            "track_artist": ", ".join(
+                [artist["name"] for artist in track_data["artists"]]
+            ),
+            "track_uri": track_data["uri"],
+        }
+
+    @classmethod
+    def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
+        track_data = cls.parse_track(t)
+        return cls(
+            spotify_id=track_data["track_id"],
+            name=track_data["track_name"],
+            artist_name=track_data["track_artist"],
+            uri=track_data["track_uri"],
+        )
+
+    def update_track_data(self, t: Dict) -> "SpotifyTrack":
+        track_data = self.parse_track(t)
+        # self.spotify_id=track_data["track_id"],
+        self.name=track_data["track_name"]
+        self.artist_name=track_data["track_artist"]
+        self.uri=track_data["track_uri"]
+        return self
+
+
+class SpotifyTrackHistory(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("spotify_id", "played_at", name="uix_track_datetime"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    played_at: datetime = Field(index=True)
+
+    spotify_id: str = Field(foreign_key="spotifytrack.spotify_id", index=True)
+    track: SpotifyTrack = Relationship(back_populates="track_history")
+
+    context_uri: Optional[str] = Field(
+        default=None, foreign_key="spotifycontext.uri", index=True
+    )
+    context: "SpotifyContext" = Relationship(back_populates="track_history")
 
     @classmethod
     def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
@@ -43,19 +93,11 @@ class SpotifyTrack(SQLModel):
         else:
             track_data = t
         track_id = track_data["id"]
-        track_name = track_data["name"]
-        track_artist = ", ".join([artist["name"] for artist in track_data["artists"]])
-        track_uri = track_data["uri"]
         track_context = t.get("context", None)
-        context_type = track_context["type"] if track_context else None
         context_uri = track_context["uri"] if track_context else None
         return cls(
             spotify_id=track_id,
-            name=track_name,
-            artist_name=track_artist,
-            uri=track_uri,
             played_at=played_at,
-            context_type=context_type,
             context_uri=context_uri,
         )
 
@@ -67,7 +109,23 @@ class SpotifyTrack(SQLModel):
             played_at = f"{played_at : %H:%M:%S}"
         else:
             played_at = ""
-        return f"[{self.name}]({self.uri}) | {self.artist_name} | {played_at}"
+        return f"[{self.track.name}]({self.track.uri}) | {self.track.artist_name} | {played_at}"
+
+
+class SpotifyContext(SQLModel, table=True):
+    uri: str = Field(primary_key=True)
+    name: str = Field(index=True)
+    context_type: str
+    context_uri: str = Field(index=True)
+
+    track_history: List[SpotifyTrackHistory] = Relationship(back_populates="context")
+
+
+# class SpotifyTrackHistory(SQLModel):
+#     __table_args__ = (UniqueConstraint('spotify_id', 'played_at', name="uix_track_datetime"),)
+#     id: Optional[int] = Field(default=None, primary_key=True)
+#     spotify_id: str
+#     played_at: datetime
 
 
 class PocketArticleTagLink(SQLModel, table=True):
@@ -330,7 +388,7 @@ class MyDiaryDay(SQLModel):
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
-    spotify_tracks: List[SpotifyTrack] = []  # Spotify songs played on this day
+    spotify_tracks: List[SpotifyTrackHistory] = []  # Spotify songs played on this day
     pocket_articles: Dict[
         str, List[PocketArticle]
     ] = {}  # interactions with Pocket articles on this day
@@ -343,7 +401,9 @@ class MyDiaryDay(SQLModel):
     )
 
     @classmethod
-    def from_dt(cls, dt: datetime = now().start_of("day"), spotify_sync: bool = True, **kwargs) -> "MyDiaryDay":
+    def from_dt(
+        cls, dt: datetime = now().start_of("day"), spotify_sync: bool = True, **kwargs
+    ) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
@@ -524,12 +584,15 @@ class MyDiaryDay(SQLModel):
             self.update_joplin_note(post_sync=post_sync)
         else:
             # this should not happen
-            raise RuntimeError(f"error when checking if Joplin note already exists (date: {self.dt}")
+            raise RuntimeError(
+                f"error when checking if Joplin note already exists (date: {self.dt}"
+            )
 
 
 class Dog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
+
 
 class GooglePhotosThumbnail(SQLModel):
     baseUrl: str
