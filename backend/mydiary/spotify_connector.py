@@ -27,7 +27,7 @@ logger = root_logger.getChild(__name__)
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
 
-from .models import SpotifyTrack, SpotifyTrackHistory
+from .models import SpotifyTrack, SpotifyTrackHistory, SpotifyTrackHistoryFrozen
 from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
@@ -126,4 +126,9 @@ class MyDiarySpotify:
             .where(SpotifyTrackHistory.played_at <= end)
             .order_by(desc(SpotifyTrackHistory.played_at))
         )
-        return session.exec(stmt).all()
+        r = session.exec(stmt).all()
+        return [SpotifyTrackHistoryFrozen(
+            id=t.id,
+            played_at=t.played_at,
+            track=t.track,
+        ) for t in r]
