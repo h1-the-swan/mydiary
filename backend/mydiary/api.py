@@ -13,7 +13,6 @@ from .db import Session, engine, select
 from .models import (
     SpotifyTrack,
     SpotifyTrackHistory,
-    SpotifyContext,
     GoogleCalendarEvent,
     PocketStatusEnum,
     Tag,

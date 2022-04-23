@@ -63,10 +63,15 @@ class SpotifyTrack(SQLModel, table=True):
     def update_track_data(self, t: Dict) -> "SpotifyTrack":
         track_data = self.parse_track(t)
         # self.spotify_id=track_data["track_id"],
-        self.name=track_data["track_name"]
-        self.artist_name=track_data["track_artist"]
-        self.uri=track_data["track_uri"]
+        self.name = track_data["track_name"]
+        self.artist_name = track_data["track_artist"]
+        self.uri = track_data["track_uri"]
         return self
+
+
+class SpotifyContextTypeEnum(IntEnum):
+    ALBUM = 0
+    PLAYLIST = 1
 
 
 class SpotifyTrackHistory(SQLModel, table=True):
@@ -75,14 +80,14 @@ class SpotifyTrackHistory(SQLModel, table=True):
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     played_at: datetime = Field(index=True)
+    context_uri: Optional[str] = Field(default=None, index=True)
+    context_name: Optional[str] = Field(default=None, index=True)
+    context_type: Optional[SpotifyContextTypeEnum]
 
     spotify_id: str = Field(foreign_key="spotifytrack.spotify_id", index=True)
-    track: SpotifyTrack = Relationship(back_populates="track_history", sa_relationship_kwargs={"lazy": "joined"})
-
-    context_uri: Optional[str] = Field(
-        default=None, foreign_key="spotifycontext.uri", index=True
+    track: SpotifyTrack = Relationship(
+        back_populates="track_history", sa_relationship_kwargs={"lazy": "joined"}
     )
-    context: "SpotifyContext" = Relationship(back_populates="track_history")
 
     @classmethod
     def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
@@ -101,9 +106,13 @@ class SpotifyTrackHistory(SQLModel, table=True):
             context_uri=context_uri,
         )
 
+
 class SpotifyTrackHistoryFrozen(SQLModel):
     id: int
     played_at: datetime
+    context_uri: Optional[str]
+    context_name: Optional[str]
+    context_type: Optional[SpotifyContextTypeEnum]
     track: SpotifyTrack
 
     def to_markdown(self, timezone=None) -> str:
@@ -115,16 +124,6 @@ class SpotifyTrackHistoryFrozen(SQLModel):
         else:
             played_at = ""
         return f"[{self.track.name}]({self.track.uri}) | {self.track.artist_name} | {played_at}"
-
-
-
-class SpotifyContext(SQLModel, table=True):
-    uri: str = Field(primary_key=True)
-    name: str = Field(index=True)
-    context_type: str
-    context_uri: str = Field(index=True)
-
-    track_history: List[SpotifyTrackHistory] = Relationship(back_populates="context")
 
 
 # class SpotifyTrackHistory(SQLModel):
@@ -384,6 +383,7 @@ class MyDiaryImage(SQLModel):
     description: str = None
     created_at: datetime = None
 
+
 class MyDiaryDay(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
     dt: pendulum.DateTime = now().start_of("day")
@@ -393,7 +393,9 @@ class MyDiaryDay(SQLModel):
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
-    spotify_tracks: List[SpotifyTrackHistoryFrozen] = []  # Spotify songs played on this day
+    spotify_tracks: List[
+        SpotifyTrackHistoryFrozen
+    ] = []  # Spotify songs played on this day
     pocket_articles: Dict[
         str, List[PocketArticle]
     ] = {}  # interactions with Pocket articles on this day
@@ -419,8 +421,6 @@ class MyDiaryDay(SQLModel):
         if spotify_sync is True:
             mydiary_spotify.save_recent_tracks_to_database()
         spotify_tracks = mydiary_spotify.get_tracks_for_day(dt)
-        test_tracks = [t.track for t in spotify_tracks]
-        print(test_tracks[0].name)
 
         mydiary_gcal = MyDiaryGCal()
         google_calendar_events = mydiary_gcal.get_events_for_day(dt)

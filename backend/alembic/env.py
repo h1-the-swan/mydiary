@@ -18,7 +18,7 @@ fileConfig(config.config_file_name)
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 from sqlmodel import SQLModel
-from mydiary import models, spotify_history
+from mydiary import models
 
 target_metadata = SQLModel.metadata
 naming_convection = {

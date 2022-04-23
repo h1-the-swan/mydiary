@@ -39,11 +39,25 @@ export interface TagRead {
   is_pocket_tag?: boolean;
 }
 
+/**
+ * An enumeration.
+ */
+export type SpotifyContextTypeEnum = 0 | 1;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SpotifyContextTypeEnum = {
+  NUMBER_0: 0 as SpotifyContextTypeEnum,
+  NUMBER_1: 1 as SpotifyContextTypeEnum,
+};
+
 export interface SpotifyTrackHistoryRead {
   id: number;
   played_at: string;
-  spotify_id: string;
   context_uri?: string;
+  context_name?: string;
+  context_type?: SpotifyContextTypeEnum;
+  spotify_id: string;
 }
 
 /**

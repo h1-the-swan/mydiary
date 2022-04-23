@@ -27,7 +27,11 @@ logger = root_logger.getChild(__name__)
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
 
-from .models import SpotifyTrack, SpotifyTrackHistory, SpotifyTrackHistoryFrozen
+from .models import (
+    SpotifyTrack,
+    SpotifyTrackHistory,
+    SpotifyTrackHistoryFrozen,
+)
 from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
@@ -127,8 +131,32 @@ class MyDiarySpotify:
             .order_by(desc(SpotifyTrackHistory.played_at))
         )
         r = session.exec(stmt).all()
-        return [SpotifyTrackHistoryFrozen(
-            id=t.id,
-            played_at=t.played_at,
-            track=t.track,
-        ) for t in r]
+        return [
+            SpotifyTrackHistoryFrozen(
+                id=t.id,
+                played_at=t.played_at,
+                track=t.track,
+            )
+            for t in r
+        ]
+
+    def hydrate_context(self, context_uri: str) -> Dict:
+        if "playlist" in context_uri:
+            r = self.sp.playlist(context_uri, fields="id,uri,name,type")
+            context_uri = r["uri"]
+            context_name = r["name"]
+            context_type = r["type"]
+        elif "album" in context_uri:
+            r = self.sp.album(context_uri)
+            artists = ", ".join([artist["name"] for artist in r["artists"]])
+            album_name = f"{artists} - {r['name']}"
+            context_uri = r["uri"]
+            context_name = album_name
+            context_type = r["type"]
+        else:
+            raise ValueError("invalid context_uri. must be either a playlist or album")
+        return {
+            "context_uri": context_uri,
+            "context_name": context_name,
+            "context_type": context_type,
+        }
