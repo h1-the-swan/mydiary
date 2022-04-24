@@ -26,13 +26,11 @@ def make_markdown_table_header(columns: List[str]) -> str:
     return "\n".join([header, header_sep])
 
 
-class SpotifyTrack(SQLModel, table=True):
+class SpotifyTrackBase(SQLModel):
     spotify_id: str = Field(primary_key=True)
     name: str = Field(index=True)
     artist_name: str = Field(index=True)
     uri: str
-
-    track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
 
     @staticmethod
     def parse_track(t: Dict) -> Dict:
@@ -68,29 +66,26 @@ class SpotifyTrack(SQLModel, table=True):
         self.uri = track_data["track_uri"]
         return self
 
+class SpotifyTrack(SpotifyTrackBase, table=True):
+    track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
+
 
 class SpotifyContextTypeEnum(IntEnum):
-    ALBUM = 0
-    PLAYLIST = 1
+    album = 0
+    playlist = 1
 
 
-class SpotifyTrackHistory(SQLModel, table=True):
-    __table_args__ = (
-        UniqueConstraint("spotify_id", "played_at", name="uix_track_datetime"),
-    )
+class SpotifyTrackHistoryBase(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
-    played_at: datetime = Field(index=True)
+    played_at: datetime = Field(index=True)  # stored in the database in UTC timezone
     context_uri: Optional[str] = Field(default=None, index=True)
     context_name: Optional[str] = Field(default=None, index=True)
     context_type: Optional[SpotifyContextTypeEnum]
 
     spotify_id: str = Field(foreign_key="spotifytrack.spotify_id", index=True)
-    track: SpotifyTrack = Relationship(
-        back_populates="track_history", sa_relationship_kwargs={"lazy": "joined"}
-    )
 
     @classmethod
-    def from_spotify_track(cls, t: Dict) -> "SpotifyTrack":
+    def from_spotify_track(cls, t: Dict) -> "SpotifyTrackHistoryBase":
         # Parse a spotify track from the Spotify API
         played_at = t.get("played_at", None)
         if "track" in t:
@@ -106,6 +101,13 @@ class SpotifyTrackHistory(SQLModel, table=True):
             context_uri=context_uri,
         )
 
+class SpotifyTrackHistory(SpotifyTrackHistoryBase, table=True):
+    __table_args__ = (
+        UniqueConstraint("spotify_id", "played_at", name="uix_track_datetime"),
+    )
+    track: SpotifyTrack = Relationship(
+        back_populates="track_history", sa_relationship_kwargs={"lazy": "joined"}
+    )
 
 class SpotifyTrackHistoryFrozen(SQLModel):
     id: int

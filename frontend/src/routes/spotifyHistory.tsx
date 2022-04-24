@@ -21,20 +21,21 @@ function SpotifyHistoryTable() {
     },
     {
       title: "Name",
-      dataIndex: "name",
+      dataIndex: "track",
       key: "name",
-      render: (value, record) => (
-        <a href={record.uri} target="_blank" rel="noreferrer">
-          {value}
+      render: (track) => (
+        <a href={track.uri} target="_blank" rel="noreferrer">
+          {track.name}
         </a>
       ),
-      sorter: (a, b) => a.name.localeCompare(b.name),
+      sorter: (a, b) => a.track.name.localeCompare(b.track.name),
     },
     {
       title: "Artist",
-      dataIndex: "artist_name",
+      dataIndex: "track",
       key: "artist",
-      sorter: (a, b) => a.artist_name.localeCompare(b.artist_name),
+      render: (track) => track.artist_name,
+      sorter: (a, b) => a.track.artist_name.localeCompare(b.track.artist_name),
     },
     {
       title: "Played At",
@@ -42,7 +43,6 @@ function SpotifyHistoryTable() {
       key: "played_at",
       render: (value: string) => {
         const dt = new Date(value + "Z");
-        console.log(dt);
         return dt.toLocaleString();
       },
       sorter: (a, b) =>

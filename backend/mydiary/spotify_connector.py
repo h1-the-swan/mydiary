@@ -54,6 +54,8 @@ class MyDiarySpotify:
                     cache_path=os.environ.get("SPOTIFY_TOKEN_CACHE_PATH", None)
                 ),
             )
+        
+        self.context_cache = {}
 
     def new_session(self, engine=engine):
         with Session(engine) as session:
@@ -89,7 +91,7 @@ class MyDiarySpotify:
         num_added = 0
         num_skipped = 0
         for t in recent_tracks:
-            spotify_track_history = SpotifyTrackHistory.from_spotify_track(t)
+            spotify_track_history: SpotifyTrackHistory = SpotifyTrackHistory.from_spotify_track(t)
             stmt = (
                 select(SpotifyTrackHistory)
                 .where(
@@ -101,6 +103,10 @@ class MyDiarySpotify:
             if existing_row:
                 num_skipped += 1
                 continue
+            if spotify_track_history.context_uri is not None:
+                context = self.hydrate_context(spotify_track_history.context_uri)
+                spotify_track_history.context_name = context["context_name"]
+                spotify_track_history.context_type = context["context_type"]
             session.add(spotify_track_history)
             self.add_or_update_track_in_database(t, session=session, commit=False)
             num_added += 1
@@ -112,7 +118,7 @@ class MyDiarySpotify:
 
     def get_tracks_for_day(
         self, dt: datetime, session: Optional[Session] = None
-    ) -> List[SpotifyTrackHistory]:
+    ) -> List[SpotifyTrackHistoryFrozen]:
         """get the spotify tracks for a given day from the database
 
         Args:
@@ -140,7 +146,9 @@ class MyDiarySpotify:
             for t in r
         ]
 
-    def hydrate_context(self, context_uri: str) -> Dict:
+    def hydrate_context(self, context_uri: str, force: bool = False) -> Dict:
+        if context_uri in self.context_cache and force is False:
+            return self.context_cache[context_uri]
         if "playlist" in context_uri:
             r = self.sp.playlist(context_uri, fields="id,uri,name,type")
             context_uri = r["uri"]
@@ -155,8 +163,10 @@ class MyDiarySpotify:
             context_type = r["type"]
         else:
             raise ValueError("invalid context_uri. must be either a playlist or album")
-        return {
+        context = {
             "context_uri": context_uri,
             "context_name": context_name,
             "context_type": context_type,
         }
+        self.context_cache[context_uri] = context
+        return context

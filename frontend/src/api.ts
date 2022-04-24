@@ -39,6 +39,13 @@ export interface TagRead {
   is_pocket_tag?: boolean;
 }
 
+export interface SpotifyTrackBase {
+  spotify_id: string;
+  name: string;
+  artist_name: string;
+  uri: string;
+}
+
 /**
  * An enumeration.
  */
@@ -58,6 +65,7 @@ export interface SpotifyTrackHistoryRead {
   context_name?: string;
   context_type?: SpotifyContextTypeEnum;
   spotify_id: string;
+  track: SpotifyTrackBase;
 }
 
 /**

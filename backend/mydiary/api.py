@@ -11,7 +11,8 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import (
-    SpotifyTrack,
+    SpotifyTrackBase,
+    SpotifyTrackHistoryBase,
     SpotifyTrackHistory,
     GoogleCalendarEvent,
     PocketStatusEnum,
@@ -40,13 +41,14 @@ class PocketArticleRead(PocketArticle):
     tags_: List[TagRead] = Field(alias="tags")
 
 
-class SpotifyTrackHistoryCreate(SpotifyTrackHistory):
+class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):
     pass
 
 
-class SpotifyTrackHistoryRead(SpotifyTrackHistory):
+class SpotifyTrackHistoryRead(SpotifyTrackHistoryBase):
     # id: int
     id_: int = Field(alias="id")
+    track: SpotifyTrackBase
 
 
 def get_session():
