@@ -50,9 +50,9 @@ function SpotifyHistoryTable() {
         new Date(a.played_at + "Z").getTime(),
     },
     {
-      title: "context_type",
-      dataIndex: "context_type",
-      key: "context_type",
+      title: "context_name",
+      dataIndex: "context_name",
+      key: "context_name",
       render: (value, record) => (
         <a href={record.context_uri} target="_blank" rel="noreferrer">
           {value}

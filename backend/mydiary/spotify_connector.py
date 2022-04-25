@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pendulum
 from timeit import default_timer as timer
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 
 from sqlalchemy import desc
 
@@ -31,6 +31,7 @@ from .models import (
     SpotifyTrack,
     SpotifyTrackHistory,
     SpotifyTrackHistoryFrozen,
+    SpotifyContextTypeEnum,
 )
 from .db import engine, Session, select
 
@@ -54,7 +55,7 @@ class MyDiarySpotify:
                     cache_path=os.environ.get("SPOTIFY_TOKEN_CACHE_PATH", None)
                 ),
             )
-        
+
         self.context_cache = {}
 
     def new_session(self, engine=engine):
@@ -62,24 +63,77 @@ class MyDiarySpotify:
             return session
 
     def add_or_update_track_in_database(
-        self, track: Dict, session: Optional[Session] = None, commit: bool = True
+        self,
+        track: Union[Dict, SpotifyTrack],
+        session: Optional[Session] = None,
+        commit: bool = True,
     ) -> None:
         if session is None:
             session = self.new_session()
-        if "track" in track:
-            track_data = track["track"]
+        if isinstance(track, SpotifyTrack):
+            spotify_id = track.spotify_id
+            spotify_track = track
         else:
-            track_data = track
-        db_track = session.get(SpotifyTrack, track_data["id"])
-        if db_track is None:
+            if "track" in track:
+                track_data = track["track"]
+            else:
+                track_data = track
+            spotify_id = track_data["id"]
             spotify_track = SpotifyTrack.from_spotify_track(track)
+        db_track = session.get(SpotifyTrack, spotify_id)
+        if db_track is None:
             session.add(spotify_track)
         else:
-            db_track = db_track.update_track_data(track_data)
+            # db_track = db_track.update_track_data(track_data)
+            db_track.name = spotify_track.name
+            db_track.artist_name = spotify_track.artist_name
+            db_track.uri = spotify_track.uri
             # session.add(db_track)
 
         if commit is True:
             session.commit()
+
+    def check_existing_history(
+        self, spotify_id: str, played_at: datetime, session: Session
+    ) -> Union[SpotifyTrackHistory, None]:
+        stmt = (
+            select(SpotifyTrackHistory)
+            .where(SpotifyTrackHistory.spotify_id == spotify_id)
+            .where(SpotifyTrackHistory.played_at == played_at)
+        )
+        existing_row = session.exec(stmt).one_or_none()
+        return existing_row
+
+    def save_one_track_to_database(
+        self,
+        t: Union[Dict, SpotifyTrackHistory],
+        session: Session,
+        commit: bool = True,
+        add_or_update_track: bool = True,
+    ) -> SpotifyTrackHistory:
+        if isinstance(t, SpotifyTrackHistory):
+            spotify_track_history = t
+        else:
+            spotify_track_history: SpotifyTrackHistory = (
+                SpotifyTrackHistory.from_spotify_track(t)
+            )
+        existing_row = self.check_existing_history(
+            spotify_id=spotify_track_history.spotify_id,
+            played_at=spotify_track_history.played_at,
+            session=session,
+        )
+        if existing_row:
+            return "skipped"
+        if spotify_track_history.context_uri is not None:
+            context = self.hydrate_context(spotify_track_history.context_uri)
+            spotify_track_history.context_name = context["context_name"]
+            spotify_track_history.context_type = SpotifyContextTypeEnum[context["context_type"]]
+        session.add(spotify_track_history)
+        if add_or_update_track is True:
+            self.add_or_update_track_in_database(t, session=session, commit=False)
+        if commit is True:
+            session.commit()
+        return "added"
 
     def save_recent_tracks_to_database(self, session: Optional[Session] = None):
         logger.info(
@@ -87,29 +141,15 @@ class MyDiarySpotify:
         )
         if session is None:
             session = self.new_session()
-        recent_tracks = self.sp.current_user_recently_played()["items"]
+        recent_tracks: List[Dict] = self.sp.current_user_recently_played()["items"]
         num_added = 0
         num_skipped = 0
         for t in recent_tracks:
-            spotify_track_history: SpotifyTrackHistory = SpotifyTrackHistory.from_spotify_track(t)
-            stmt = (
-                select(SpotifyTrackHistory)
-                .where(
-                    SpotifyTrackHistory.spotify_id == spotify_track_history.spotify_id
-                )
-                .where(SpotifyTrackHistory.played_at == spotify_track_history.played_at)
-            )
-            existing_row = session.exec(stmt).one_or_none()
-            if existing_row:
+            r = self.save_one_track_to_database(t, session, commit=False)
+            if r == "skipped":
                 num_skipped += 1
-                continue
-            if spotify_track_history.context_uri is not None:
-                context = self.hydrate_context(spotify_track_history.context_uri)
-                spotify_track_history.context_name = context["context_name"]
-                spotify_track_history.context_type = context["context_type"]
-            session.add(spotify_track_history)
-            self.add_or_update_track_in_database(t, session=session, commit=False)
-            num_added += 1
+            elif r == "added":
+                num_added += 1
         logger.debug(
             f"skipped {num_skipped} tracks because they were already in the database"
         )
@@ -154,6 +194,11 @@ class MyDiarySpotify:
             context_uri = r["uri"]
             context_name = r["name"]
             context_type = r["type"]
+        elif "artist" in context_uri:
+            r = self.sp.artist(context_uri)
+            context_uri = r["uri"]
+            context_name = r["name"]
+            context_type = r["type"]
         elif "album" in context_uri:
             r = self.sp.album(context_uri)
             artists = ", ".join([artist["name"] for artist in r["artists"]])
@@ -162,7 +207,9 @@ class MyDiarySpotify:
             context_name = album_name
             context_type = r["type"]
         else:
-            raise ValueError("invalid context_uri. must be either a playlist or album")
+            raise ValueError(
+                "invalid context_uri. must be one of [playlist, album, artist]"
+            )
         context = {
             "context_uri": context_uri,
             "context_name": context_name,

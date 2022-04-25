@@ -49,13 +49,14 @@ export interface SpotifyTrackBase {
 /**
  * An enumeration.
  */
-export type SpotifyContextTypeEnum = 0 | 1;
+export type SpotifyContextTypeEnum = 0 | 1 | 2;
 
 
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const SpotifyContextTypeEnum = {
   NUMBER_0: 0 as SpotifyContextTypeEnum,
   NUMBER_1: 1 as SpotifyContextTypeEnum,
+  NUMBER_2: 2 as SpotifyContextTypeEnum,
 };
 
 export interface SpotifyTrackHistoryRead {

@@ -30,7 +30,7 @@ class SpotifyTrackBase(SQLModel):
     spotify_id: str = Field(primary_key=True)
     name: str = Field(index=True)
     artist_name: str = Field(index=True)
-    uri: str
+    uri: str = Field(index=True)
 
     @staticmethod
     def parse_track(t: Dict) -> Dict:
@@ -73,6 +73,7 @@ class SpotifyTrack(SpotifyTrackBase, table=True):
 class SpotifyContextTypeEnum(IntEnum):
     album = 0
     playlist = 1
+    artist = 2
 
 
 class SpotifyTrackHistoryBase(SQLModel):
