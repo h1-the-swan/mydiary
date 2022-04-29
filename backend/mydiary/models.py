@@ -2,6 +2,7 @@ from re import S
 from typing import Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
+import json
 from google.auth.transport import requests
 import pendulum
 from sqlmodel import Field, Relationship, SQLModel
@@ -66,6 +67,7 @@ class SpotifyTrackBase(SQLModel):
         self.uri = track_data["track_uri"]
         return self
 
+
 class SpotifyTrack(SpotifyTrackBase, table=True):
     track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
 
@@ -102,6 +104,7 @@ class SpotifyTrackHistoryBase(SQLModel):
             context_uri=context_uri,
         )
 
+
 class SpotifyTrackHistory(SpotifyTrackHistoryBase, table=True):
     __table_args__ = (
         UniqueConstraint("spotify_id", "played_at", name="uix_track_datetime"),
@@ -109,6 +112,7 @@ class SpotifyTrackHistory(SpotifyTrackHistoryBase, table=True):
     track: SpotifyTrack = Relationship(
         back_populates="track_history", sa_relationship_kwargs={"lazy": "joined"}
     )
+
 
 class SpotifyTrackHistoryFrozen(SQLModel):
     id: int
@@ -123,10 +127,15 @@ class SpotifyTrackHistoryFrozen(SQLModel):
             played_at = pendulum.instance(self.played_at)
             if timezone:
                 played_at = played_at.in_timezone(timezone)
-            played_at = f"{played_at : %H:%M:%S}"
+            played_at = f"{played_at:%H:%M:%S}"
         else:
             played_at = ""
-        return f"[{self.track.name}]({self.track.uri}) | {self.track.artist_name} | {played_at}"
+
+        if self.context_uri:
+            context = f"[{self.context_name}]({self.context_uri})"
+        else:
+            context = ""
+        return f"[{self.track.name}]({self.track.uri}) | {self.track.artist_name} | {played_at} | {context}"
 
 
 # class SpotifyTrackHistory(SQLModel):
@@ -417,6 +426,7 @@ class MyDiaryDay(SQLModel):
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
+        from .habitica_connector import MyDiaryHabitica
 
         pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
 
@@ -428,6 +438,14 @@ class MyDiaryDay(SQLModel):
         mydiary_gcal = MyDiaryGCal()
         google_calendar_events = mydiary_gcal.get_events_for_day(dt)
         mydiary_gcal.save_events_to_database(google_calendar_events)
+
+        mydiary_habitica = MyDiaryHabitica()
+        habitica_data = mydiary_habitica.get_user_data()
+        outfile = Path("mydiary/habitica_backups").joinpath(
+            f"habitica_userdata_{pendulum.now():%Y%m%dT%H%M%S}.json"
+        )
+        logger.info(f"saving Habitica userdata to {outfile}")
+        outfile.write_text(json.dumps(habitica_data))
 
         return cls(
             dt=dt,
@@ -463,7 +481,7 @@ class MyDiaryDay(SQLModel):
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:
             return "None"
-        columns = ["Name", "Artists", "Played At"]
+        columns = ["Name", "Artists", "Played At", "Context"]
         header = make_markdown_table_header(columns)
         lines = [header]
         for t in self.spotify_tracks:
@@ -602,6 +620,11 @@ class MyDiaryDay(SQLModel):
 class Dog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
+    how_met: Optional[str] = Field(default=None, index=True)
+    when_met: Optional[datetime] = Field(default=None, index=True)
+    owners: Optional[List[str]]
+    # images: List[MyDiaryImage] = []
+    estimated_bday: Optional[datetime] = Field(default=None, index=True)
 
 
 class GooglePhotosThumbnail(SQLModel):

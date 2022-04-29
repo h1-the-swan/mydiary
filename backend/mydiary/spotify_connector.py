@@ -182,6 +182,9 @@ class MyDiarySpotify:
                 id=t.id,
                 played_at=t.played_at,
                 track=t.track,
+                context_name=t.context_name,
+                context_type=t.context_type,
+                context_uri=t.context_uri,
             )
             for t in r
         ]
