@@ -21,9 +21,9 @@ import {
 } from 'react-query'
 export type ReadSpotifyHistoryParams = { offset?: number; limit?: number };
 
-export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string[]; year?: number };
+export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string; year?: number };
 
-export type ReadTagsParams = { offset?: number; limit?: number };
+export type ReadTagsParams = { offset?: number; limit?: number; is_pocket_tag?: boolean };
 
 export type ReadGCalEventsParams = { offset?: number; limit?: number };
 
@@ -37,6 +37,7 @@ export interface TagRead {
   id: number;
   name: string;
   is_pocket_tag?: boolean;
+  num_pocket_articles?: number;
 }
 
 export interface SpotifyTrackBase {
@@ -205,6 +206,46 @@ export const useReadTags = <TData = AsyncReturnType<typeof readTags>, TError = A
   const queryFn: QueryFunction<AsyncReturnType<typeof readTags>> = () => readTags(params, axiosOptions);
 
   const query = useQuery<AsyncReturnType<typeof readTags>, TError, TData>(queryKey, queryFn, queryOptions)
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Count Pocket Articles
+ */
+export const countPocketArticles = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<number>> => {
+    return axios.get(
+      `/pocket/articles/count`,options
+    );
+  }
+
+
+export const getCountPocketArticlesQueryKey = () => [`/pocket/articles/count`];
+
+    
+export type CountPocketArticlesQueryResult = NonNullable<AsyncReturnType<typeof countPocketArticles>>
+export type CountPocketArticlesQueryError = AxiosError<unknown>
+
+export const useCountPocketArticles = <TData = AsyncReturnType<typeof countPocketArticles>, TError = AxiosError<unknown>>(
+  options?: { query?:UseQueryOptions<AsyncReturnType<typeof countPocketArticles>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getCountPocketArticlesQueryKey();
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof countPocketArticles>> = () => countPocketArticles(axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof countPocketArticles>, TError, TData>(queryKey, queryFn, queryOptions)
 
   return {
     queryKey,

@@ -428,7 +428,9 @@ class MyDiaryDay(SQLModel):
         from .googlecalendar_connector import MyDiaryGCal
         from .habitica_connector import MyDiaryHabitica
 
-        pocket_articles = MyDiaryPocket().get_articles_for_day(dt)
+        mydiary_pocket = MyDiaryPocket()
+        pocket_articles = mydiary_pocket.get_articles_for_day(dt)
+        mydiary_pocket.save_articles_to_database(pocket_articles)
 
         mydiary_spotify = MyDiarySpotify()
         if spotify_sync is True:
@@ -625,9 +627,38 @@ class Dog(SQLModel, table=True):
     owners: Optional[List[str]]
     # images: List[MyDiaryImage] = []
     estimated_bday: Optional[datetime] = Field(default=None, index=True)
+    notes: Optional[str]
 
 
 class GooglePhotosThumbnail(SQLModel):
     baseUrl: str
     width: int
     height: int
+
+
+class RecipeTagLink(SQLModel, table=True):
+    recipe_id: int = Field(foreign_key="recipe.id", primary_key=True)
+    tag_id: int = Field(foreign_key="tag.id", primary_key=True)
+
+
+class Recipe(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    upvotes: int = Field(default=0, index=True)
+    notes: Optional[str] = None
+
+    tags: List["Tag"] = Relationship(back_populates="recipes", link_model=RecipeTagLink)
+
+    recipe_events: Optional[List["RecipeEvent"]] = Relationship(back_populates="recipe")
+
+
+class RecipeEvent(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "timestamp", name="uix_recipe_timestamp"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    timestamp: int = Field(index=True)
+    notes: Optional[str] = None
+
+    recipe_id: int = Field(foreign_key="recipe.id", index=True)
+    recipe: Recipe = Relationship(back_populates="recipe_events")

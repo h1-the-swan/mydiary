@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = (
-    """Get all pocket articles from API and save to database"""
-)
+DESCRIPTION = """Get all pocket articles from API and save to database"""
 
 import sys, os, time, json
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
+from mydiary.models import PocketArticle
 import pendulum
 from timeit import default_timer as timer
 
@@ -31,15 +30,23 @@ from mydiary.pocket_connector import MyDiaryPocket
 def main(args):
     with Session(engine) as session:
         mydiary_pocket = MyDiaryPocket()
+        num_existing = 0
+        num_added = 0
         for i, article in enumerate(mydiary_pocket.yield_all_articles_from_api()):
+            existing = session.get(PocketArticle, int(article.id))
+            if existing is not None:
+                num_existing += 1
+                continue
             article.collect_tags(session=session)
             session.add(article)
-            if i % 5000 == 0:
-                logger.debug(f"{i+1} articles added. committing")
+            num_added += 1
+            if num_added % 500 == 0:
+                logger.debug(f"{num_added} articles added. committing")
                 session.commit()
-        logger.debug(f"finished all articles. i={i}. committing")
+        logger.debug(
+            f"finished all articles. num_added={num_added}. skipping {num_existing} because they were already in the database. committing..."
+        )
         session.commit()
-
 
 
 if __name__ == "__main__":
@@ -71,4 +78,3 @@ if __name__ == "__main__":
     logger.info(
         "all finished. total time: {}".format(format_timespan(total_end - total_start))
     )
-

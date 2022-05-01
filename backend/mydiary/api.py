@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 import pydantic
 from sqlalchemy import desc, all_
+from sqlalchemy.sql.functions import count
 from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
@@ -35,6 +36,7 @@ class GoogleCalendarEventRead(GoogleCalendarEvent):
 
 class TagRead(Tag):
     id_: int = Field(alias="id")
+    num_pocket_articles: Optional[int] = None
 
 
 class PocketArticleRead(PocketArticle):
@@ -88,11 +90,25 @@ def read_tags(
     *,
     session: Session = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, lte=100),
+    limit: int = Query(default=100, lte=1000),
+    is_pocket_tag: Optional[bool] = None,
 ):
-    tags = session.exec(select(Tag).offset(offset).limit(limit)).all()
-    return tags
+    stmt = select(Tag)
+    if is_pocket_tag is not None:
+        stmt = stmt.where(Tag.is_pocket_tag==is_pocket_tag)
+    stmt = stmt.offset(offset).limit(limit)
+    tags: List[Tag] = session.exec(stmt).all()
+    ret: List[TagRead] = []
+    for tag in tags:
+        num_pocket_articles = len(tag.pocket_articles)
+        item = TagRead.from_orm(tag)
+        item.num_pocket_articles = num_pocket_articles
+        ret.append(item)
+    return ret
 
+@app.get("/pocket/articles/count", operation_id="countPocketArticles", response_model=int)
+def count_pocket_articles(*, session: Session = Depends(get_session)):
+    return session.exec(count(PocketArticle.id)).scalar()
 
 @app.get(
     "/pocket/articles",
@@ -105,7 +121,7 @@ def read_pocket_articles(
     offset: int = 0,
     limit: int = Query(default=100),
     status: Optional[Set[int]] = Query(None),
-    tags: Optional[Set[str]] = Query(None, description="Tag names"),  # tag names
+    tags: Optional[str] = Query(None, description="Tag names (comma separated"),
     year: Optional[int] = Query(None, description="Year added"),
 ):
     stmt = (
@@ -117,7 +133,7 @@ def read_pocket_articles(
         # stmt = stmt.where(PocketArticle.status==status)
         stmt = stmt.where(PocketArticle.status.in_(status))
     if tags:
-        for t in tags:
+        for t in tags.split(','):
             stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
 
     if year is not None:

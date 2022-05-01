@@ -46,8 +46,8 @@ function SpotifyHistoryTable() {
         return dt.toLocaleString();
       },
       sorter: (a, b) =>
-        new Date(b.played_at + "Z").getTime() -
-        new Date(a.played_at + "Z").getTime(),
+        new Date(a.played_at + "Z").getTime() -
+        new Date(b.played_at + "Z").getTime(),
     },
     {
       title: "context_name",

@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pendulum
 from timeit import default_timer as timer
-from typing import Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Dict, Generator, Iterable, List, Mapping, Optional, Tuple, Union
 
 try:
     from humanfriendly import format_timespan
@@ -120,7 +120,7 @@ class MyDiaryPocket:
 
         Returns:
             PocketArticle: the PocketArticle instance (unchanged)
-        """    
+        """
         if session is None:
             session = self.new_session()
         for tag_name in pocket_tags:
@@ -132,3 +132,37 @@ class MyDiaryPocket:
             article.tags.append(tag)
         session.commit()
         return article
+
+    def save_articles_to_database(
+        self,
+        articles: Union[Iterable[PocketArticle], Dict[str, List[PocketArticle]]],
+        session: Optional[Session] = None,
+    ):
+        if isinstance(articles, Mapping):
+            articles_list = []
+            added_ids = set()
+            for v in articles.values():
+                for article in v:
+                    if article.id not in added_ids:
+                        articles_list.append(article)
+                        added_ids.add(article.id)
+        else:
+            articles_list = articles
+        logger.info(f"saving {len(articles_list)} pocket articles to database")
+        if session is None:
+            session = self.new_session()
+        num_updated = 0
+        for article in articles_list:
+            existing_row = session.get(PocketArticle, article.id)
+            if existing_row:
+                session.delete(existing_row)
+                num_updated += 1
+            session.add(article)
+            article.collect_tags(session=session)
+        session.commit()
+        for article in articles_list:
+            session.refresh(article)
+        if num_updated > 0:
+            logger.debug(
+                f"{num_updated} articles were already in the database and were updated"
+            )
