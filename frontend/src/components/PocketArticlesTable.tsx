@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Table, TableColumnType } from "antd";
 import {
   PocketArticleRead,
+  PocketStatusEnum,
   TagRead,
   useReadPocketArticles,
   useReadTags,
@@ -45,6 +46,7 @@ export default function PocketArticlesTable() {
           {value ? value : "given_title: " + record.given_title}
         </a>
       ),
+      sorter: (a, b) => a.resolved_title.localeCompare(b.resolved_title),
     },
     {
       title: "Time Added",
@@ -66,6 +68,21 @@ export default function PocketArticlesTable() {
         const tagNames = tags.map((tag) => tag.name);
         return tagNames.join(", ");
       },
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (status: PocketStatusEnum) => {
+        if (status === 0) {
+          return "unread";
+        } else if (status === 1) {
+          return "archived";
+        } else if (status === 2) {
+          return "SHOULD_BE_DELETED";
+        }
+      },
+      sorter: (a, b) => a.status - b.status,
     },
   ];
   return isLoading ? (

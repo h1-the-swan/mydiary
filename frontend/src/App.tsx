@@ -11,6 +11,10 @@ import {
 import PocketArticles from "./routes/pocketArticles";
 import GooglePhotos from "./routes/googlePhotos";
 import SpotifyHistory from "./routes/spotifyHistory";
+import Dogs from "./routes/dogs";
+import DogAdd from "./routes/dogAdd";
+import Recipes from "./routes/recipes";
+import RecipeAdd from "./routes/recipeAdd";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -70,6 +74,26 @@ const ROUTES: IRoute[] = [
     path: "/spotify/history",
     title: "Spotify History",
     element: <SpotifyHistory />,
+  },
+  {
+    path: "/dogs",
+    title: "Dogs",
+    element: <Dogs />,
+  },
+  {
+    path: "/dogs/add",
+    title: "Add Dog",
+    element: <DogAdd />,
+  },
+  {
+    path: "/recipes",
+    title: "Recipes",
+    element: <Recipes />,
+  },
+  {
+    path: "/recipes/add",
+    title: "Add Recipe",
+    element: <RecipeAdd />,
   },
 ];
 

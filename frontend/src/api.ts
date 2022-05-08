@@ -19,6 +19,10 @@ import {
   UseQueryResult,
   QueryKey
 } from 'react-query'
+export type ReadRecipesListParams = { offset?: number; limit?: number };
+
+export type ReadDogsListParams = { offset?: number; limit?: number };
+
 export type ReadSpotifyHistoryParams = { offset?: number; limit?: number };
 
 export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string; year?: number };
@@ -68,6 +72,19 @@ export interface SpotifyTrackHistoryRead {
   context_type?: SpotifyContextTypeEnum;
   spotify_id: string;
   track: SpotifyTrackBase;
+}
+
+export interface RecipeRead {
+  name: string;
+  upvotes?: number;
+  notes?: string;
+  id: number;
+}
+
+export interface RecipeCreate {
+  name: string;
+  upvotes?: number;
+  notes?: string;
 }
 
 /**
@@ -120,6 +137,34 @@ export interface GoogleCalendarEventRead {
   end: string;
   start_timezone: string;
   end_timezone: string;
+}
+
+export interface DogUpdate {
+  name?: string;
+  how_met?: string;
+  when_met?: string;
+  owners?: string;
+  estimated_bday?: string;
+  notes?: string;
+}
+
+export interface DogRead {
+  name: string;
+  how_met?: string;
+  when_met?: string;
+  owners?: string;
+  estimated_bday?: string;
+  notes?: string;
+  id: number;
+}
+
+export interface DogCreate {
+  name: string;
+  how_met?: string;
+  when_met?: string;
+  owners?: string;
+  estimated_bday?: string;
+  notes?: string;
 }
 
 
@@ -488,6 +533,274 @@ export const googlePhotosAddToJoplin = (
         }
 
       return useMutation<AsyncReturnType<typeof googlePhotosAddToJoplin>, TError, {noteId: string;data: GooglePhotosThumbnail[]}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Read Dogs
+ */
+export const readDogsList = (
+    params?: ReadDogsListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<DogRead[]>> => {
+    return axios.get(
+      `/dogs/`,{
+        params,
+    ...options}
+    );
+  }
+
+
+export const getReadDogsListQueryKey = (params?: ReadDogsListParams,) => [`/dogs/`, ...(params ? [params]: [])];
+
+    
+export type ReadDogsListQueryResult = NonNullable<AsyncReturnType<typeof readDogsList>>
+export type ReadDogsListQueryError = AxiosError<HTTPValidationError>
+
+export const useReadDogsList = <TData = AsyncReturnType<typeof readDogsList>, TError = AxiosError<HTTPValidationError>>(
+ params?: ReadDogsListParams, options?: { query?:UseQueryOptions<AsyncReturnType<typeof readDogsList>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getReadDogsListQueryKey(params);
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof readDogsList>> = () => readDogsList(params, axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof readDogsList>, TError, TData>(queryKey, queryFn, queryOptions)
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Create Dog
+ */
+export const createDog = (
+    dogCreate: DogCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<DogRead>> => {
+    return axios.post(
+      `/dogs/`,
+      dogCreate,options
+    );
+  }
+
+
+
+    export type CreateDogMutationResult = NonNullable<AsyncReturnType<typeof createDog>>
+    export type CreateDogMutationBody = DogCreate
+    export type CreateDogMutationError = AxiosError<HTTPValidationError>
+
+    export const useCreateDog = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof createDog>, TError,{data: DogCreate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options || {}
+
+      
+
+
+      const mutationFn: MutationFunction<AsyncReturnType<typeof createDog>, {data: DogCreate}> = (props) => {
+          const {data} = props || {};
+
+          return  createDog(data,axiosOptions)
+        }
+
+      return useMutation<AsyncReturnType<typeof createDog>, TError, {data: DogCreate}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Read Dog
+ */
+export const readDog = (
+    dogId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<DogRead>> => {
+    return axios.get(
+      `/dogs/${dogId}`,options
+    );
+  }
+
+
+export const getReadDogQueryKey = (dogId: number,) => [`/dogs/${dogId}`];
+
+    
+export type ReadDogQueryResult = NonNullable<AsyncReturnType<typeof readDog>>
+export type ReadDogQueryError = AxiosError<HTTPValidationError>
+
+export const useReadDog = <TData = AsyncReturnType<typeof readDog>, TError = AxiosError<HTTPValidationError>>(
+ dogId: number, options?: { query?:UseQueryOptions<AsyncReturnType<typeof readDog>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getReadDogQueryKey(dogId);
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof readDog>> = () => readDog(dogId, axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof readDog>, TError, TData>(queryKey, queryFn, {enabled: !!(dogId), ...queryOptions})
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Delete Dog
+ */
+export const deleteDog = (
+    dogId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.delete(
+      `/dogs/${dogId}`,options
+    );
+  }
+
+
+
+    export type DeleteDogMutationResult = NonNullable<AsyncReturnType<typeof deleteDog>>
+    
+    export type DeleteDogMutationError = AxiosError<HTTPValidationError>
+
+    export const useDeleteDog = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof deleteDog>, TError,{dogId: number}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options || {}
+
+      
+
+
+      const mutationFn: MutationFunction<AsyncReturnType<typeof deleteDog>, {dogId: number}> = (props) => {
+          const {dogId} = props || {};
+
+          return  deleteDog(dogId,axiosOptions)
+        }
+
+      return useMutation<AsyncReturnType<typeof deleteDog>, TError, {dogId: number}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Update Dog
+ */
+export const updateDog = (
+    dogId: number,
+    dogUpdate: DogUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<DogRead>> => {
+    return axios.patch(
+      `/dogs/${dogId}`,
+      dogUpdate,options
+    );
+  }
+
+
+
+    export type UpdateDogMutationResult = NonNullable<AsyncReturnType<typeof updateDog>>
+    export type UpdateDogMutationBody = DogUpdate
+    export type UpdateDogMutationError = AxiosError<HTTPValidationError>
+
+    export const useUpdateDog = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof updateDog>, TError,{dogId: number;data: DogUpdate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options || {}
+
+      
+
+
+      const mutationFn: MutationFunction<AsyncReturnType<typeof updateDog>, {dogId: number;data: DogUpdate}> = (props) => {
+          const {dogId,data} = props || {};
+
+          return  updateDog(dogId,data,axiosOptions)
+        }
+
+      return useMutation<AsyncReturnType<typeof updateDog>, TError, {dogId: number;data: DogUpdate}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Read Recipes
+ */
+export const readRecipesList = (
+    params?: ReadRecipesListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<RecipeRead>> => {
+    return axios.get(
+      `/recipes/`,{
+        params,
+    ...options}
+    );
+  }
+
+
+export const getReadRecipesListQueryKey = (params?: ReadRecipesListParams,) => [`/recipes/`, ...(params ? [params]: [])];
+
+    
+export type ReadRecipesListQueryResult = NonNullable<AsyncReturnType<typeof readRecipesList>>
+export type ReadRecipesListQueryError = AxiosError<HTTPValidationError>
+
+export const useReadRecipesList = <TData = AsyncReturnType<typeof readRecipesList>, TError = AxiosError<HTTPValidationError>>(
+ params?: ReadRecipesListParams, options?: { query?:UseQueryOptions<AsyncReturnType<typeof readRecipesList>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options || {}
+
+  const queryKey = queryOptions?.queryKey ?? getReadRecipesListQueryKey(params);
+
+  
+
+  const queryFn: QueryFunction<AsyncReturnType<typeof readRecipesList>> = () => readRecipesList(params, axiosOptions);
+
+  const query = useQuery<AsyncReturnType<typeof readRecipesList>, TError, TData>(queryKey, queryFn, queryOptions)
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Create Recipe
+ */
+export const createRecipe = (
+    recipeCreate: RecipeCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<RecipeRead>> => {
+    return axios.post(
+      `/recipes/`,
+      recipeCreate,options
+    );
+  }
+
+
+
+    export type CreateRecipeMutationResult = NonNullable<AsyncReturnType<typeof createRecipe>>
+    export type CreateRecipeMutationBody = RecipeCreate
+    export type CreateRecipeMutationError = AxiosError<HTTPValidationError>
+
+    export const useCreateRecipe = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<AsyncReturnType<typeof createRecipe>, TError,{data: RecipeCreate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options || {}
+
+      
+
+
+      const mutationFn: MutationFunction<AsyncReturnType<typeof createRecipe>, {data: RecipeCreate}> = (props) => {
+          const {data} = props || {};
+
+          return  createRecipe(data,axiosOptions)
+        }
+
+      return useMutation<AsyncReturnType<typeof createRecipe>, TError, {data: RecipeCreate}, TContext>(mutationFn, mutationOptions)
     }
     
 /**

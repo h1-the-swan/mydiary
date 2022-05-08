@@ -11,6 +11,7 @@ services:
       - ./backend/token_cache:/usr/local/src/app/backend/token_cache
       - ./backend/tests:/usr/local/src/app/backend/tests
       - ./backend/pytest.ini:/usr/local/src/app/backend/pytest.ini
+      - ./backend/cov.xml:/usr/local/src/app/backend/cov.xml
       # specify joplin data as a persistent docker volume (defined below)
       - joplin_data:/root/.config/joplin
       # use timezone information from host machine

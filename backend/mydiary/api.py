@@ -12,6 +12,10 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import (
+    Dog,
+    Recipe,
+    RecipeBase,
+    RecipeEventBase,
     SpotifyTrackBase,
     SpotifyTrackHistoryBase,
     SpotifyTrackHistory,
@@ -20,6 +24,7 @@ from .models import (
     Tag,
     PocketArticle,
     GooglePhotosThumbnail,
+    DogBase,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 import uvicorn
@@ -51,6 +56,52 @@ class SpotifyTrackHistoryRead(SpotifyTrackHistoryBase):
     # id: int
     id_: int = Field(alias="id")
     track: SpotifyTrackBase
+
+
+class DogRead(DogBase):
+    id: int
+
+
+class DogCreate(DogBase):
+    pass
+
+
+class DogUpdate(SQLModel):
+    name: Optional[str] = None
+    how_met: Optional[str] = None
+    when_met: Optional[datetime] = None
+    owners: Optional[str] = None
+    # images: List[MyDiaryImage] = []
+    estimated_bday: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class RecipeRead(RecipeBase):
+    id: int
+
+
+class RecipeCreate(RecipeBase):
+    pass
+
+
+class RecipeUpdate(SQLModel):
+    name: Optional[str] = None
+    upvotes: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class RecipeEventRead(RecipeEventBase):
+    id: int
+
+
+class RecipeEventCreate(RecipeEventBase):
+    pass
+
+
+class RecipeEventUpdate(SQLModel):
+    timestamp: Optional[int] = None
+    notes: Optional[str] = None
+    recipe_id: Optional[int] = None
 
 
 def get_session():
@@ -95,7 +146,7 @@ def read_tags(
 ):
     stmt = select(Tag)
     if is_pocket_tag is not None:
-        stmt = stmt.where(Tag.is_pocket_tag==is_pocket_tag)
+        stmt = stmt.where(Tag.is_pocket_tag == is_pocket_tag)
     stmt = stmt.offset(offset).limit(limit)
     tags: List[Tag] = session.exec(stmt).all()
     ret: List[TagRead] = []
@@ -106,9 +157,13 @@ def read_tags(
         ret.append(item)
     return ret
 
-@app.get("/pocket/articles/count", operation_id="countPocketArticles", response_model=int)
+
+@app.get(
+    "/pocket/articles/count", operation_id="countPocketArticles", response_model=int
+)
 def count_pocket_articles(*, session: Session = Depends(get_session)):
     return session.exec(count(PocketArticle.id)).scalar()
+
 
 @app.get(
     "/pocket/articles",
@@ -133,7 +188,7 @@ def read_pocket_articles(
         # stmt = stmt.where(PocketArticle.status==status)
         stmt = stmt.where(PocketArticle.status.in_(status))
     if tags:
-        for t in tags.split(','):
+        for t in tags.split(","):
             stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
 
     if year is not None:
@@ -272,6 +327,87 @@ async def google_photos_add_to_joplin(
         r_put_note.raise_for_status()
 
         await joplin_sync()
+
+
+@app.post("/dogs/", operation_id="createDog", response_model=DogRead)
+def create_dog(*, session: Session = Depends(get_session), dog: DogCreate):
+    db_dog = Dog.from_orm(dog)
+    session.add(db_dog)
+    session.commit()
+    session.refresh(db_dog)
+    return db_dog
+
+
+@app.get("/dogs/", operation_id="readDogsList", response_model=List[DogRead])
+def read_dogs(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, lte=1000),
+):
+    dogs = session.exec(select(Dog).offset(offset).limit(limit)).all()
+    return dogs
+
+
+@app.get("/dogs/{dog_id}", operation_id="readDog", response_model=DogRead)
+def read_dog(
+    *,
+    session: Session = Depends(get_session),
+    dog_id: int,
+):
+    dog = session.get(Dog, dog_id)
+    if not dog:
+        raise HTTPException(status_code=404, detail="Dog not found")
+    return dog
+
+
+@app.patch("/dogs/{dog_id}", operation_id="updateDog", response_model=DogRead)
+def update_dog(
+    *,
+    session: Session = Depends(get_session),
+    dog_id: int,
+    dog: DogUpdate,
+):
+    db_dog = session.get(Dog, dog_id)
+    if not db_dog:
+        raise HTTPException(status_code=404, detail="Dog not found")
+    dog_data = dog.dict(exclude_unset=True)
+    for k, v in dog_data.items():
+        setattr(db_dog, k, v)
+    session.add(db_dog)
+    session.commit()
+    session.refresh(db_dog)
+    return db_dog
+
+
+@app.delete("/dogs/{dog_id}", operation_id="deleteDog")
+def delete_dog(*, session: Session = Depends(get_session), dog_id: int):
+    db_dog = session.get(Dog, dog_id)
+    if not db_dog:
+        raise HTTPException(status_code=404, detail="Dog not found")
+    session.delete(db_dog)
+    session.commit()
+    return {"ok": True}
+
+
+@app.post("/recipes/", operation_id="createRecipe", response_model=RecipeRead)
+def create_recipe(*, session: Session = Depends(get_session), recipe: RecipeCreate):
+    db_recipe = Recipe.from_orm(recipe)
+    session.add(db_recipe)
+    session.commit()
+    session.refresh(db_recipe)
+    return db_recipe
+
+
+@app.get("/recipes/", operation_id="readRecipesList", response_model=RecipeRead)
+def read_recipes(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, lte=1000),
+):
+    recipes = session.exec(select(Recipe).offset(offset).limit(limit)).all()
+    return recipes
 
 
 @app.get("/generate_openapi_json")

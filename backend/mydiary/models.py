@@ -619,15 +619,18 @@ class MyDiaryDay(SQLModel):
             )
 
 
-class Dog(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+class DogBase(SQLModel):
     name: str = Field(index=True)
     how_met: Optional[str] = Field(default=None, index=True)
     when_met: Optional[datetime] = Field(default=None, index=True)
-    owners: Optional[List[str]]
+    owners: Optional[str]
     # images: List[MyDiaryImage] = []
     estimated_bday: Optional[datetime] = Field(default=None, index=True)
     notes: Optional[str]
+
+
+class Dog(DogBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
 
 
 class GooglePhotosThumbnail(SQLModel):
@@ -641,24 +644,31 @@ class RecipeTagLink(SQLModel, table=True):
     tag_id: int = Field(foreign_key="tag.id", primary_key=True)
 
 
-class Recipe(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+class RecipeBase(SQLModel):
     name: str = Field(index=True)
     upvotes: int = Field(default=0, index=True)
     notes: Optional[str] = None
 
-    tags: List["Tag"] = Relationship(back_populates="recipes", link_model=RecipeTagLink)
+
+class Recipe(RecipeBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # tags: List["Tag"] = Relationship(back_populates="recipes", link_model=RecipeTagLink)
+    tags: List["Tag"] = Relationship(link_model=RecipeTagLink)
 
     recipe_events: Optional[List["RecipeEvent"]] = Relationship(back_populates="recipe")
 
 
-class RecipeEvent(SQLModel, table=True):
-    __table_args__ = (
-        UniqueConstraint("recipe_id", "timestamp", name="uix_recipe_timestamp"),
-    )
-    id: Optional[int] = Field(default=None, primary_key=True)
+class RecipeEventBase(SQLModel):
     timestamp: int = Field(index=True)
     notes: Optional[str] = None
 
     recipe_id: int = Field(foreign_key="recipe.id", index=True)
+
+
+class RecipeEvent(RecipeEventBase, table=True):
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "timestamp", name="uix_recipe_timestamp"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
     recipe: Recipe = Relationship(back_populates="recipe_events")
