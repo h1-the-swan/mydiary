@@ -2,9 +2,10 @@ import React from "react";
 import { useSearchParams } from "react-router-dom";
 import PocketArticlesTable from "../components/PocketArticlesTable";
 import { useCountPocketArticles, useReadTags } from "../api";
-import { Select } from "antd";
+import { Select, DatePicker } from "antd";
 
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const PocketArticles = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,6 +40,11 @@ const PocketArticles = () => {
     </Option>
   ));
 
+  function datePickerOnChange(date: any, dateString: string[]) {
+    console.log(dateString);
+    setSearchParams({ dateMin: dateString[0], dateMax: dateString[1] });
+  }
+
   return (
     <main>
       <p>Number of articles in the database: {countArticles}</p>
@@ -54,6 +60,7 @@ const PocketArticles = () => {
           {options}
         </Select>
       )}
+      <RangePicker onChange={datePickerOnChange} />
       <PocketArticlesTable />
     </main>
   );

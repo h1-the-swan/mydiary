@@ -25,7 +25,7 @@ export type ReadDogsListParams = { offset?: number; limit?: number };
 
 export type ReadSpotifyHistoryParams = { offset?: number; limit?: number };
 
-export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string; year?: number };
+export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string; dateMin?: string; dateMax?: string; year?: number };
 
 export type ReadTagsParams = { offset?: number; limit?: number; is_pocket_tag?: boolean };
 

@@ -12,8 +12,15 @@ import {
 export default function PocketArticlesTable() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tagFilter = searchParams.get("tags") || "";
+  const dateMinFilter = searchParams.get("dateMin") || "";
+  const dateMaxFilter = searchParams.get("dateMax") || "";
   const { data: articles, isLoading } = useReadPocketArticles(
-    { limit: 100, tags: tagFilter },
+    {
+      limit: 100,
+      tags: tagFilter,
+      dateMin: dateMinFilter,
+      dateMax: dateMaxFilter,
+    },
     {
       query: {
         select: (d) => d.data,
@@ -28,13 +35,16 @@ export default function PocketArticlesTable() {
       dataIndex: "id",
       key: "id",
       render: (value, record) => (
-        <a
-          href={`https://getpocket.com/read/${record.id}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {value}
-        </a>
+        <span>
+          <a
+            href={`https://getpocket.com/read/${record.id}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {value}
+          </a>
+          {record.favorite ? "❤️" : null}
+        </span>
       ),
     },
     {

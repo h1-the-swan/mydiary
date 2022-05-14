@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Form, Button, Alert } from "antd";
+import { Form, Button, Alert, DatePicker, Space } from "antd";
 import {
   useGooglePhotosAddToJoplin,
   useGooglePhotosThumbnailUrls,
@@ -11,6 +11,7 @@ import Gallery, { PhotoClickHandler } from "react-photo-gallery";
 import SelectedImage, { ISelectedImage } from "../components/SelectedImage";
 import { RenderImageProps, GalleryI } from "react-photo-gallery";
 import JoplinFindNote from "../components/JoplinFindNote";
+import moment from "moment";
 
 const GooglePhotos = () => {
   const [selectAll, setSelectAll] = useState(false);
@@ -24,6 +25,14 @@ const GooglePhotos = () => {
     setSearchParams({ dt: "yesterday" });
   }
   const dt = searchParams.get("dt") || "yesterday";
+  let dtMoment: moment.Moment;
+  if (dt === "today") {
+    dtMoment = moment();
+  } else if (dt === "yesterday") {
+    dtMoment = moment().subtract(1, "days");
+  } else {
+    dtMoment = moment(dt);
+  }
   let { data: imgUrls, isLoading } = useGooglePhotosThumbnailUrls(dt, {
     query: {
       select: (d) => d.data,
@@ -36,7 +45,7 @@ const GooglePhotos = () => {
   });
   const mutationGooglePhotosAddToJoplin = useGooglePhotosAddToJoplin({
     mutation: {
-      onSuccess: () => mutationJoplinSync.mutate(),  // run sync
+      onSuccess: () => mutationJoplinSync.mutate(), // run sync
     },
   });
 
@@ -109,15 +118,23 @@ const GooglePhotos = () => {
     <span>Loading...</span>
   ) : photos ? (
     <main>
-      {lastSync ? <p>{`Last Joplin sync: ${lastSync}`}</p> : null}
-      {mutationJoplinSync.isLoading && <p>Joplin: currently syncing...</p>}
-      <JoplinFindNote
-        dt={dt}
-        setNoteId={setNoteId}
-        lastSync={lastSync}
-        setLastSync={setLastSync}
-        mutationJoplinSync={mutationJoplinSync}
-      />
+      <Space direction="vertical">
+        <DatePicker
+          defaultValue={dtMoment}
+          onChange={(date: any, dateString: string) => {
+            setSearchParams({ dt: dateString });
+          }}
+        />
+        {lastSync ? <p>{`Last Joplin sync: ${lastSync}`}</p> : null}
+        {mutationJoplinSync.isLoading && <p>Joplin: currently syncing...</p>}
+        <JoplinFindNote
+          dt={dt}
+          setNoteId={setNoteId}
+          lastSync={lastSync}
+          setLastSync={setLastSync}
+          mutationJoplinSync={mutationJoplinSync}
+        />
+      </Space>
       <Form form={form} onFinish={onFinish}>
         <Button onClick={toggleSelectAll}>toggle select all</Button>
         <Form.Item name="gallery">

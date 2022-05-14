@@ -2,7 +2,7 @@ from datetime import datetime
 import requests
 import io
 import pendulum
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 import pydantic
@@ -177,7 +177,11 @@ def read_pocket_articles(
     limit: int = Query(default=100),
     status: Optional[Set[int]] = Query(None),
     tags: Optional[str] = Query(None, description="Tag names (comma separated"),
-    year: Optional[int] = Query(None, description="Year added"),
+    dateMin: Optional[str] = Query(None),
+    dateMax: Optional[str] = Query(None),
+    year: Optional[int] = Query(
+        None, description="Year added (ignored if dateRange is specified)"
+    ),
 ):
     stmt = (
         select(PocketArticle)
@@ -191,7 +195,11 @@ def read_pocket_articles(
         for t in tags.split(","):
             stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
 
-    if year is not None:
+    if dateMin:
+        stmt = stmt.where(PocketArticle.time_added >= dateMin)
+    if dateMax:
+        stmt = stmt.where(PocketArticle.time_added <= dateMax)
+    if year is not None and (not dateMin and not dateMax):
         # stmt = stmt.where(PocketArticle.time_added.year==year)
         # The above doesn't work (maybe a SQLite issue?) so do this instead:
         dt = pendulum.datetime(year=year, month=1, day=1)
