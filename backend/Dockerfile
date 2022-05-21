@@ -32,9 +32,9 @@ RUN node --version
 RUN npm --version
 
 RUN npm install joplin
-RUN npx joplin config sync.5.path http://192.168.0.111:48916/remote.php/webdav/Joplin
-RUN npx joplin config sync.5.username admin
-RUN npx joplin config sync.5.password password
+RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
+RUN npx joplin config sync.5.username ${NEXTCLOUD_USERNAME}
+RUN npx joplin config sync.5.password ${NEXTCLOUD_PASSWORD}
 RUN npx joplin config sync.target 5
 RUN npx joplin config api.token $JOPLIN_AUTH_TOKEN
 

@@ -1,11 +1,12 @@
-import { Button } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
+import { Button, Spin } from "antd";
 import React, { useEffect, useState } from "react";
 import { useJoplinGetNoteId, useJoplinSync } from "../api";
 
 interface Props {
   dt: string;
   setNoteId: (noteId: string) => any;
-  lastSync: Date | undefined,
+  lastSync: Date | undefined;
   setLastSync: (lastSync: Date) => any;
   mutationJoplinSync: any;
 }
@@ -15,7 +16,7 @@ export default function JoplinFindNote(props: Props) {
   const { lastSync, setLastSync, mutationJoplinSync } = props;
   const noteId = useJoplinGetNoteId(props.dt, {
     query: {
-      queryKey: [lastSync],
+      queryKey: [props.dt, lastSync],
     },
   });
   useEffect(() => {
@@ -44,7 +45,10 @@ export default function JoplinFindNote(props: Props) {
               </Button>
             </>
           ) : (
-            <p>Joplin Note ID: {noteId.data.data}</p>
+            <p>
+              Joplin Note ID: {noteId.data.data}
+              {noteId.isFetching && <Spin indicator={<LoadingOutlined />} />}
+            </p>
           )}
         </div>
       )}
