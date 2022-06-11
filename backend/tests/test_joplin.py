@@ -1,5 +1,7 @@
 import os, json
 from pathlib import Path
+
+import pendulum
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.models import PocketArticle, PocketStatusEnum, JoplinNote
 
@@ -32,9 +34,12 @@ def test_server_is_running(joplin_client: MyDiaryJoplin):
 
 
 def test_joplin_note_from_api(joplin_client: MyDiaryJoplin):
-    note_id = "870912b332b547f2851ee6dbacf1ac85"
+    dt_str = "2022-01-18"
+    dt = pendulum.parse(dt_str)
+    note_id = joplin_client.get_note_id_by_date(dt)
+    assert note_id == "5d56d02b4a854eaf8e59650df3d0270e"
     note = joplin_client.get_note(note_id)
-    assert note.title == "2021-12-27"
+    assert note.title == dt_str
     parent_id = note.parent_id
     notebook = joplin_client.get_notebook(parent_id)
-    assert notebook.title == "2021"
+    assert notebook.title == "2022"

@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import pytest
 from mydiary.markdown_edits import MarkdownDoc, MarkdownSection
 
 markdown_text = """
@@ -25,6 +27,13 @@ goodbye
 
 def test_markdown_split_and_rejoin():
     md_doc = MarkdownDoc(markdown_text)
+
+    section_existing = md_doc.get_section_by_title("heading")
+    assert section_existing is not None
+
+    with pytest.raises(KeyError):
+        section_nonexisting = md_doc.get_section_by_title("nonexistent")
+
     rejoin = "\n".join([section.txt for section in md_doc.sections])
     assert markdown_text == rejoin
 
@@ -45,6 +54,6 @@ def test_update_body(rootdir):
         result = sec.update(update_txt)
         assert result in ["updated", "no update"]
         results.append(result=="updated")
-    assert any(results)
+    assert any(results)  # at least one section was updated
 
     assert md1.txt == txt2

@@ -178,7 +178,7 @@ class MyDiaryJoplin:
         if self.server_process is not None:
             self.server_process.terminate()
 
-    def sync(self, timeout: int = 20) -> bool:
+    def sync(self, timeout: int = 30) -> bool:
         # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
         pattern = re.compile(r"Completed: (\d.*)\(")
         p = subprocess.run(
@@ -315,6 +315,7 @@ class MyDiaryJoplin:
             data={"props": json.dumps(props)},
             params={"token": self.token},
         )
+        print(response.json())
         return response
 
     def joplin_reduce_image_size(

@@ -31,16 +31,25 @@ def client_fixture(session: Session):
 
 
 class TestDog:
-    dog_data = {
-        "name": "Bizzy",
-        "how_met": "internet",
-        "when_met": pendulum.today().to_datetime_string(),
-        "owners": "Josh Gondelman and Maris Kreizman",
-        "notes": "Bizzy is a pug",
-    }
+    dog_data = [
+        {
+            "name": "Bizzy",
+            "how_met": "internet",
+            "when_met": pendulum.today().to_datetime_string(),
+            "owners": "Josh Gondelman and Maris Kreizman",
+            "notes": "Bizzy is a pug",
+        },
+        {
+            "name": "Lucy",
+            "how_met": "Rover",
+            "when_met": pendulum.yesterday().to_datetime_string(),
+            "owners": "Chris?",
+            "notes": "Lucy is a French Bulldog.",
+        },
+    ]
 
     def test_create_dog(self, client: TestClient):
-        response = client.post("/dogs/", json=self.dog_data)
+        response = client.post("/dogs/", json=self.dog_data[0])
         d = response.json()
 
         assert response.status_code == 200
@@ -52,8 +61,55 @@ class TestDog:
         assert d["estimated_bday"] is None
         assert d["id"] is not None
 
+    def test_read_dogs(self, session: Session, client: TestClient):
+        dog_1 = Dog(**self.dog_data[0])
+        dog_2 = Dog(**self.dog_data[1])
+        session.add(dog_1)
+        session.add(dog_2)
+        session.commit()
+        assert dog_1.id is not None
+        assert dog_2.id is not None
+
+        response = client.get('/dogs/')
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert len(data) == 2
+        assert data[0]["name"] == dog_1.name
+        assert data[0]["how_met"] == dog_1.how_met
+        assert pendulum.parse(data[0]["when_met"]).is_same_day(dog_1.when_met)
+        assert data[0]["owners"] == dog_1.owners
+        assert data[0]["notes"] == dog_1.notes
+        assert data[1]["name"] == dog_2.name
+        assert data[1]["how_met"] == dog_2.how_met
+        assert pendulum.parse(data[1]["when_met"]).is_same_day(dog_2.when_met)
+        assert data[1]["owners"] == dog_2.owners
+        assert data[1]["notes"] == dog_2.notes
+
+    def test_read_dog(self, session: Session, client: TestClient):
+        dog_1 = Dog(**self.dog_data[0])
+        session.add(dog_1)
+        session.commit()
+
+        response = client.get(f'/dogs/{dog_1.id}')
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert data["name"] == dog_1.name
+        assert data["how_met"] == dog_1.how_met
+        assert pendulum.parse(data["when_met"]).is_same_day(dog_1.when_met)
+        assert data["owners"] == dog_1.owners
+        assert data["notes"] == dog_1.notes
+
+    def test_read_dog_missing(self, session: Session, client: TestClient):
+        dog_id = 11
+        response = client.get(f'/dogs/{dog_id}')
+        assert response.status_code == 404
+
     def test_update_dog(self, session: Session, client: TestClient):
-        dog_1 = Dog(**self.dog_data)
+        dog_1 = Dog(**self.dog_data[0])
         session.add(dog_1)
         session.commit()
         assert dog_1.id is not None
@@ -66,8 +122,13 @@ class TestDog:
         assert d["owners"] == "Swan"
         assert d["id"] == dog_1.id
 
+    def test_update_dog_missing(self, session: Session, client: TestClient):
+        dog_id = 11
+        response = client.patch(f'/dogs/{dog_id}', json={"owners": "Swan"})
+        assert response.status_code == 404
+
     def test_delete_dog(self, session: Session, client: TestClient):
-        dog_1 = Dog(**self.dog_data)
+        dog_1 = Dog(**self.dog_data[0])
         session.add(dog_1)
         session.commit()
         assert dog_1.id is not None
@@ -79,6 +140,12 @@ class TestDog:
         assert response.status_code == 200
 
         assert dog_in_db is None
+
+    def test_delete_dog_missing(self, session: Session, client: TestClient):
+        dog_id = 11
+        response = client.delete(f'/dogs/{dog_id}')
+        assert response.status_code == 404
+
 
 class TestRecipe:
     recipe_data = {
