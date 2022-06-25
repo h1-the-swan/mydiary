@@ -594,8 +594,8 @@ class MyDiaryDay(SQLModel):
             self.joplin_connector.sync()
             logger.info("sync complete")
 
-        # fill in the note id
-        self.get_joplin_note_id()
+            # fill in the note id
+            self.get_joplin_note_id()
 
     def init_or_update_joplin_note(self, joplin_connector=None, post_sync=True):
         from .joplin_connector import MyDiaryJoplin
