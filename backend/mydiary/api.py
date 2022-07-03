@@ -12,19 +12,21 @@ from sqlmodel import Field, SQLModel
 from fastapi import Query
 from .db import Session, engine, select
 from .models import (
-    Dog,
     Recipe,
     RecipeBase,
     RecipeEventBase,
     SpotifyTrackBase,
     SpotifyTrackHistoryBase,
     SpotifyTrackHistory,
+    PerformSongBase,
+    PerformSong,
+    DogBase,
+    Dog,
     GoogleCalendarEvent,
     PocketStatusEnum,
     Tag,
     PocketArticle,
     GooglePhotosThumbnail,
-    DogBase,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 import uvicorn
@@ -56,6 +58,23 @@ class SpotifyTrackHistoryRead(SpotifyTrackHistoryBase):
     # id: int
     id_: int = Field(alias="id")
     track: SpotifyTrackBase
+
+
+class PerformSongRead(PerformSongBase):
+    id: int
+
+
+class PerformSongCreate(PerformSongBase):
+    pass
+
+
+class PerformSongUpdate(SQLModel):
+    name: Optional[str] = None
+    artist_name: Optional[str] = None
+    learned: Optional[bool] = None
+    spotify_id: Optional[str] = None
+    notes: Optional[str] = None
+    perform_url: Optional[str] = None
 
 
 class DogRead(DogBase):
@@ -335,6 +354,85 @@ async def google_photos_add_to_joplin(
         r_put_note.raise_for_status()
 
         await joplin_sync()
+
+
+@app.post(
+    "/performsongs/", operation_id="createPerformSong", response_model=PerformSongRead
+)
+def create_perform_song(
+    *, session: Session = Depends(get_session), perform_song: PerformSongCreate
+):
+    db_perform_song = PerformSong.from_orm(perform_song)
+    session.add(db_perform_song)
+    session.commit()
+    session.refresh(db_perform_song)
+    return db_perform_song
+
+
+@app.get(
+    "/performsongs/",
+    operation_id="readPerformSongsList",
+    response_model=List[PerformSongRead],
+)
+def read_perform_songs(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, lte=1000),
+):
+    perform_songs = session.exec(select(PerformSong).offset(offset).limit(limit)).all()
+    return perform_songs
+
+
+@app.get(
+    "/performsongs/{perform_song_id}",
+    operation_id="readPerformSong",
+    response_model=PerformSongRead,
+)
+def read_perform_song(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+):
+    perform_song = session.get(PerformSong, perform_song_id)
+    if not perform_song:
+        raise HTTPException(status_code=404, detail="PerformSong not found")
+    return perform_song
+
+
+@app.patch(
+    "/performsongs/{perform_song_id}",
+    operation_id="updatePerformSong",
+    response_model=PerformSongRead,
+)
+def update_perform_song(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    perform_song: PerformSongUpdate,
+):
+    db_perform_song = session.get(PerformSong, perform_song_id)
+    if not db_perform_song:
+        raise HTTPException(status_code=404, detail="PerformSong not found")
+    perform_song_data = perform_song.dict(exclude_unset=True)
+    for k, v in perform_song_data.items():
+        setattr(db_perform_song, k, v)
+    session.add(db_perform_song)
+    session.commit()
+    session.refresh(db_perform_song)
+    return db_perform_song
+
+
+@app.delete("/performsongs/{perform_song_id}", operation_id="deletePerformSong")
+def delete_perform_song(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    db_perform_song = session.get(PerformSong, perform_song_id)
+    if not db_perform_song:
+        raise HTTPException(status_code=404, detail="PerformSong not found")
+    session.delete(db_perform_song)
+    session.commit()
+    return {"ok": True}
 
 
 @app.post("/dogs/", operation_id="createDog", response_model=DogRead)

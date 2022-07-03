@@ -145,6 +145,19 @@ class SpotifyTrackHistoryFrozen(SQLModel):
 #     played_at: datetime
 
 
+class PerformSongBase(SQLModel):
+    name: str = Field(index=True)
+    artist_name: str = Field(index=True)
+    learned: bool = Field(index=True)
+    spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", index=True)
+    notes: Optional[str]
+    perform_url: Optional[str]
+
+
+class PerformSong(PerformSongBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
 class PocketArticleTagLink(SQLModel, table=True):
     article_id: int = Field(foreign_key="pocketarticle.id", primary_key=True)
     tag_id: int = Field(foreign_key="tag.id", primary_key=True)

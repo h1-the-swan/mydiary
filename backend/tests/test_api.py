@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog
+from mydiary.models import Dog, PerformSong
 from mydiary.api import app, get_session
 
 
@@ -28,6 +28,117 @@ def client_fixture(session: Session):
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
+
+
+class TestPerformSong:
+    perform_song_data = [
+        {
+            "name": "Ironic",
+            "artist_name": "Alanis Morissette",
+            "learned": True,
+            "spotify_id": "4oGTdOClZUxcM2H3UmXlwL",
+            "notes": "capo 2nd fret?",
+        },
+        {
+            "name": "Stay (I Missed You)",
+            "artist_name": "Lisa Loeb",
+            "learned": False,
+            "spotify_id": "00U1MDChdOTxWwtKoOoBXE",
+        },
+    ]
+
+    def test_create_perform_song(self, client: TestClient):
+        response = client.post("/performsongs/", json=self.perform_song_data[0])
+        d = response.json()
+
+        assert response.status_code == 200
+        assert d["name"] == "Ironic"
+        assert d["artist_name"] == "Alanis Morissette"
+        assert d["learned"] == True
+        assert d["spotify_id"] == "4oGTdOClZUxcM2H3UmXlwL"
+        assert d["notes"] ==  "capo 2nd fret?"
+
+    def test_read_perform_songs(self, session: Session, client: TestClient):
+        perform_song_1 = PerformSong(**self.perform_song_data[0])
+        perform_song_2 = PerformSong(**self.perform_song_data[1])
+        session.add(perform_song_1)
+        session.add(perform_song_2)
+        session.commit()
+        assert perform_song_1.id is not None
+        assert perform_song_2.id is not None
+
+        response = client.get('/performsongs/')
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert len(data) == 2
+        assert data[0]["name"] == perform_song_1.name
+        assert data[0]["artist_name"] == perform_song_1.artist_name
+        assert data[0]["learned"] == perform_song_1.learned
+        assert data[0]["spotify_id"] == perform_song_1.spotify_id
+        assert data[1]["name"] == perform_song_2.name
+        assert data[1]["artist_name"] == perform_song_2.artist_name
+        assert data[1]["learned"] == perform_song_2.learned
+        assert data[1]["spotify_id"] == perform_song_2.spotify_id
+
+    def test_read_perform_song(self, session: Session, client: TestClient):
+        perform_song_1 = PerformSong(**self.perform_song_data[0])
+        session.add(perform_song_1)
+        session.commit()
+
+        response = client.get(f'/performsongs/{perform_song_1.id}')
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert data["name"] == perform_song_1.name
+        assert data["artist_name"] == perform_song_1.artist_name
+        assert data["learned"] == perform_song_1.learned
+        assert data["spotify_id"] == perform_song_1.spotify_id
+
+    def test_read_perform_song_missing(self, session: Session, client: TestClient):
+        perform_song_id = 11
+        response = client.get(f'/performsongs/{perform_song_id}')
+        assert response.status_code == 404
+
+    def test_update_perform_song(self, session: Session, client: TestClient):
+        perform_song_1 = PerformSong(**self.perform_song_data[0])
+        session.add(perform_song_1)
+        session.commit()
+        assert perform_song_1.id is not None
+
+        response = client.patch(f"/performsongs/{perform_song_1.id}", json={"notes": "capo 3rd fret"})
+        d = response.json()
+
+        assert response.status_code == 200
+        assert d["name"] == "Ironic"
+        assert d["notes"] == "capo 3rd fret"
+        assert d["id"] == perform_song_1.id
+
+    def test_update_perform_song_missing(self, session: Session, client: TestClient):
+        perform_song_id = 11
+        response = client.patch(f'/performsongs/{perform_song_id}', json={"notes": "capo 3rd fret"})
+        assert response.status_code == 404
+
+    def test_delete_perform_song(self, session: Session, client: TestClient):
+        perform_song_1 = PerformSong(**self.perform_song_data[0])
+        session.add(perform_song_1)
+        session.commit()
+        assert perform_song_1.id is not None
+
+        response = client.delete(f"/performsongs/{perform_song_1.id}")
+
+        perform_song_in_db = session.get(PerformSong, perform_song_1.id)
+
+        assert response.status_code == 200
+
+        assert perform_song_in_db is None
+
+    def test_delete_perform_song_missing(self, session: Session, client: TestClient):
+        perform_song_id = 11
+        response = client.delete(f'/performsongs/{perform_song_id}')
+        assert response.status_code == 404
 
 
 class TestDog:
