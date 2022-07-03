@@ -1,5 +1,6 @@
 import os, json
 from pathlib import Path
+import pytest
 
 import pendulum
 
@@ -7,6 +8,7 @@ import pendulum
 def test_env_loaded():
     assert "GOOGLEPHOTOS_TOKEN_CACHE" in os.environ
 
+@pytest.mark.slow
 def test_googlephotos_api_call():
     from mydiary.googlephotos_connector import MyDiaryGooglePhotos
     dt = pendulum.parse("2022-03-24")

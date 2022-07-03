@@ -9,14 +9,6 @@ import pendulum
 from timeit import default_timer as timer
 from typing import Dict, List, Optional
 
-try:
-    from humanfriendly import format_timespan
-except ImportError:
-
-    def format_timespan(seconds):
-        return "{:.2f} seconds".format(seconds)
-
-
 import logging
 
 root_logger = logging.getLogger()
