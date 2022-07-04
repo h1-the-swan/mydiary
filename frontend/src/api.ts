@@ -23,6 +23,10 @@ export type ReadRecipesListParams = { offset?: number; limit?: number };
 
 export type ReadDogsListParams = { offset?: number; limit?: number };
 
+export type ReadPerformSongsListParams = { offset?: number; limit?: number };
+
+export type JoplinInitNoteParams = { tz?: string };
+
 export type ReadSpotifyHistoryParams = { offset?: number; limit?: number };
 
 export type ReadPocketArticlesParams = { offset?: number; limit?: number; status?: number[]; tags?: string; dateMin?: string; dateMax?: string; year?: number };
@@ -116,6 +120,34 @@ export interface PocketArticleRead {
   excerpt?: string;
   top_image_url?: string;
   tags: TagRead[];
+}
+
+export interface PerformSongUpdate {
+  name?: string;
+  artist_name?: string;
+  learned?: boolean;
+  spotify_id?: string;
+  notes?: string;
+  perform_url?: string;
+}
+
+export interface PerformSongRead {
+  name: string;
+  artist_name: string;
+  learned: boolean;
+  spotify_id?: string;
+  notes?: string;
+  perform_url?: string;
+  id: number;
+}
+
+export interface PerformSongCreate {
+  name: string;
+  artist_name: string;
+  learned: boolean;
+  spotify_id?: string;
+  notes?: string;
+  perform_url?: string;
 }
 
 export interface HTTPValidationError {
@@ -458,6 +490,44 @@ export const useJoplinGetNoteId = <TData = Awaited<ReturnType<typeof joplinGetNo
 
 
 /**
+ * @summary Joplin Init Note
+ */
+export const joplinInitNote = (
+    dt: string,
+    params?: JoplinInitNoteParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/joplin/init_note/${dt}`,undefined,{
+        params,
+    ...options}
+    );
+  }
+
+
+
+    export type JoplinInitNoteMutationResult = NonNullable<Awaited<ReturnType<typeof joplinInitNote>>>
+    
+    export type JoplinInitNoteMutationError = AxiosError<HTTPValidationError>
+
+    export const useJoplinInitNote = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joplinInitNote>>, TError,{dt: string;params?: JoplinInitNoteParams}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joplinInitNote>>, {dt: string;params?: JoplinInitNoteParams}> = (props) => {
+          const {dt,params} = props ?? {};
+
+          return  joplinInitNote(dt,params,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof joplinInitNote>>, TError, {dt: string;params?: JoplinInitNoteParams}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
  * @summary Google Photos Thumbnails Url
  */
 export const googlePhotosThumbnailUrls = (
@@ -532,6 +602,196 @@ export const googlePhotosAddToJoplin = (
         }
 
       return useMutation<Awaited<ReturnType<typeof googlePhotosAddToJoplin>>, TError, {noteId: string;data: GooglePhotosThumbnail[]}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Read Perform Songs
+ */
+export const readPerformSongsList = (
+    params?: ReadPerformSongsListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PerformSongRead[]>> => {
+    return axios.get(
+      `/performsongs/`,{
+        params,
+    ...options}
+    );
+  }
+
+
+export const getReadPerformSongsListQueryKey = (params?: ReadPerformSongsListParams,) => [`/performsongs/`, ...(params ? [params]: [])];
+
+    
+export type ReadPerformSongsListQueryResult = NonNullable<Awaited<ReturnType<typeof readPerformSongsList>>>
+export type ReadPerformSongsListQueryError = AxiosError<HTTPValidationError>
+
+export const useReadPerformSongsList = <TData = Awaited<ReturnType<typeof readPerformSongsList>>, TError = AxiosError<HTTPValidationError>>(
+ params?: ReadPerformSongsListParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readPerformSongsList>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getReadPerformSongsListQueryKey(params);
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof readPerformSongsList>>> = ({ signal }) => readPerformSongsList(params, { signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof readPerformSongsList>>, TError, TData>(queryKey, queryFn, queryOptions)
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Create Perform Song
+ */
+export const createPerformSong = (
+    performSongCreate: PerformSongCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PerformSongRead>> => {
+    return axios.post(
+      `/performsongs/`,
+      performSongCreate,options
+    );
+  }
+
+
+
+    export type CreatePerformSongMutationResult = NonNullable<Awaited<ReturnType<typeof createPerformSong>>>
+    export type CreatePerformSongMutationBody = PerformSongCreate
+    export type CreatePerformSongMutationError = AxiosError<HTTPValidationError>
+
+    export const useCreatePerformSong = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPerformSong>>, TError,{data: PerformSongCreate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPerformSong>>, {data: PerformSongCreate}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPerformSong(data,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof createPerformSong>>, TError, {data: PerformSongCreate}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Read Perform Song
+ */
+export const readPerformSong = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PerformSongRead>> => {
+    return axios.get(
+      `/performsongs/${performSongId}`,options
+    );
+  }
+
+
+export const getReadPerformSongQueryKey = (performSongId: number,) => [`/performsongs/${performSongId}`];
+
+    
+export type ReadPerformSongQueryResult = NonNullable<Awaited<ReturnType<typeof readPerformSong>>>
+export type ReadPerformSongQueryError = AxiosError<HTTPValidationError>
+
+export const useReadPerformSong = <TData = Awaited<ReturnType<typeof readPerformSong>>, TError = AxiosError<HTTPValidationError>>(
+ performSongId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readPerformSong>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getReadPerformSongQueryKey(performSongId);
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof readPerformSong>>> = ({ signal }) => readPerformSong(performSongId, { signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof readPerformSong>>, TError, TData>(queryKey, queryFn, {enabled: !!(performSongId), ...queryOptions})
+
+  return {
+    queryKey,
+    ...query
+  }
+}
+
+
+/**
+ * @summary Delete Perform Song
+ */
+export const deletePerformSong = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.delete(
+      `/performsongs/${performSongId}`,options
+    );
+  }
+
+
+
+    export type DeletePerformSongMutationResult = NonNullable<Awaited<ReturnType<typeof deletePerformSong>>>
+    
+    export type DeletePerformSongMutationError = AxiosError<HTTPValidationError>
+
+    export const useDeletePerformSong = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePerformSong>>, TError,{performSongId: number}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePerformSong>>, {performSongId: number}> = (props) => {
+          const {performSongId} = props ?? {};
+
+          return  deletePerformSong(performSongId,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof deletePerformSong>>, TError, {performSongId: number}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Update Perform Song
+ */
+export const updatePerformSong = (
+    performSongId: number,
+    performSongUpdate: PerformSongUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PerformSongRead>> => {
+    return axios.patch(
+      `/performsongs/${performSongId}`,
+      performSongUpdate,options
+    );
+  }
+
+
+
+    export type UpdatePerformSongMutationResult = NonNullable<Awaited<ReturnType<typeof updatePerformSong>>>
+    export type UpdatePerformSongMutationBody = PerformSongUpdate
+    export type UpdatePerformSongMutationError = AxiosError<HTTPValidationError>
+
+    export const useUpdatePerformSong = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePerformSong>>, TError,{performSongId: number;data: PerformSongUpdate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePerformSong>>, {performSongId: number;data: PerformSongUpdate}> = (props) => {
+          const {performSongId,data} = props ?? {};
+
+          return  updatePerformSong(performSongId,data,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof updatePerformSong>>, TError, {performSongId: number;data: PerformSongUpdate}, TContext>(mutationFn, mutationOptions)
     }
     
 /**

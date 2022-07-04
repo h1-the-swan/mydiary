@@ -280,6 +280,22 @@ def joplin_get_note_id(dt: str) -> str:
         return existing_id
 
 
+@app.post("/joplin/init_note/{dt}", operation_id="joplinInitNote")
+def joplin_init_note(dt: str, tz: str = "local"):
+    from mydiary import MyDiaryDay
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    if dt == "today":
+        dt = pendulum.today(tz=tz)
+    elif dt == "yesterday":
+        dt = pendulum.yesterday(tz=tz)
+    else:
+        dt = pendulum.parse(dt, tz=tz)
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+        day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+
+
 @app.get(
     "/googlephotos/thumbnails/{dt}",
     operation_id="googlePhotosThumbnailUrls",

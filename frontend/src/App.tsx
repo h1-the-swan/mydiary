@@ -15,6 +15,7 @@ import Dogs from "./routes/dogs";
 import DogAdd from "./routes/dogAdd";
 import Recipes from "./routes/recipes";
 import RecipeAdd from "./routes/recipeAdd";
+import TestJoplin from "./routes/testJoplin";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -94,6 +95,11 @@ const ROUTES: IRoute[] = [
     path: "/recipes/add",
     title: "Add Recipe",
     element: <RecipeAdd />,
+  },
+  {
+    path: "/testJoplin",
+    title: "testJoplin",
+    element: <TestJoplin />,
   },
 ];
 

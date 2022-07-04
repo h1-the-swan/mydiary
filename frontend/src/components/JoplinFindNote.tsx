@@ -20,7 +20,7 @@ export default function JoplinFindNote(props: Props) {
     },
   });
   useEffect(() => {
-    if (noteId.data && noteId.data.data !== "does_not_exist") {
+    if (noteId.data) {
       props.setNoteId(noteId.data.data);
     }
   }, [noteId, props]);
@@ -46,7 +46,7 @@ export default function JoplinFindNote(props: Props) {
             </>
           ) : (
             <p>
-              Joplin Note ID: {noteId.data.data}
+              Joplin Note ID: <a href={`joplin://x-callback-url/openNote?id=${noteId.data.data}`}>{noteId.data.data}</a>
               {noteId.isFetching && <Spin indicator={<LoadingOutlined />} />}
             </p>
           )}
