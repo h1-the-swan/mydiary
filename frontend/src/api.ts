@@ -129,6 +129,9 @@ export interface PerformSongUpdate {
   spotify_id?: string;
   notes?: string;
   perform_url?: string;
+  created_at?: string;
+  key?: string;
+  capo?: number;
 }
 
 export interface PerformSongRead {
@@ -138,6 +141,9 @@ export interface PerformSongRead {
   spotify_id?: string;
   notes?: string;
   perform_url?: string;
+  created_at?: string;
+  key?: string;
+  capo?: number;
   id: number;
 }
 
@@ -148,6 +154,9 @@ export interface PerformSongCreate {
   spotify_id?: string;
   notes?: string;
   perform_url?: string;
+  created_at?: string;
+  key?: string;
+  capo?: number;
 }
 
 export interface HTTPValidationError {

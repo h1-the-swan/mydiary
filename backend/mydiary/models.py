@@ -152,6 +152,9 @@ class PerformSongBase(SQLModel):
     spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", index=True)
     notes: Optional[str]
     perform_url: Optional[str]
+    created_at: Optional[datetime] = Field(default=None, index=True)
+    key: Optional[str] = Field(default=None, index=True)  # musical key of the song
+    capo: Optional[int] = Field(default=None, index=True)  # fret of capo (0 if no capo)
 
 
 class PerformSong(PerformSongBase, table=True):

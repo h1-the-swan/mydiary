@@ -75,6 +75,9 @@ class PerformSongUpdate(SQLModel):
     spotify_id: Optional[str] = None
     notes: Optional[str] = None
     perform_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+    key: Optional[str]
+    capo: Optional[int]
 
 
 class DogRead(DogBase):
