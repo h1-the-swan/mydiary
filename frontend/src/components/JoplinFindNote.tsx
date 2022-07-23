@@ -23,6 +23,7 @@ export default function JoplinFindNote(props: Props) {
     if (noteId.data) {
       props.setNoteId(noteId.data.data);
     }
+    console.log(noteId);
   }, [noteId, props]);
 
   function handleButtonClick() {

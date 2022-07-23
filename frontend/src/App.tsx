@@ -16,7 +16,7 @@ import DogAdd from "./routes/dogAdd";
 import Recipes from "./routes/recipes";
 import RecipeAdd from "./routes/recipeAdd";
 import TestJoplin from "./routes/testJoplin";
-import { PerformSongs, PerformSongAdd } from "./routes/performSongs";
+import { PerformSongs, PerformSongAddOrCreate } from "./routes/performSongs";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -103,9 +103,9 @@ const ROUTES: IRoute[] = [
     element: <PerformSongs />,
   },
   {
-    path: "/performSongs/create",
-    title: "performSongsAdd",
-    element: <PerformSongAdd />,
+    path: "/performSongs/song",
+    title: "Add or Update performSong",
+    element: <PerformSongAddOrCreate />,
   },
   {
     path: "/testJoplin",

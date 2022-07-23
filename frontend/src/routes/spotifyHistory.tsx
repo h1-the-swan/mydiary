@@ -58,7 +58,17 @@ function SpotifyHistoryTable() {
           {value}
         </a>
       ),
-      sorter: true,
+      sorter: (a, b) => {
+        if (!a.context_name && !b.context_name) {
+          return 0;
+        } else if (!a.context_name) {
+          return 1;
+        } else if (!b.context_name) {
+          return -1;
+        } else {
+          return a.context_name.localeCompare(b.context_name);
+        }
+      },
     },
   ];
   return isLoading ? (
@@ -66,6 +76,7 @@ function SpotifyHistoryTable() {
   ) : (
     <Table
       dataSource={tracks}
+      rowKey="id"
       columns={columns}
       pagination={{ pageSize: 100 }}
     />

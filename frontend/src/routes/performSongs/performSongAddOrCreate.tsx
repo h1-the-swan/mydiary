@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { Button, Checkbox, DatePicker, Form, Input } from "antd";
+import React, { useEffect, useState } from "react";
+import { Alert, Button, Checkbox, DatePicker, Form, Input } from "antd";
 import {
   useReadPerformSong,
   PerformSongRead,
@@ -7,6 +7,7 @@ import {
   useCreatePerformSong,
 } from "../../api";
 import { useSearchParams } from "react-router-dom";
+import moment from "moment";
 
 const { TextArea } = Input;
 
@@ -18,7 +19,17 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
   const [form] = Form.useForm();
   const { performSong } = props;
   console.log(performSong);
-  useEffect(() => form.resetFields(), [form, performSong]);
+
+  useEffect(() => {
+    const vals: any = performSong;
+    if (vals != null && vals.created_at != null) {
+      console.log(vals.created_at);
+      vals.created_at = moment(vals.created_at + "Z");
+    }
+    console.log(vals);
+    // form.resetFields();
+    form.setFieldsValue(vals);
+  }, [form, performSong]);
   const mutationUpdatePerformSong = useUpdatePerformSong();
   const mutationCreatePerformSong = useCreatePerformSong();
   const onFinish = (values: any) => {
@@ -28,7 +39,7 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
         data: values,
       });
     } else {
-      mutationCreatePerformSong.mutate(values);
+      mutationCreatePerformSong.mutate({data: values});
     }
   };
 
@@ -37,7 +48,7 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
       form={form}
       layout="vertical"
       onFinish={onFinish}
-      initialValues={performSong}
+      // initialValues={initialValues}
     >
       <Form.Item name="name" label="Name" rules={[{ required: true }]}>
         <Input />
@@ -67,15 +78,40 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
         <DatePicker />
       </Form.Item>
       <Form.Item>
-        <Button type="primary" htmlType="submit">
+        <Button
+          type="primary"
+          htmlType="submit"
+          loading={
+            mutationCreatePerformSong.isLoading ||
+            mutationUpdatePerformSong.isLoading
+          }
+        >
           {performSong ? "Update" : "Submit"}
         </Button>
+        {mutationCreatePerformSong.isSuccess && (
+          <Alert message="song added" type="success" />
+        )}
+        {mutationUpdatePerformSong.isSuccess && (
+          <Alert message="song updated" type="success" />
+        )}
+        {mutationCreatePerformSong.isError && (
+          <Alert
+            message={`Error: ${mutationCreatePerformSong.error.message}`}
+            type="error"
+          />
+        )}
+        {mutationUpdatePerformSong.isError && (
+          <Alert
+            message={`Error: ${mutationUpdatePerformSong.error.message}`}
+            type="error"
+          />
+        )}
       </Form.Item>
     </Form>
   );
 };
 
-const PerformSongAdd: React.FC = () => {
+const PerformSongAddOrCreate: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const performSongId = searchParams.get("id");
   console.log(performSongId);
@@ -90,4 +126,4 @@ const PerformSongAdd: React.FC = () => {
   return <PerformSongForm performSong={performSong} />;
 };
 
-export { PerformSongAdd };
+export { PerformSongAddOrCreate };

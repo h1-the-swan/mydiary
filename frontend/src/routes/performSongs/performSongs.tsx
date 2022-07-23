@@ -1,6 +1,8 @@
 import React, { useEffect } from "react";
 import { PerformSongRead, useReadPerformSongsList } from "../../api";
 import { Table, TableColumnType } from "antd";
+import { Link } from "react-router-dom";
+import moment from "moment";
 
 function PerformSongTable() {
   const { data: performSongs, isLoading } = useReadPerformSongsList(
@@ -17,12 +19,15 @@ function PerformSongTable() {
       title: "id",
       dataIndex: "id",
       key: "id",
+      render: (value: number) => {
+        return <Link to={`/performSongs/song?id=${value}`}>{value}</Link>;
+      },
       sorter: (a, b) => a.id - b.id,
     },
     {
       title: "Name",
       dataIndex: "name",
-      key: "name",
+      // key: "name",
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
@@ -42,40 +47,73 @@ function PerformSongTable() {
       title: "Spotify ID",
       dataIndex: "spotify_id",
       key: "spotify_id",
+      render: (spotify_id: string) => {
+        const uri = `spotify:track:${spotify_id}`;
+        return (
+          <a href={uri} target="_blank" rel="noreferrer">
+            {spotify_id}
+          </a>
+        );
+      },
     },
     {
       title: "Key",
       dataIndex: "key",
       key: "key",
+      sorter: (a, b) => {
+        if (!a.key && !b.key) {
+          return 0;
+        } else if (!a.key) {
+          return 1;
+        } else if (!b.key) {
+          return -1;
+        } else {
+          return a.key.localeCompare(b.key);
+        }
+      },
     },
     {
       title: "Capo",
       dataIndex: "capo",
       key: "capo",
+      sorter: (a, b) => {
+        if (a.capo == null && b.capo == null) {
+          return 0;
+        } else if (a.capo == null) {
+          return 1;
+        } else if (b.capo == null) {
+          return -1;
+        } else {
+          return a.capo - b.capo;
+        }
+      },
     },
-//     {
-//       title: "Played At",
-//       dataIndex: "played_at",
-//       key: "played_at",
-//       render: (value: string) => {
-//         const dt = new Date(value + "Z");
-//         return dt.toLocaleString();
-//       },
-//       sorter: (a, b) =>
-//         new Date(a.played_at + "Z").getTime() -
-//         new Date(b.played_at + "Z").getTime(),
-//     },
-//     {
-//       title: "context_name",
-//       dataIndex: "context_name",
-//       key: "context_name",
-//       render: (value, record) => (
-//         <a href={record.context_uri} target="_blank" rel="noreferrer">
-//           {value}
-//         </a>
-//       ),
-//       sorter: true,
-//     },
+    {
+      title: "Created At",
+      dataIndex: "created_at",
+      key: "created_at",
+      render: (value: string) => {
+        if (value != null) {
+          const dt = moment(value + "Z");
+          return dt.format("MMMM D YYYY");
+        }
+        return "";
+      },
+      sorter: (a, b) => {
+        if (a.created_at == null && b.created_at == null) {
+          return 0;
+        } else if (a.created_at == null) {
+          return 1;
+        } else if (b.created_at == null) {
+          return -1;
+        } else {
+          return (
+            new Date(a.created_at + "Z").getTime() -
+            new Date(b.created_at + "Z").getTime()
+          );
+        }
+      },
+    },
   ];
   return isLoading ? (
     <span>Loading...</span>
@@ -84,6 +122,7 @@ function PerformSongTable() {
       dataSource={performSongs}
       columns={columns}
       pagination={{ pageSize: 100 }}
+      rowKey="id"
     />
   );
 }
@@ -97,4 +136,3 @@ const PerformSongs = () => {
 };
 
 export { PerformSongs };
-

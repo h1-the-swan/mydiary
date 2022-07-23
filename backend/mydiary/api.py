@@ -256,7 +256,7 @@ async def joplin_sync():
         try:
             mydiary_joplin.sync()
         except RuntimeError:
-            raise HTTPException(status_code=500)
+            raise HTTPException(status_code=500, detail="sync failed")
         logger.info("sync complete")
     return "sync complete"
 
@@ -273,9 +273,7 @@ def joplin_get_note_id(dt: str) -> str:
     else:
         dt = pendulum.parse(dt)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
-
-        existing_id = day.get_joplin_note_id()
+        existing_id = mydiary_joplin.get_note_id_by_date(dt)
         # if existing_id == "does_not_exist":
         #     raise RuntimeError(
         #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
@@ -284,9 +282,11 @@ def joplin_get_note_id(dt: str) -> str:
 
 
 @app.post("/joplin/init_note/{dt}", operation_id="joplinInitNote")
-def joplin_init_note(dt: str, tz: str = "local"):
+async def joplin_init_note(dt: str, tz: str = "local"):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
+
+    await joplin_sync()
 
     if dt == "today":
         dt = pendulum.today(tz=tz)
@@ -295,8 +295,13 @@ def joplin_init_note(dt: str, tz: str = "local"):
     else:
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
-        day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+        try:
+            day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+            day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+        except Exception as e:
+            # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
+            print(e)
+            raise
 
 
 @app.get(

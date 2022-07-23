@@ -17,14 +17,6 @@ from typing import Any, Collection, Dict, List, Optional, Tuple, Union
 from .core import reduce_image_size, reduce_size_recurse
 from .models import JoplinNote, JoplinFolder
 
-try:
-    from humanfriendly import format_timespan
-except ImportError:
-
-    def format_timespan(seconds):
-        return "{:.2f} seconds".format(seconds)
-
-
 import logging
 
 root_logger = logging.getLogger()

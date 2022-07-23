@@ -53,6 +53,18 @@ const TestJoplin = () => {
             Init Note
           </Button>
         )}
+        {mutationJoplinInitNote.isError && (
+          <Alert
+            message={`Error: ${mutationJoplinInitNote.error.message}`}
+            type="error"
+          />
+        )}
+        {mutationJoplinInitNote.isSuccess && (
+          <Alert
+            message={`Init note: success`}
+            type="success"
+          />
+        )}
       </Space>
     </main>
   );

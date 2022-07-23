@@ -147,8 +147,8 @@ class SpotifyTrackHistoryFrozen(SQLModel):
 
 class PerformSongBase(SQLModel):
     name: str = Field(index=True)
-    artist_name: str = Field(index=True)
-    learned: bool = Field(index=True)
+    artist_name: Optional[str] = Field(default=None, index=True)
+    learned: bool = Field(default=True, index=True)
     spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", index=True)
     notes: Optional[str]
     perform_url: Optional[str]
