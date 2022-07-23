@@ -3,6 +3,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    # user: ${UID}:${GUID}
     volumes:
       - ./backend/mydiary:/usr/local/src/app/backend/mydiary
       - ./backend/scripts:/usr/local/src/app/backend/scripts
@@ -19,6 +20,8 @@ services:
       # use timezone information from host machine
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro 
     env_file:
       - ./backend/.env
     environment:
@@ -39,6 +42,7 @@ services:
     # We can't mount the entire UI directory, since JavaScript dependencies
     # (`node_modules`) live at that location.
     restart: unless-stopped
+    # user: ${UID}:${GUID}
     volumes:
       - ./frontend/src:/usr/local/src/app/frontend/src
       - ./frontend/public:/usr/local/src/app/frontend/public
@@ -46,6 +50,8 @@ services:
       - ./frontend/package.json:/usr/local/src/app/frontend/package.json
       - ./frontend/tsconfig.json:/usr/local/src/app/frontend/tsconfig.json
       - ./frontend/yarn.lock:/usr/local/src/app/frontend/yarn.lock
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro 
       # use timezone information from host machine
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
@@ -61,10 +67,32 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
     ports:
-      - 8080:80
+      - 8085:80
     depends_on:
       - backend
       - frontend
+    networks:
+      - proxy-tier
+      - default
+  cloudflared:
+    image: cloudflare/cloudflared:2022.5.1
+    # volumes: 
+    #   - ./cloudflared:/etc/cloudflared
+    # env_file:
+    #   - ./cloudflared/cloudflared.env
+    # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --hello-world'
+    # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --url http://localhost:48916'
+    command: 'tunnel --no-autoupdate --loglevel debug run --token ${CLOUDFLARED_TOKEN} --url http://proxy:80'
+    # ports:
+    #   - 8080:8080
+    restart: 'on-failure'
+    networks:
+      - proxy-tier
+    depends_on:
+      - proxy
 
 volumes:
   joplin_data:
+
+networks:
+  proxy-tier:
