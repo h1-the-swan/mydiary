@@ -108,10 +108,16 @@ class MyDiaryJoplin:
             "type": "folder",
             "token": self.token,
         }
-        r = requests.get(f"{self.base_url}/search", params=params)
+        logger.debug(f"getting subfolder id. params: {params}")
+        headers = requests.utils.default_headers()
+        headers.update({'User-Agent': 'My User Agent 1.0'})
+        logger.debug(f"headers: {headers}")
+        r = requests.get(f"{self.base_url}/search", params=params, headers=headers)
+        logger.debug(f"status code is {r.status_code}")
         r.raise_for_status()
         items = r.json()["items"]
         item = [x for x in items if x["parent_id"] == self.notebook_id]
+        logger.debug(f"item is {item}")
         if len(item) == 0:
             return None
         elif len(item) == 1:
@@ -247,8 +253,11 @@ class MyDiaryJoplin:
 
     def get_note_id_by_date(self, dt: datetime) -> str:
         title = title_from_date(dt)
+        logger.debug(f"title: {title}")
         subfolder_title = str(dt.year)
+        logger.debug(f"subfolder_title: {subfolder_title}")
         subfolder_id = self.get_subfolder_id(subfolder_title)
+        logger.debug(f"subfolder_id: {subfolder_id}")
         logger.debug(
             f"getting note id (title={title}, parent_notebook_id={subfolder_id})"
         )

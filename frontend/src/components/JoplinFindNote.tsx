@@ -38,19 +38,24 @@ export default function JoplinFindNote(props: Props) {
           {noteId.data.data === "does_not_exist" ? (
             <>
               <p>Note not found</p>
-              <Button
-                onClick={handleButtonClick}
-                loading={mutationJoplinSync.isLoading}
-              >
-                Sync and Try Again
-              </Button>
             </>
           ) : (
             <p>
-              Joplin Note ID: <a href={`joplin://x-callback-url/openNote?id=${noteId.data.data}`}>{noteId.data.data}</a>
+              Joplin Note ID:{" "}
+              <a
+                href={`joplin://x-callback-url/openNote?id=${noteId.data.data}`}
+              >
+                {noteId.data.data}
+              </a>
               {noteId.isFetching && <Spin indicator={<LoadingOutlined />} />}
             </p>
           )}
+          <Button
+            onClick={handleButtonClick}
+            loading={mutationJoplinSync.isLoading}
+          >
+            Sync and Try Again
+          </Button>
         </div>
       )}
     </>

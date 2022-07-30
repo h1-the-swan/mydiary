@@ -475,12 +475,14 @@ class MyDiaryDay(SQLModel):
 
     def get_joplin_note_id(self) -> Union[str, None]:
         from .joplin_connector import MyDiaryJoplin
+        logger.debug("starting get_joplin_note_id")
 
         if isinstance(self.joplin_connector, MyDiaryJoplin):
             self.joplin_note_id = self.joplin_connector.get_note_id_by_date(self.dt)
         else:
             with MyDiaryJoplin() as mj:
                 self.joplin_note_id = mj.get_note_id_by_date(self.dt)
+        logger.debug(f"returning note_id: {self.joplin_note_id}")
         return self.joplin_note_id
 
     def init_markdown(self) -> str:
@@ -577,6 +579,7 @@ class MyDiaryDay(SQLModel):
         from .joplin_connector import MyDiaryJoplin
         from .markdown_edits import MarkdownDoc
 
+        logger.debug("starting init_joplin_note")
         if joplin_connector is not None:
             self.joplin_connector = joplin_connector
         if not isinstance(self.joplin_connector, MyDiaryJoplin):
@@ -589,6 +592,7 @@ class MyDiaryDay(SQLModel):
             )
 
         title = self.dt.strftime("%Y-%m-%d")
+        logger.debug("initializing markdown")
         body = self.init_markdown()
         subfolder_title = str(self.dt.year)
         subfolder_id = self.joplin_connector.get_subfolder_id(subfolder_title)

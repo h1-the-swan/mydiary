@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Checkbox, DatePicker, Form, Input } from "antd";
+import { Alert, Button, Checkbox, DatePicker, Form, Input, Image } from "antd";
 import {
   useReadPerformSong,
   PerformSongRead,
   useUpdatePerformSong,
   useCreatePerformSong,
+  useGetSpotifyImageUrl,
 } from "../../api";
 import { useSearchParams } from "react-router-dom";
 import moment from "moment";
@@ -39,7 +40,7 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
         data: values,
       });
     } else {
-      mutationCreatePerformSong.mutate({data: values});
+      mutationCreatePerformSong.mutate({ data: values });
     }
   };
 
@@ -122,8 +123,19 @@ const PerformSongAddOrCreate: React.FC = () => {
     }
   );
   useEffect(() => console.log(performSong), [performSong]);
-  // const { data } = useReadPerformSong();
-  return <PerformSongForm performSong={performSong} />;
+  const { data: imageUrl, isLoading: isLoadingImageUrl } =
+    useGetSpotifyImageUrl(
+      performSong ? (performSong.spotify_id ? performSong.spotify_id : "") : "",
+      {
+        query: { select: (d) => d.data },
+      }
+  )
+  return (
+    <main>
+      <PerformSongForm performSong={performSong} />
+      <Image src={imageUrl} preview={false} />
+    </main>
+  );
 };
 
 export { PerformSongAddOrCreate };

@@ -9,7 +9,6 @@ import pydantic
 from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
 from sqlmodel import Field, SQLModel
-from fastapi import Query
 from .db import Session, engine, select
 from .models import (
     Recipe,
@@ -131,8 +130,29 @@ def get_session():
         yield session
 
 
+# handler = logging.StreamHandler()
+# handler.setFormatter(
+#     logging.Formatter(
+#         fmt="%(asctime)s %(name)s.%(lineno)d %(levelname)s : %(message)s",
+#         datefmt="%H:%M:%S",
+#     )
+# )
+# # root_logger.addHandler(handler)
+# # logger.addHandler(handler)
+# logging.getLogger("mydiary").addHandler(handler)
+# # root_logger.setLevel(logging.DEBUG)
+# # logger.setLevel(logging.DEBUG)
+# logging.getLogger("mydiary").setLevel(logging.DEBUG)
+# logging.getLogger("uvicorn.error").propagate = False
+# logger.debug("debug mode is on")
+# logger.info("info")
+# logger.error("error")
+# print('print')
+
 # app = FastAPI()
-app = FastAPI(title="mydiary", root_path="/api", openapi_url="/api/openapi.json")
+app = FastAPI(
+    title="mydiary", root_path="/api", openapi_url="/api/openapi.json", debug=True
+)
 # app = FastAPI(title="mydiary", openapi_url="/api")
 # app = FastAPI(title="mydiary", root_path="/api")
 
@@ -247,6 +267,26 @@ async def read_spotify_history(
     return tracks
 
 
+@app.get(
+    "/spotify/album_image_url/{track_id}",
+    operation_id="getSpotifyImageUrl",
+    response_model=str,
+)
+async def get_spotify_image_url(
+    *,
+    session: Session = Depends(get_session),
+    track_id: Optional[str],
+):
+    if not track_id:
+        return ""
+    from mydiary.spotify_connector import MyDiarySpotify
+
+    mydiary_spotify = MyDiarySpotify()
+    sp = mydiary_spotify.sp
+    track = sp.track(track_id)
+    return track["album"]["images"][0]["url"]
+
+
 @app.post("/joplin/sync", operation_id="joplinSync")
 async def joplin_sync():
     from mydiary.joplin_connector import MyDiaryJoplin
@@ -281,12 +321,10 @@ def joplin_get_note_id(dt: str) -> str:
         return existing_id
 
 
-@app.post("/joplin/init_note/{dt}", operation_id="joplinInitNote")
+@app.post("/joplin/init_note/{dt}", operation_id="joplinInitNote", )
 async def joplin_init_note(dt: str, tz: str = "local"):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
-
-    await joplin_sync()
 
     if dt == "today":
         dt = pendulum.today(tz=tz)
@@ -296,8 +334,13 @@ async def joplin_init_note(dt: str, tz: str = "local"):
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         try:
+            logger.debug("starting sync")
+            mydiary_joplin.sync()
+            logger.debug("sync complete")
             day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+            logger.debug("created MyDiaryDay instance")
             day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+            logger.debug("initialized note")
         except Exception as e:
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
             print(e)
@@ -552,5 +595,7 @@ if __name__ == "__main__":
         host="0.0.0.0",
         reload=True,
         port=8888,
-        timeout_keep_alive=30,
+        timeout_keep_alive=120,
+        log_level='debug',
+        access_log=True,
     )

@@ -26,7 +26,7 @@ const TestJoplin = () => {
       onSuccess: () => setLastSync(new Date()),
     },
   });
-  const mutationJoplinInitNote = useJoplinInitNote();
+  const mutationJoplinInitNote = useJoplinInitNote({ mutation: { retry: 5 } });
   return (
     <main>
       <Space direction="vertical">
@@ -60,10 +60,7 @@ const TestJoplin = () => {
           />
         )}
         {mutationJoplinInitNote.isSuccess && (
-          <Alert
-            message={`Init note: success`}
-            type="success"
-          />
+          <Alert message={`Init note: success`} type="success" />
         )}
       </Space>
     </main>

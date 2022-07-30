@@ -1,19 +1,16 @@
 import React, { useEffect } from "react";
 import { PerformSongRead, useReadPerformSongsList } from "../../api";
-import { Table, TableColumnType } from "antd";
-import { Link } from "react-router-dom";
+import { Button, Table, TableColumnType } from "antd";
+import { Link, useNavigate } from "react-router-dom";
 import moment from "moment";
 
-function PerformSongTable() {
-  const { data: performSongs, isLoading } = useReadPerformSongsList(
-    { limit: 5000 },
-    {
-      query: {
-        select: (d) => d.data,
-      },
-    }
-  );
-  useEffect(() => console.log(performSongs), [performSongs]);
+interface PerformSongTableProps {
+  performSongs?: PerformSongRead[];
+}
+
+function PerformSongTable(props: PerformSongTableProps) {
+  const { performSongs } = props;
+  if (!performSongs) return null;
   const columns: TableColumnType<PerformSongRead>[] = [
     {
       title: "id",
@@ -34,7 +31,17 @@ function PerformSongTable() {
       title: "Artist",
       dataIndex: "artist_name",
       key: "artist",
-      sorter: (a, b) => a.artist_name.localeCompare(b.artist_name),
+      sorter: (a, b) => {
+        if (!a.artist_name && !b.artist_name) {
+          return 0;
+        } else if (!a.artist_name) {
+          return 1;
+        } else if (!b.artist_name) {
+          return -1;
+        } else {
+          return a.artist_name.localeCompare(b.artist_name);
+        }
+      },
     },
     {
       title: "Learned",
@@ -115,9 +122,7 @@ function PerformSongTable() {
       },
     },
   ];
-  return isLoading ? (
-    <span>Loading...</span>
-  ) : (
+  return (
     <Table
       dataSource={performSongs}
       columns={columns}
@@ -128,9 +133,39 @@ function PerformSongTable() {
 }
 
 const PerformSongs = () => {
+  let navigate = useNavigate();
+  const { data: performSongs, isLoading } = useReadPerformSongsList(
+    { limit: 5000 },
+    {
+      query: {
+        select: (d) => d.data,
+      },
+    }
+  );
+  useEffect(() => console.log(performSongs), [performSongs]);
+
+  function randomPerformSong(performSongs: PerformSongRead[]) {
+    const learnedSongs = performSongs.filter((performSong) => performSong.learned === true);
+    return learnedSongs[Math.floor(Math.random()*learnedSongs.length)];
+  }
   return (
     <main>
-      <PerformSongTable />
+      {isLoading ? (
+        <span>Loading...</span>
+      ) : (
+        performSongs && (
+        <>
+        <Button onClick={() => {
+          const s = randomPerformSong(performSongs);
+          console.log(s);
+          navigate(`/performSongs/song?id=${s.id}`)
+        }} >
+          Random Song
+        </Button>
+        <PerformSongTable performSongs={performSongs} />
+        </>
+        )
+      )}
     </main>
   );
 };
