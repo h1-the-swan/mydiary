@@ -75,7 +75,7 @@ services:
       - proxy-tier
       - default
   cloudflared:
-    image: cloudflare/cloudflared:2022.5.1
+    image: cloudflare/cloudflared:2022.7.1
     # volumes: 
     #   - ./cloudflared:/etc/cloudflared
     # env_file:
