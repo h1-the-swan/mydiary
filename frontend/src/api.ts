@@ -38,6 +38,8 @@ export type ReadTagsParams = { offset?: number; limit?: number; is_pocket_tag?: 
 
 export type ReadGCalEventsParams = { offset?: number; limit?: number };
 
+export type RefreshGCalTokenParams = { code: string };
+
 export interface ValidationError {
   loc: string[];
   msg: string;
@@ -218,6 +220,82 @@ type AwaitedInput<T> = PromiseLike<T> | T;
       type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 
+/**
+ * @summary Get Gcal Auth Url
+ */
+export const getGCalAuthUrl = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<string>> => {
+    return axios.get(
+      `/gcal/get_auth_url`,options
+    );
+  }
+
+
+export const getGetGCalAuthUrlQueryKey = () => [`/gcal/get_auth_url`];
+
+    
+export type GetGCalAuthUrlQueryResult = NonNullable<Awaited<ReturnType<typeof getGCalAuthUrl>>>
+export type GetGCalAuthUrlQueryError = AxiosError<unknown>
+
+export const useGetGCalAuthUrl = <TData = Awaited<ReturnType<typeof getGCalAuthUrl>>, TError = AxiosError<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGCalAuthUrl>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetGCalAuthUrlQueryKey();
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getGCalAuthUrl>>> = ({ signal }) => getGCalAuthUrl({ signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof getGCalAuthUrl>>, TError, TData>(queryKey, queryFn, queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
+/**
+ * @summary Refresh Gcal Token
+ */
+export const refreshGCalToken = (
+    params: RefreshGCalTokenParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/gcal/refresh_token`,undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+
+    export type RefreshGCalTokenMutationResult = NonNullable<Awaited<ReturnType<typeof refreshGCalToken>>>
+    
+    export type RefreshGCalTokenMutationError = AxiosError<HTTPValidationError>
+
+    export const useRefreshGCalToken = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshGCalToken>>, TError,{params: RefreshGCalTokenParams}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshGCalToken>>, {params: RefreshGCalTokenParams}> = (props) => {
+          const {params} = props ?? {};
+
+          return  refreshGCalToken(params,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof refreshGCalToken>>, TError, {params: RefreshGCalTokenParams}, TContext>(mutationFn, mutationOptions)
+    }
+    
 /**
  * @summary Read Gcal Events
  */

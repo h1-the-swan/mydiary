@@ -16,6 +16,7 @@ import DogAdd from "./routes/dogAdd";
 import Recipes from "./routes/recipes";
 import RecipeAdd from "./routes/recipeAdd";
 import TestJoplin from "./routes/testJoplin";
+import GCalRefreshToken from "./routes/gcalRefreshToken";
 import { PerformSongs, PerformSongAddOrCreate } from "./routes/performSongs";
 
 const { Header, Content, Footer, Sider } = Layout;
@@ -111,6 +112,11 @@ const ROUTES: IRoute[] = [
     path: "/testJoplin",
     title: "testJoplin",
     element: <TestJoplin />,
+  },
+  {
+    path: "/gcalRefresh",
+    title: "Refresh Google Calendar Token",
+    element: <GCalRefreshToken />,
   },
 ];
 

@@ -33,6 +33,7 @@ services:
       # override these variables from the .env file:
       - SPOTIFY_TOKEN_CACHE_PATH=/usr/local/src/app/backend/token_cache/spotify.json
       - GOOGLECALENDAR_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlecalendar_token.json
+      - GOOGLECALENDAR_CREDENTIALS_FILE=/usr/local/src/app/backend/token_cache/googlecalendar_credentials.json
       - GOOGLEPHOTOS_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlephotos_token.json
     # command: ["main:app", "--host", "0.0.0.0", "--reload"]
     # ports:

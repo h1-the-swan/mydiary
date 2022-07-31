@@ -163,6 +163,25 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 #     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
 
 
+@app.get("/gcal/get_auth_url", operation_id="getGCalAuthUrl", response_model=str)
+async def get_gcal_auth_url():
+    from mydiary.googlecalendar_connector import MyDiaryGCal
+
+    mydiary_gcal = MyDiaryGCal(init_service=False)
+    mydiary_gcal._init_flow()
+    return mydiary_gcal.flow.authorization_url()[0]
+
+
+@app.post("/gcal/refresh_token", operation_id="refreshGCalToken")
+async def refresh_gcal_token(code: str):
+    from mydiary.googlecalendar_connector import MyDiaryGCal
+
+    mydiary_gcal = MyDiaryGCal(init_service=False)
+    mydiary_gcal._init_flow()
+    mydiary_gcal.flow.fetch_token(code=code)
+    mydiary_gcal._save_token_cache()
+
+
 @app.get(
     "/gcal/events",
     operation_id="readGCalEvents",
@@ -321,7 +340,10 @@ def joplin_get_note_id(dt: str) -> str:
         return existing_id
 
 
-@app.post("/joplin/init_note/{dt}", operation_id="joplinInitNote", )
+@app.post(
+    "/joplin/init_note/{dt}",
+    operation_id="joplinInitNote",
+)
 async def joplin_init_note(dt: str, tz: str = "local"):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
@@ -596,6 +618,6 @@ if __name__ == "__main__":
         reload=True,
         port=8888,
         timeout_keep_alive=120,
-        log_level='debug',
+        log_level="debug",
         access_log=True,
     )

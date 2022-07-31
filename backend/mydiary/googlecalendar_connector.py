@@ -29,31 +29,53 @@ from .models import GoogleCalendarEvent
 
 
 class MyDiaryGCal:
-    def __init__(self, service: Optional[Resource] = None) -> None:
+    def __init__(
+        self, service: Optional[Resource] = None, init_service: bool = True
+    ) -> None:
         self.service = service
         self.auth_error = None
-        if self.service is None:
-            gcal_token_file = os.environ["GOOGLECALENDAR_TOKEN_CACHE"]
+        self.flow = None
+        if init_service is True and self.service is None:
+            self._init_service()
 
-            # If modifying these scopes, delete the token file
-            SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-            creds = Credentials.from_authorized_user_file(gcal_token_file, SCOPES)
-            if not creds.valid:
-                if creds.expired and creds.refresh_token:
-                    try:
-                        creds.refresh(Request())
-                    except GoogleOauthExceptions.RefreshError as exc:
-                        # TODO handle exception
-                        # you'll need to authorize access again. the procedure is currently in googlecalendar-auth-example.ipynb
-                        self.auth_error = exc
-                        raise
-                    with open(gcal_token_file, "w") as token:
-                        token.write(creds.to_json())
-                else:
-                    raise RuntimeError(
-                        "could not refresh the token. you'll need to authorize again."
-                    )
-            self.service = build("calendar", "v3", credentials=creds)
+    def _init_service(self) -> None:
+        gcal_token_file = os.environ["GOOGLECALENDAR_TOKEN_CACHE"]
+
+        # If modifying these scopes, delete the token file
+        SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+        creds = Credentials.from_authorized_user_file(gcal_token_file, SCOPES)
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                except GoogleOauthExceptions.RefreshError as exc:
+                    # TODO handle exception
+                    # you'll need to authorize access again. see api.py get_gcal_auth_url() and refresh_gcal_token()
+                    self.auth_error = exc
+                    raise
+                with open(gcal_token_file, "w") as token:
+                    token.write(creds.to_json())
+            else:
+                raise RuntimeError(
+                    "could not refresh the token. you'll need to authorize again."
+                )
+        self.service = build("calendar", "v3", credentials=creds)
+
+    def _init_flow(self) -> None:
+        gcal_credentials_file = os.environ["GOOGLECALENDAR_CREDENTIALS_FILE"]
+        SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+        self.flow = InstalledAppFlow.from_client_secrets_file(
+            gcal_credentials_file, SCOPES, redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+        )
+
+    def _save_token_cache(self) -> None:
+        if not self.flow.credentials.valid:
+            raise RuntimeError(
+                "cannot save token cache, because credentials are not valid"
+            )
+        gcal_token_file = os.environ["GOOGLECALENDAR_TOKEN_CACHE"]
+        with open(gcal_token_file, "w") as token:
+            token.write(self.flow.credentials.to_json())
 
     def new_session(self, engine=engine):
         with Session(engine) as session:
