@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Checkbox, DatePicker, Form, Input, Image } from "antd";
+import { Alert, Button, Checkbox, DatePicker, Form, Input, Image, Space } from "antd";
 import {
   useReadPerformSong,
   PerformSongRead,
@@ -9,6 +9,8 @@ import {
 } from "../../api";
 import { useSearchParams } from "react-router-dom";
 import moment from "moment";
+import PerformSongCard from "../../components/PerformSongCard";
+import ButtonRandomPerformSong from "../../components/ButtonRandomPerformSong";
 
 const { TextArea } = Input;
 
@@ -129,11 +131,15 @@ const PerformSongAddOrCreate: React.FC = () => {
       {
         query: { select: (d) => d.data },
       }
-  )
+    );
   return (
     <main>
+      <ButtonRandomPerformSong />
+      <Space />
+      {performSong && (
+        <PerformSongCard performSong={performSong} imageUrl={imageUrl} />
+      )}
       <PerformSongForm performSong={performSong} />
-      <Image src={imageUrl} preview={false} />
     </main>
   );
 };

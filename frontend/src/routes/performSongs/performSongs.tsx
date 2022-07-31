@@ -3,6 +3,7 @@ import { PerformSongRead, useReadPerformSongsList } from "../../api";
 import { Button, Table, TableColumnType } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import moment from "moment";
+import ButtonRandomPerformSong from "../../components/ButtonRandomPerformSong";
 
 interface PerformSongTableProps {
   performSongs?: PerformSongRead[];
@@ -133,7 +134,6 @@ function PerformSongTable(props: PerformSongTableProps) {
 }
 
 const PerformSongs = () => {
-  let navigate = useNavigate();
   const { data: performSongs, isLoading } = useReadPerformSongsList(
     { limit: 5000 },
     {
@@ -144,26 +144,16 @@ const PerformSongs = () => {
   );
   useEffect(() => console.log(performSongs), [performSongs]);
 
-  function randomPerformSong(performSongs: PerformSongRead[]) {
-    const learnedSongs = performSongs.filter((performSong) => performSong.learned === true);
-    return learnedSongs[Math.floor(Math.random()*learnedSongs.length)];
-  }
   return (
     <main>
       {isLoading ? (
         <span>Loading...</span>
       ) : (
         performSongs && (
-        <>
-        <Button onClick={() => {
-          const s = randomPerformSong(performSongs);
-          console.log(s);
-          navigate(`/performSongs/song?id=${s.id}`)
-        }} >
-          Random Song
-        </Button>
-        <PerformSongTable performSongs={performSongs} />
-        </>
+          <>
+            <ButtonRandomPerformSong performSongs={performSongs} />
+            <PerformSongTable performSongs={performSongs} />
+          </>
         )
       )}
     </main>
