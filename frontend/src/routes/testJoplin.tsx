@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Form, Button, Alert, DatePicker, Space } from "antd";
-import { useJoplinSync, useJoplinInitNote } from "../api";
+import { useJoplinSync, useJoplinInitNote, useJoplinUpdateNote } from "../api";
 import JoplinFindNote from "../components/JoplinFindNote";
 import moment from "moment";
 
@@ -27,6 +27,9 @@ const TestJoplin = () => {
     },
   });
   const mutationJoplinInitNote = useJoplinInitNote({ mutation: { retry: 5 } });
+  const mutationJoplinUpdateNote = useJoplinUpdateNote({
+    mutation: { retry: 5 },
+  });
   return (
     <main>
       <Space direction="vertical">
@@ -45,12 +48,19 @@ const TestJoplin = () => {
           setLastSync={setLastSync}
           mutationJoplinSync={mutationJoplinSync}
         />
-        {noteId === "does_not_exist" && (
+        {noteId === "does_not_exist" ? (
           <Button
             onClick={() => mutationJoplinInitNote.mutate({ dt: dt })}
             loading={mutationJoplinInitNote.isLoading}
           >
             Init Note
+          </Button>
+        ) : (
+          <Button
+            onClick={() => mutationJoplinUpdateNote.mutate({ dt: dt })}
+            loading={mutationJoplinUpdateNote.isLoading}
+          >
+            Update Note: {dt}
           </Button>
         )}
         {mutationJoplinInitNote.isError && (
@@ -61,6 +71,15 @@ const TestJoplin = () => {
         )}
         {mutationJoplinInitNote.isSuccess && (
           <Alert message={`Init note: success`} type="success" />
+        )}
+        {mutationJoplinUpdateNote.isError && (
+          <Alert
+            message={`Error: ${mutationJoplinUpdateNote.error.message}`}
+            type="error"
+          />
+        )}
+        {mutationJoplinUpdateNote.isSuccess && (
+          <Alert message={`Update note: success`} type="success" />
         )}
       </Space>
     </main>

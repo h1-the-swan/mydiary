@@ -375,6 +375,34 @@ async def joplin_init_note(dt: str, tz: str = "local"):
             print(e)
             raise
 
+@app.post(
+    "/joplin/update_note/{dt}",
+    operation_id="joplinUpdateNote",
+)
+async def joplin_update_note(dt: str, tz: str = "local"):
+    from mydiary import MyDiaryDay
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    if dt == "today":
+        dt = pendulum.today(tz=tz)
+    elif dt == "yesterday":
+        dt = pendulum.yesterday(tz=tz)
+    else:
+        dt = pendulum.parse(dt, tz=tz)
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        try:
+            logger.debug("starting sync")
+            mydiary_joplin.sync()
+            logger.debug("sync complete")
+            day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+            logger.debug("created MyDiaryDay instance")
+            day.update_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+            logger.debug("initialized note")
+        except Exception as e:
+            # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
+            print(e)
+            raise
+
 
 @app.get(
     "/googlephotos/thumbnails/{dt}",

@@ -28,6 +28,8 @@ export type ReadDogsListParams = { offset?: number; limit?: number };
 
 export type ReadPerformSongsListParams = { offset?: number; limit?: number };
 
+export type JoplinUpdateNoteParams = { tz?: string };
+
 export type JoplinInitNoteParams = { tz?: string };
 
 export type ReadSpotifyHistoryParams = { offset?: number; limit?: number };
@@ -687,6 +689,44 @@ export const joplinInitNote = (
         }
 
       return useMutation<Awaited<ReturnType<typeof joplinInitNote>>, TError, {dt: string;params?: JoplinInitNoteParams}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
+ * @summary Joplin Update Note
+ */
+export const joplinUpdateNote = (
+    dt: string,
+    params?: JoplinUpdateNoteParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/joplin/update_note/${dt}`,undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+
+    export type JoplinUpdateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof joplinUpdateNote>>>
+    
+    export type JoplinUpdateNoteMutationError = AxiosError<HTTPValidationError>
+
+    export const useJoplinUpdateNote = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof joplinUpdateNote>>, TError,{dt: string;params?: JoplinUpdateNoteParams}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof joplinUpdateNote>>, {dt: string;params?: JoplinUpdateNoteParams}> = (props) => {
+          const {dt,params} = props ?? {};
+
+          return  joplinUpdateNote(dt,params,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof joplinUpdateNote>>, TError, {dt: string;params?: JoplinUpdateNoteParams}, TContext>(mutationFn, mutationOptions)
     }
     
 /**
