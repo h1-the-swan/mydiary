@@ -1,5 +1,5 @@
 import os
-from sqlmodel import create_engine, SQLModel, Session, select
+from sqlmodel import create_engine, SQLModel, Session, select, func
 from . import models
 
 rootdir = os.path.dirname(os.path.abspath(__file__))

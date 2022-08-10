@@ -1,5 +1,9 @@
 import React, { useEffect } from "react";
-import { SpotifyTrackHistoryRead, useReadSpotifyHistory } from "../api";
+import {
+  SpotifyTrackHistoryRead,
+  useReadSpotifyHistory,
+  useSpotifyHistoryCount,
+} from "../api";
 import { Table, TableColumnType } from "antd";
 
 function SpotifyHistoryTable() {
@@ -84,8 +88,15 @@ function SpotifyHistoryTable() {
 }
 
 const SpotifyHistory = () => {
+  const { data: spotifyHistoryCount } = useSpotifyHistoryCount({
+    query: { select: (d) => d.data },
+  });
+  useEffect(() => console.log(spotifyHistoryCount), [spotifyHistoryCount]);
   return (
     <main>
+      {spotifyHistoryCount && (
+        <p>There are {spotifyHistoryCount} items in the database.</p>
+      )}
       <SpotifyHistoryTable />
     </main>
   );

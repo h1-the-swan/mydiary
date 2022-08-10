@@ -500,6 +500,45 @@ export const useReadSpotifyHistory = <TData = Awaited<ReturnType<typeof readSpot
 
 
 /**
+ * @summary Spotify History Count
+ */
+export const spotifyHistoryCount = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<number>> => {
+    return axios.get(
+      `/spotify/history/count`,options
+    );
+  }
+
+
+export const getSpotifyHistoryCountQueryKey = () => [`/spotify/history/count`];
+
+    
+export type SpotifyHistoryCountQueryResult = NonNullable<Awaited<ReturnType<typeof spotifyHistoryCount>>>
+export type SpotifyHistoryCountQueryError = AxiosError<unknown>
+
+export const useSpotifyHistoryCount = <TData = Awaited<ReturnType<typeof spotifyHistoryCount>>, TError = AxiosError<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof spotifyHistoryCount>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getSpotifyHistoryCountQueryKey();
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof spotifyHistoryCount>>> = ({ signal }) => spotifyHistoryCount({ signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof spotifyHistoryCount>>, TError, TData>(queryKey, queryFn, queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
+/**
  * @summary Get Spotify Image Url
  */
 export const getSpotifyImageUrl = (

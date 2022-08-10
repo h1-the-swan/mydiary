@@ -9,7 +9,7 @@ import pydantic
 from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
 from sqlmodel import Field, SQLModel
-from .db import Session, engine, select
+from .db import Session, engine, select, func
 from .models import (
     Recipe,
     RecipeBase,
@@ -23,6 +23,7 @@ from .models import (
     Dog,
     GoogleCalendarEvent,
     PocketStatusEnum,
+    SpotifyTrackHistoryFrozen,
     Tag,
     PocketArticle,
     GooglePhotosThumbnail,
@@ -284,6 +285,12 @@ async def read_spotify_history(
     stmt = select(SpotifyTrackHistory).order_by(desc(SpotifyTrackHistory.played_at))
     tracks = session.exec(stmt.offset(offset).limit(limit)).all()
     return tracks
+
+
+@app.get("/spotify/history/count", operation_id="spotifyHistoryCount", response_model=int)
+async def spotify_history_count(*, session: Session = Depends(get_session)):
+    stmt = select(func.count(SpotifyTrackHistory.id))
+    return session.exec(stmt).one()
 
 
 @app.get(
