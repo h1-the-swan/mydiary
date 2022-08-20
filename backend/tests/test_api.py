@@ -1,11 +1,12 @@
 import json
 import pendulum
 import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, PerformSong
+from mydiary.models import Dog, PerformSong, PocketArticle
 from mydiary.api import app, get_session
 
 
@@ -28,6 +29,41 @@ def client_fixture(session: Session):
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
+
+
+class TestPocketArticle:
+    def test_read_pocket_articles(self, rootdir, session: Session, client: TestClient):
+        fp = Path(rootdir).joinpath("pocketitem.json")
+        article_json = json.loads(fp.read_text())
+        article = PocketArticle.from_pocket_item(article_json)
+        session.add(article)
+        session.commit()
+        assert article.id is not None
+
+        response = client.get("/pocket/articles")
+        data = response.json()
+
+        assert response.status_code == 200
+
+        assert len(data) == 1
+        assert data[0]["given_title"] == article.given_title
+        assert data[0]["url"] == article.url
+        assert data[0]["url"] == article.url
+        assert data[0]["favorite"] == article.favorite
+        assert data[0]["status"] == article.status
+        # assert data[0]["time_added"] == article.time_added
+        # assert data[0]["time_updated"] == article.time_updated
+        # assert data[0]["time_read"] == article.time_read
+        # assert data[0]["time_favorited"] == article.time_favorited
+        assert data[0]["listen_duration_estimate"] == article.listen_duration_estimate
+        assert data[0]["word_count"] == article.word_count
+        assert data[0]["excerpt"] == article.excerpt
+        assert data[0]["top_image_url"] == article.top_image_url
+
+    # def test_read_perform_song_missing(self, session: Session, client: TestClient):
+    #     perform_song_id = 11
+    #     response = client.get(f'/performsongs/{perform_song_id}')
+    #     assert response.status_code == 404
 
 
 class TestPerformSong:
@@ -56,7 +92,7 @@ class TestPerformSong:
         assert d["artist_name"] == "Alanis Morissette"
         assert d["learned"] == True
         assert d["spotify_id"] == "4oGTdOClZUxcM2H3UmXlwL"
-        assert d["notes"] ==  "capo 2nd fret?"
+        assert d["notes"] == "capo 2nd fret?"
 
     def test_read_perform_songs(self, session: Session, client: TestClient):
         perform_song_1 = PerformSong(**self.perform_song_data[0])
@@ -67,7 +103,7 @@ class TestPerformSong:
         assert perform_song_1.id is not None
         assert perform_song_2.id is not None
 
-        response = client.get('/performsongs/')
+        response = client.get("/performsongs/")
         data = response.json()
 
         assert response.status_code == 200
@@ -87,7 +123,7 @@ class TestPerformSong:
         session.add(perform_song_1)
         session.commit()
 
-        response = client.get(f'/performsongs/{perform_song_1.id}')
+        response = client.get(f"/performsongs/{perform_song_1.id}")
         data = response.json()
 
         assert response.status_code == 200
@@ -99,7 +135,7 @@ class TestPerformSong:
 
     def test_read_perform_song_missing(self, session: Session, client: TestClient):
         perform_song_id = 11
-        response = client.get(f'/performsongs/{perform_song_id}')
+        response = client.get(f"/performsongs/{perform_song_id}")
         assert response.status_code == 404
 
     def test_update_perform_song(self, session: Session, client: TestClient):
@@ -108,7 +144,9 @@ class TestPerformSong:
         session.commit()
         assert perform_song_1.id is not None
 
-        response = client.patch(f"/performsongs/{perform_song_1.id}", json={"notes": "capo 3rd fret"})
+        response = client.patch(
+            f"/performsongs/{perform_song_1.id}", json={"notes": "capo 3rd fret"}
+        )
         d = response.json()
 
         assert response.status_code == 200
@@ -118,7 +156,9 @@ class TestPerformSong:
 
     def test_update_perform_song_missing(self, session: Session, client: TestClient):
         perform_song_id = 11
-        response = client.patch(f'/performsongs/{perform_song_id}', json={"notes": "capo 3rd fret"})
+        response = client.patch(
+            f"/performsongs/{perform_song_id}", json={"notes": "capo 3rd fret"}
+        )
         assert response.status_code == 404
 
     def test_delete_perform_song(self, session: Session, client: TestClient):
@@ -137,7 +177,7 @@ class TestPerformSong:
 
     def test_delete_perform_song_missing(self, session: Session, client: TestClient):
         perform_song_id = 11
-        response = client.delete(f'/performsongs/{perform_song_id}')
+        response = client.delete(f"/performsongs/{perform_song_id}")
         assert response.status_code == 404
 
 
@@ -181,7 +221,7 @@ class TestDog:
         assert dog_1.id is not None
         assert dog_2.id is not None
 
-        response = client.get('/dogs/')
+        response = client.get("/dogs/")
         data = response.json()
 
         assert response.status_code == 200
@@ -203,7 +243,7 @@ class TestDog:
         session.add(dog_1)
         session.commit()
 
-        response = client.get(f'/dogs/{dog_1.id}')
+        response = client.get(f"/dogs/{dog_1.id}")
         data = response.json()
 
         assert response.status_code == 200
@@ -216,7 +256,7 @@ class TestDog:
 
     def test_read_dog_missing(self, session: Session, client: TestClient):
         dog_id = 11
-        response = client.get(f'/dogs/{dog_id}')
+        response = client.get(f"/dogs/{dog_id}")
         assert response.status_code == 404
 
     def test_update_dog(self, session: Session, client: TestClient):
@@ -235,7 +275,7 @@ class TestDog:
 
     def test_update_dog_missing(self, session: Session, client: TestClient):
         dog_id = 11
-        response = client.patch(f'/dogs/{dog_id}', json={"owners": "Swan"})
+        response = client.patch(f"/dogs/{dog_id}", json={"owners": "Swan"})
         assert response.status_code == 404
 
     def test_delete_dog(self, session: Session, client: TestClient):
@@ -254,7 +294,7 @@ class TestDog:
 
     def test_delete_dog_missing(self, session: Session, client: TestClient):
         dog_id = 11
-        response = client.delete(f'/dogs/{dog_id}')
+        response = client.delete(f"/dogs/{dog_id}")
         assert response.status_code == 404
 
 

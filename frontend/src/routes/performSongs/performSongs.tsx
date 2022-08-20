@@ -50,6 +50,17 @@ function PerformSongTable(props: PerformSongTableProps) {
       key: "learned",
       render: (value: boolean) => Number(value),
       sorter: (a, b) => Number(a.learned) - Number(b.learned),
+      filters: [
+        {
+          text: "Learned",
+          value: true,
+        },
+        {
+          text: "Not Learned",
+          value: false,
+        },
+      ],
+      onFilter: (value, record: PerformSongRead) => record.learned === value,
     },
     {
       title: "Spotify ID",

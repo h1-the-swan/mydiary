@@ -16,7 +16,7 @@ export default function PocketArticlesTable() {
   const dateMaxFilter = searchParams.get("dateMax") || "";
   const { data: articles, isLoading } = useReadPocketArticles(
     {
-      limit: 100,
+      limit: 500,
       tags: tagFilter,
       dateMin: dateMinFilter,
       dateMax: dateMaxFilter,
@@ -93,6 +93,21 @@ export default function PocketArticlesTable() {
         }
       },
       sorter: (a, b) => a.status - b.status,
+      filters: [
+        {
+          text: "unread",
+          value: 0,
+        },
+        {
+          text: "archived",
+          value: 1,
+        },
+        {
+          text: "SHOULD_BE_DELETED",
+          value: 2,
+        },
+      ],
+      onFilter: (value, record: PocketArticleRead) => record.status === value,
     },
   ];
   return isLoading ? (

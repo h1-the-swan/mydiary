@@ -33,6 +33,7 @@ data/
 
 database.db
 *backup*.db
+*Copy*.db
 
 cov*.xml
 .coverage
