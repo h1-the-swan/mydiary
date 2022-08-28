@@ -28,6 +28,8 @@ export type ReadDogsListParams = { offset?: number; limit?: number };
 
 export type ReadPerformSongsListParams = { offset?: number; limit?: number };
 
+export type GetNextcloudImageNextcloudThumbnailImgGetParams = { url: string };
+
 export type JoplinUpdateNoteParams = { tz?: string };
 
 export type JoplinInitNoteParams = { tz?: string };
@@ -805,6 +807,86 @@ export const googlePhotosAddToJoplin = (
       return useMutation<Awaited<ReturnType<typeof googlePhotosAddToJoplin>>, TError, {noteId: string;data: GooglePhotosThumbnail[]}, TContext>(mutationFn, mutationOptions)
     }
     
+/**
+ * @summary Nextcloud Photos Thumbnails Url
+ */
+export const nextcloudPhotosThumbnailUrls = (
+    dt: string, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<string[]>> => {
+    return axios.get(
+      `/nextcloud/thumbnails/${dt}`,options
+    );
+  }
+
+
+export const getNextcloudPhotosThumbnailUrlsQueryKey = (dt: string,) => [`/nextcloud/thumbnails/${dt}`];
+
+    
+export type NextcloudPhotosThumbnailUrlsQueryResult = NonNullable<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>>
+export type NextcloudPhotosThumbnailUrlsQueryError = AxiosError<HTTPValidationError>
+
+export const useNextcloudPhotosThumbnailUrls = <TData = Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>, TError = AxiosError<HTTPValidationError>>(
+ dt: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getNextcloudPhotosThumbnailUrlsQueryKey(dt);
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>> = ({ signal }) => nextcloudPhotosThumbnailUrls(dt, { signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>, TError, TData>(queryKey, queryFn, {enabled: !!(dt), ...queryOptions}) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
+/**
+ * @summary Get Nextcloud Image
+ */
+export const getNextcloudImageNextcloudThumbnailImgGet = (
+    params: GetNextcloudImageNextcloudThumbnailImgGetParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.get(
+      `/nextcloud/thumbnail_img`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetNextcloudImageNextcloudThumbnailImgGetQueryKey = (params: GetNextcloudImageNextcloudThumbnailImgGetParams,) => [`/nextcloud/thumbnail_img`, ...(params ? [params]: [])];
+
+    
+export type GetNextcloudImageNextcloudThumbnailImgGetQueryResult = NonNullable<Awaited<ReturnType<typeof getNextcloudImageNextcloudThumbnailImgGet>>>
+export type GetNextcloudImageNextcloudThumbnailImgGetQueryError = AxiosError<HTTPValidationError>
+
+export const useGetNextcloudImageNextcloudThumbnailImgGet = <TData = Awaited<ReturnType<typeof getNextcloudImageNextcloudThumbnailImgGet>>, TError = AxiosError<HTTPValidationError>>(
+ params: GetNextcloudImageNextcloudThumbnailImgGetParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextcloudImageNextcloudThumbnailImgGet>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetNextcloudImageNextcloudThumbnailImgGetQueryKey(params);
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNextcloudImageNextcloudThumbnailImgGet>>> = ({ signal }) => getNextcloudImageNextcloudThumbnailImgGet(params, { signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof getNextcloudImageNextcloudThumbnailImgGet>>, TError, TData>(queryKey, queryFn, queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
 /**
  * @summary Read Perform Songs
  */

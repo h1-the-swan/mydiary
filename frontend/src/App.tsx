@@ -18,6 +18,7 @@ import RecipeAdd from "./routes/recipeAdd";
 import TestJoplin from "./routes/testJoplin";
 import GCalRefreshToken from "./routes/gcalRefreshToken";
 import { PerformSongs, PerformSongAddOrCreate } from "./routes/performSongs";
+import NextcloudPhotos from "./routes/nextcloudPhotos";
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -117,6 +118,11 @@ const ROUTES: IRoute[] = [
     path: "/gcalRefresh",
     title: "Refresh Google Calendar Token",
     element: <GCalRefreshToken />,
+  },
+  {
+    path: "/nextcloud/thumbnail",
+    title: "Nextcloud Photos",
+    element: <NextcloudPhotos />,
   },
 ];
 

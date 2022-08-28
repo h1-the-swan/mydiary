@@ -33,14 +33,19 @@ class MyDiaryNextcloud:
         self.url = url
         self.auth = HTTPBasicAuth(NEXTCLOUD_USERNAME, NEXTCLOUD_PASSWORD)
 
-    def get_image_thumbnail(self, path_to_file: str, w=512, h=512) -> bytes:
+    def get_image_thumbnail_url(self, path_to_file: str, w=512, h=512) -> str:
         # will automatically scale aspect ratio (because of the query param a=1)
-        url = f"{self.url}/index.php/core/preview.png?file={path_to_file}&x={h}pxW&y={w}pxH&a=1&mode=cover&forceIcon=0"
+        return f"{self.url}/index.php/core/preview.png?file={path_to_file}&x={h}pxW&y={w}pxH&a=1&mode=cover&forceIcon=0"
+
+    def get_image_thumbnail(self, path_to_file: str, w=512, h=512) -> bytes:
+        url = self.get_image_thumbnail_url(path_to_file, w, h)
         r = requests.get(url, auth=self.auth)
         r.raise_for_status()
         return r.content
 
-    def parse_datetime_from_filepath(self, filepath: str, tz: str = 'local') -> pendulum.DateTime:
+    def parse_datetime_from_filepath(
+        self, filepath: str, tz: str = "local"
+    ) -> pendulum.DateTime:
         filepath = requests.utils.unquote(filepath)
         name = Path(filepath).stem
         # name will look like: "22-06-11 17-50-16 4704"
