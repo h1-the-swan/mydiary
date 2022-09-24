@@ -1,8 +1,13 @@
 import { Alert, Button, Form, Input } from "antd";
 import { useEffect } from "react";
-import { useGetGCalAuthUrl, useRefreshGCalToken } from "../api";
+import {
+  useGetGCalAuthUrl,
+  useRefreshGCalToken,
+  useCheckGCalAuth,
+} from "../api";
 
 const GCalRefreshToken = () => {
+  const mutationCheckGCalAuth = useCheckGCalAuth();
   const { data: authUrl } = useGetGCalAuthUrl({
     query: { select: (d) => d.data },
   });
@@ -10,6 +15,23 @@ const GCalRefreshToken = () => {
   const [form] = Form.useForm();
   return (
     <main>
+      <Button
+        type="primary"
+        onClick={() => mutationCheckGCalAuth.mutate()}
+        loading={mutationCheckGCalAuth.isLoading}
+      >
+        Check GCal Auth
+      </Button>
+      {mutationCheckGCalAuth.isSuccess && (
+        <Alert message="Auth credentials are working" type="success" closable />
+      )}
+      {mutationCheckGCalAuth.isError && (
+        <Alert
+          message="Auth credentials are not working. Please refresh"
+          type="error"
+          closable
+        />
+      )}
       {authUrl && (
         <p>
           <a href={authUrl} target="_blank" rel="noreferrer">

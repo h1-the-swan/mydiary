@@ -185,6 +185,20 @@ async def refresh_gcal_token(code: str):
     mydiary_gcal._save_token_cache()
 
 
+@app.post("/gcal/check_auth", operation_id="checkGCalAuth")
+async def check_gcal_auth():
+    try:
+        from mydiary.googlecalendar_connector import MyDiaryGCal
+
+        events = MyDiaryGCal().get_events_for_day(pendulum.today())
+        return Response(status_code=200)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=getattr(e, "message", "NO EXCEPTION MESSAGE AVAILABLE"),
+        )
+
+
 @app.get(
     "/gcal/events",
     operation_id="readGCalEvents",
@@ -485,6 +499,12 @@ async def google_photos_add_to_joplin(
         await joplin_sync()
 
 
+def _modify_filepath(filepath):
+    filepath = filepath.split("/")[-4:]
+    filepath = "/".join(filepath)
+    return filepath
+
+
 @app.get(
     "/nextcloud/thumbnails/{dt}",
     operation_id="nextcloudPhotosThumbnailUrls",
@@ -501,6 +521,7 @@ def nextcloud_photos_thumbnails_url(dt: str):
     mydiary_nextcloud = MyDiaryNextcloud()
     filepaths = mydiary_nextcloud.get_filepaths_for_day(dt)
     # urls = [mydiary_nextcloud.get_image_thumbnail_url(fp) for fp in filepaths]
+    filepaths = [_modify_filepath(filepath) for filepath in filepaths]
     return filepaths
 
 
@@ -522,6 +543,7 @@ def get_nextcloud_image(url: str) -> Response:
     # image_bytes = r.content
     image_bytes = mydiary_nextcloud.get_image_thumbnail(url)
     print(image_bytes)
+    # return Response(content=io.BytesIO(image_bytes), media_type="image/png")
     return Response(content=image_bytes, media_type="image/png")
 
 

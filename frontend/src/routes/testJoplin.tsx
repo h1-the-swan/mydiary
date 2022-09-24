@@ -70,7 +70,7 @@ const TestJoplin = () => {
           />
         )}
         {mutationJoplinInitNote.isSuccess && (
-          <Alert message={`Init note: success`} type="success" />
+          <Alert message={`Init note: success`} type="success" closable />
         )}
         {mutationJoplinUpdateNote.isError && (
           <Alert
@@ -79,7 +79,7 @@ const TestJoplin = () => {
           />
         )}
         {mutationJoplinUpdateNote.isSuccess && (
-          <Alert message={`Update note: success`} type="success" />
+          <Alert message={`Update note: success`} type="success" closable />
         )}
       </Space>
     </main>

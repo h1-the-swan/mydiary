@@ -301,6 +301,41 @@ export const refreshGCalToken = (
     }
     
 /**
+ * @summary Check Gcal Auth
+ */
+export const checkGCalAuth = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/gcal/check_auth`,undefined,options
+    );
+  }
+
+
+
+    export type CheckGCalAuthMutationResult = NonNullable<Awaited<ReturnType<typeof checkGCalAuth>>>
+    
+    export type CheckGCalAuthMutationError = AxiosError<unknown>
+
+    export const useCheckGCalAuth = <TError = AxiosError<unknown>,
+    TVariables = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkGCalAuth>>, TError,TVariables, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof checkGCalAuth>>, TVariables> = () => {
+          ;
+
+          return  checkGCalAuth(axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof checkGCalAuth>>, TError, TVariables, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
  * @summary Read Gcal Events
  */
 export const readGCalEvents = (
