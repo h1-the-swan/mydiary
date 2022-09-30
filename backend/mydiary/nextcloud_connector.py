@@ -12,6 +12,8 @@ from time import sleep
 import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union
+from PIL import Image
+from io import BytesIO
 
 from .core import reduce_image_size, reduce_size_recurse
 import logging
@@ -37,10 +39,19 @@ class MyDiaryNextcloud:
         # will automatically scale aspect ratio (because of the query param a=1)
         return f"{self.url}/index.php/core/preview.png?file={path_to_file}&x={h}pxW&y={w}pxH&a=1&mode=cover&forceIcon=0"
 
+    def get_image_thumbnail_dimensions(self, path_to_file: str) -> Tuple:
+        url = self.get_image_thumbnail_url(path_to_file)
+        r = requests.get(url, auth=self.auth)
+        r.raise_for_status()
+        im = Image.open(BytesIO(r.content))
+        return im.size
+
     def get_image_thumbnail(self, path_to_file: str, w=512, h=512) -> bytes:
         url = self.get_image_thumbnail_url(path_to_file, w, h)
         r = requests.get(url, auth=self.auth)
         r.raise_for_status()
+        # im = Image.open(BytesIO(r.content))
+        # TODO: separate method to download image and get width and height, and save image bytes to cache
         return r.content
 
     def parse_datetime_from_filepath(

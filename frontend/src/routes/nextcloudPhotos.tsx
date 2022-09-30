@@ -2,12 +2,18 @@ import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import moment from "moment";
 import { useSearchParams } from "react-router-dom";
-import { useNextcloudPhotosThumbnailUrls } from "../api";
+import {
+  useGetNextcloudPhotosThumbnailDims,
+  useNextcloudPhotosThumbnailUrls,
+} from "../api";
 import { DatePicker, Space } from "antd";
+import { useQueries, useQuery } from "react-query";
 
 const NextcloudPhotos = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [imgObjectURLs, setImgObjectURLs] = useState<any[]>([]);
+  const [imgUrlsCache, setImgUrlsCache] = useState<string[]>([""]);
+  // const [imgDims, setImgDims] = useState<any[]>([]);
   if (!searchParams.get("dt")) {
     setSearchParams({ dt: "yesterday" });
   }
@@ -25,10 +31,38 @@ const NextcloudPhotos = () => {
       select: (d) => d.data,
     },
   });
-  useEffect(() => console.log(imgUrls), [imgUrls]);
+  // const { data: thumbnailDims } = useGetNextcloudPhotosThumbnailDims(
+  // const queryNextCloudPhotosThumbnailDims = useGetNextcloudPhotosThumbnailDims(
+  //   {
+  //     url: "",
+  //   },
+  //   {
+  //     query: {
+  //       select: (d) => d.data,
+  //       enabled: false,
+  //     },
+  //   }
+  // );
+  // const thumbnailDims = useQuery(['thumbnailDims'], () => axios.get('/nextcloud/thumbnail_dims'), { placeholderData: (0,0)})
+  // const { data: thumbnailDims } = useGetNextcloudPhotosThumbnailDims(
+  //   {
+  //     url: imgUrls && imgUrls.at(3) ? imgUrls.at(3) : "",
+  //   },
+  //   { query: { select: (d) => d.data } }
+  // );
+  const thumbnailDims = useQueries(
+    imgUrlsCache.map((url) => ({
+      queryKey: ["thumbnailDims", url],
+      queryFn: () =>
+        axios.get("/nextcloud/thumbnail_dims", { params: { url: url } }),
+    }))
+  );
   useEffect(() => {
+    if (imgUrls) {
+      setImgUrlsCache(imgUrls);
+    }
     const imgs = imgUrls?.map((url) => {
-      console.log(url);
+      // console.log(url);
       // .then((response) => response.blob())
       // .then((imgBlob) => {
       //   const imgObjectURL = URL.createObjectURL(imgBlob);
@@ -36,7 +70,6 @@ const NextcloudPhotos = () => {
       //   console.log(imgBlob);
       //   const image = document.createElement("img");
       //   image.src = imgObjectURL;
-
       //   const container = document.getElementById("container");
       //   if (container) {
       //     container.append(image);
@@ -44,6 +77,14 @@ const NextcloudPhotos = () => {
       // });
     });
   }, [imgUrls]);
+  useEffect(() => {
+    if (!thumbnailDims.filter((result) => result.isLoading).length) {
+      const disp = thumbnailDims.map((result) =>
+        result.data ? result.data.data : undefined
+      );
+      console.log(disp);
+    }
+  }, [thumbnailDims]);
   return isLoading ? (
     <span>Loading...</span>
   ) : imgUrls ? (

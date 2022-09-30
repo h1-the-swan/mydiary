@@ -30,6 +30,8 @@ export type ReadPerformSongsListParams = { offset?: number; limit?: number };
 
 export type GetNextcloudImageNextcloudThumbnailImgGetParams = { url: string };
 
+export type GetNextcloudPhotosThumbnailDimsParams = { url: string };
+
 export type JoplinUpdateNoteParams = { tz?: string };
 
 export type JoplinInitNoteParams = { tz?: string };
@@ -874,6 +876,47 @@ export const useNextcloudPhotosThumbnailUrls = <TData = Awaited<ReturnType<typeo
   const queryFn: QueryFunction<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>> = ({ signal }) => nextcloudPhotosThumbnailUrls(dt, { signal, ...axiosOptions });
 
   const query = useQuery<Awaited<ReturnType<typeof nextcloudPhotosThumbnailUrls>>, TError, TData>(queryKey, queryFn, {enabled: !!(dt), ...queryOptions}) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
+/**
+ * @summary Get Nextcloud Thumbnail Dims
+ */
+export const getNextcloudPhotosThumbnailDims = (
+    params: GetNextcloudPhotosThumbnailDimsParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown[]>> => {
+    return axios.get(
+      `/nextcloud/thumbnail_dims`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+
+export const getGetNextcloudPhotosThumbnailDimsQueryKey = (params: GetNextcloudPhotosThumbnailDimsParams,) => [`/nextcloud/thumbnail_dims`, ...(params ? [params]: [])];
+
+    
+export type GetNextcloudPhotosThumbnailDimsQueryResult = NonNullable<Awaited<ReturnType<typeof getNextcloudPhotosThumbnailDims>>>
+export type GetNextcloudPhotosThumbnailDimsQueryError = AxiosError<HTTPValidationError>
+
+export const useGetNextcloudPhotosThumbnailDims = <TData = Awaited<ReturnType<typeof getNextcloudPhotosThumbnailDims>>, TError = AxiosError<HTTPValidationError>>(
+ params: GetNextcloudPhotosThumbnailDimsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNextcloudPhotosThumbnailDims>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetNextcloudPhotosThumbnailDimsQueryKey(params);
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNextcloudPhotosThumbnailDims>>> = ({ signal }) => getNextcloudPhotosThumbnailDims(params, { signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof getNextcloudPhotosThumbnailDims>>, TError, TData>(queryKey, queryFn, queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
   query.queryKey = queryKey;
 
