@@ -143,6 +143,7 @@ export interface PerformSongUpdate {
   created_at?: string;
   key?: string;
   capo?: number;
+  lyrics?: string;
 }
 
 export interface PerformSongRead {
@@ -155,6 +156,7 @@ export interface PerformSongRead {
   created_at?: string;
   key?: string;
   capo?: number;
+  lyrics?: string;
   id: number;
 }
 
@@ -168,6 +170,7 @@ export interface PerformSongCreate {
   created_at?: string;
   key?: string;
   capo?: number;
+  lyrics?: string;
 }
 
 export interface HTTPValidationError {

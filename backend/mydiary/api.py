@@ -80,6 +80,7 @@ class PerformSongUpdate(SQLModel):
     created_at: Optional[datetime] = None
     key: Optional[str]
     capo: Optional[int]
+    lyrics: Optional[str]
 
 
 class DogRead(DogBase):

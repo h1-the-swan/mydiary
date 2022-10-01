@@ -155,6 +155,7 @@ class PerformSongBase(SQLModel):
     created_at: Optional[datetime] = Field(default=None, index=True)
     key: Optional[str] = Field(default=None, index=True)  # musical key of the song
     capo: Optional[int] = Field(default=None, index=True)  # fret of capo (0 if no capo)
+    lyrics: Optional[str]
 
 
 class PerformSong(PerformSongBase, table=True):

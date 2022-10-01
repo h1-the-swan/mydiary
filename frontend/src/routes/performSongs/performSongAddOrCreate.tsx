@@ -80,6 +80,9 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
       <Form.Item name="created_at" label="Created At">
         <DatePicker />
       </Form.Item>
+      <Form.Item name="lyrics" label="Lyrics">
+        <TextArea />
+      </Form.Item>
       <Form.Item>
         <Button
           type="primary"

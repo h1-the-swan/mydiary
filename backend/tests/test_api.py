@@ -74,6 +74,7 @@ class TestPerformSong:
             "learned": True,
             "spotify_id": "4oGTdOClZUxcM2H3UmXlwL",
             "notes": "capo 2nd fret?",
+            "lyrics": "It's like rain on your wedding day\nIt's a free ride when you've already paid",
         },
         {
             "name": "Stay (I Missed You)",
@@ -93,6 +94,10 @@ class TestPerformSong:
         assert d["learned"] == True
         assert d["spotify_id"] == "4oGTdOClZUxcM2H3UmXlwL"
         assert d["notes"] == "capo 2nd fret?"
+        assert (
+            d["lyrics"]
+            == "It's like rain on your wedding day\nIt's a free ride when you've already paid"
+        )
 
     def test_read_perform_songs(self, session: Session, client: TestClient):
         perform_song_1 = PerformSong(**self.perform_song_data[0])
