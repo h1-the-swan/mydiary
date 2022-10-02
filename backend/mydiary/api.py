@@ -526,10 +526,14 @@ def nextcloud_photos_thumbnails_url(dt: str):
     return filepaths
 
 
-@app.get("/nextcloud/thumbnail_dims", operation_id="getNextcloudPhotosThumbnailDims", response_model=Tuple[int, int])
+@app.get(
+    "/nextcloud/thumbnail_dims",
+    operation_id="getNextcloudPhotosThumbnailDims",
+    response_model=Tuple[int, int],
+)
 def get_nextcloud_thumbnail_dims(url: str):
     if not url:
-        return (0,0)
+        return (0, 0)
     mydiary_nextcloud = MyDiaryNextcloud()
     return mydiary_nextcloud.get_image_thumbnail_dimensions(url)
 
@@ -554,6 +558,52 @@ def get_nextcloud_image(url: str) -> Response:
     print(image_bytes)
     # return Response(content=io.BytesIO(image_bytes), media_type="image/png")
     return Response(content=image_bytes, media_type="image/png")
+
+
+@app.post(
+    "/nextcloud/add_to_joplin/{note_id}",
+    operation_id="nextcloudPhotosAddToJoplin",
+)
+async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
+    # TODO: refactor
+    from mydiary import MyDiaryDay
+    from mydiary.joplin_connector import MyDiaryJoplin
+    from mydiary.markdown_edits import MarkdownDoc
+    from mydiary.core import reduce_size_recurse
+
+    mydiary_nextcloud = MyDiaryNextcloud()
+
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        note = mydiary_joplin.get_note(note_id)
+        md_note = MarkdownDoc(note.body, parent=note)
+
+        sec_images = md_note.get_section_by_title("images")
+        resource_ids = sec_images.get_resource_ids()
+        if resource_ids:
+            raise RuntimeError()
+        size = (512, 512)
+        bytes_threshold = 60000
+        resource_ids = []
+        for photo in photos:
+            image_bytes = mydiary_nextcloud.get_image(photo)
+            if len(image_bytes) > bytes_threshold:
+                image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
+            r = mydiary_joplin.create_resource(data=image_bytes)
+            r.raise_for_status()
+            resource_id = r.json()["id"]
+            resource_ids.append(f"![](:/{resource_id})")
+            logger.debug(f"new resource id: {resource_id}")
+
+        new_txt = sec_images.txt
+        new_txt += "\n"
+        new_txt += "\n\n".join(resource_ids)
+        new_txt += "\n"
+        sec_images.update(new_txt)
+        logger.info(f"updating note: {note.title}")
+        r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
+        r_put_note.raise_for_status()
+
+        await joplin_sync()
 
 
 @app.post(

@@ -110,7 +110,7 @@ class MyDiaryJoplin:
         }
         logger.debug(f"getting subfolder id. params: {params}")
         headers = requests.utils.default_headers()
-        headers.update({'User-Agent': 'My User Agent 1.0'})
+        headers.update({"User-Agent": "My User Agent 1.0"})
         logger.debug(f"headers: {headers}")
         r = requests.get(f"{self.base_url}/search", params=params, headers=headers)
         logger.debug(f"status code is {r.status_code}")
@@ -318,6 +318,21 @@ class MyDiaryJoplin:
         )
         print(response.json())
         return response
+
+    # def add_image_to_note(
+    #     self,
+    #     image_bytes: bytes,
+    #     size: Tuple[int, int] = (512, 512),
+    #     bytes_threshold: int = 60000,
+    # ) -> Union[requests.Response, None]:
+    #     if len(image_bytes) > bytes_threshold:
+    #         image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
+    #     r = mydiary_joplin.create_resource(data=image_bytes)
+    #     r.raise_for_status()
+    #     resource_id = r.json()["id"]
+    #     resource_ids.append(f"![](:/{resource_id})")
+    #     logger.debug(f"new resource id: {resource_id}")
+    #     return r
 
     def joplin_reduce_image_size(
         self,

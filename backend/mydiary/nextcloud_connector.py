@@ -54,6 +54,13 @@ class MyDiaryNextcloud:
         # TODO: separate method to download image and get width and height, and save image bytes to cache
         return r.content
 
+    def get_image(self, path_to_file: str) -> bytes:
+        url = f"{self.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/{path_to_file}"
+        # TODO need to redo image urls/thumbnail urls and API interactions
+        r = requests.get(url, auth=self.auth)
+        r.raise_for_status()
+        return r.content
+
     def parse_datetime_from_filepath(
         self, filepath: str, tz: str = "local"
     ) -> pendulum.DateTime:

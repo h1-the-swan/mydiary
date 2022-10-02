@@ -8,7 +8,7 @@ import requests
 import json
 import hashlib
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 from io import BytesIO
 
 import logging
@@ -26,21 +26,21 @@ JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
 JOPLIN_AUTH_TOKEN = os.environ["JOPLIN_AUTH_TOKEN"]
 
 
-
 def reduce_image_size(
     data: bytes,
     size: Tuple[int, int] = (512, 512),
 ) -> BytesIO:
     im = Image.open(BytesIO(data))
+    format = im.format
+    # https://stackoverflow.com/questions/63947990/why-are-width-and-height-of-an-image-are-inverted-when-loading-using-pil-versus
+    im = ImageOps.exif_transpose(im)
     im.thumbnail(size)
     image_bytes = BytesIO()
-    im.save(image_bytes, format=im.format)
+    im.save(image_bytes, format=format)
     return image_bytes.getvalue()
 
 
-def reduce_size_recurse(
-    data, size: Tuple[int, int], bytes_threshold: int = 60000
-):
+def reduce_size_recurse(data, size: Tuple[int, int], bytes_threshold: int = 60000):
     logger.debug(f"reducing image using size parameter: {size}")
     new_data = reduce_image_size(data, size)
     if len(new_data) > bytes_threshold:

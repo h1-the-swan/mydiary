@@ -969,6 +969,43 @@ export const useGetNextcloudImageNextcloudThumbnailImgGet = <TData = Awaited<Ret
 
 
 /**
+ * @summary Nextcloud Photos Add To Joplin
+ */
+export const nextcloudPhotosAddToJoplin = (
+    noteId: string,
+    nextcloudPhotosAddToJoplinBody: string[], options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/nextcloud/add_to_joplin/${noteId}`,
+      nextcloudPhotosAddToJoplinBody,options
+    );
+  }
+
+
+
+    export type NextcloudPhotosAddToJoplinMutationResult = NonNullable<Awaited<ReturnType<typeof nextcloudPhotosAddToJoplin>>>
+    export type NextcloudPhotosAddToJoplinMutationBody = string[]
+    export type NextcloudPhotosAddToJoplinMutationError = AxiosError<HTTPValidationError>
+
+    export const useNextcloudPhotosAddToJoplin = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof nextcloudPhotosAddToJoplin>>, TError,{noteId: string;data: string[]}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof nextcloudPhotosAddToJoplin>>, {noteId: string;data: string[]}> = (props) => {
+          const {noteId,data} = props ?? {};
+
+          return  nextcloudPhotosAddToJoplin(noteId,data,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof nextcloudPhotosAddToJoplin>>, TError, {noteId: string;data: string[]}, TContext>(mutationFn, mutationOptions)
+    }
+    
+/**
  * @summary Read Perform Songs
  */
 export const readPerformSongsList = (
