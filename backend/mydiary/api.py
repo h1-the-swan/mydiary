@@ -555,7 +555,6 @@ def get_nextcloud_image(url: str) -> Response:
     # r.raise_for_status()
     # image_bytes = r.content
     image_bytes = mydiary_nextcloud.get_image_thumbnail(url)
-    print(image_bytes)
     # return Response(content=io.BytesIO(image_bytes), media_type="image/png")
     return Response(content=image_bytes, media_type="image/png")
 
