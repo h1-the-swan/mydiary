@@ -316,7 +316,6 @@ class MyDiaryJoplin:
             data={"props": json.dumps(props)},
             params={"token": self.token},
         )
-        print(response.json())
         return response
 
     # def add_image_to_note(
