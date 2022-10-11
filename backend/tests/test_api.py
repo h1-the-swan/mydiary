@@ -33,11 +33,15 @@ def client_fixture(session: Session):
 
 class TestPocketArticle:
     def test_read_pocket_articles(self, rootdir, session: Session, client: TestClient):
+        from mydiary.pocket_connector import MyDiaryPocket
+
+        mydiary_pocket = MyDiaryPocket()
         fp = Path(rootdir).joinpath("pocketitem.json")
         article_json = json.loads(fp.read_text())
         article = PocketArticle.from_pocket_item(article_json)
-        session.add(article)
-        session.commit()
+        # session.add(article)
+        # session.commit()
+        mydiary_pocket.save_articles_to_database([article], session)
         assert article.id is not None
 
         response = client.get("/pocket/articles")
@@ -47,7 +51,6 @@ class TestPocketArticle:
 
         assert len(data) == 1
         assert data[0]["given_title"] == article.given_title
-        assert data[0]["url"] == article.url
         assert data[0]["url"] == article.url
         assert data[0]["favorite"] == article.favorite
         assert data[0]["status"] == article.status
@@ -59,6 +62,46 @@ class TestPocketArticle:
         assert data[0]["word_count"] == article.word_count
         assert data[0]["excerpt"] == article.excerpt
         assert data[0]["top_image_url"] == article.top_image_url
+        assert len(data[0]["tags"]) == 3
+        tags = data[0]["tags"]
+        assert tags[0]["name"] == "internet"
+        assert tags[0]["is_pocket_tag"] is True
+        assert tags[1]["name"] == "news"
+        assert tags[1]["is_pocket_tag"] is True
+        assert tags[2]["name"] == "quickbites"
+        assert tags[2]["is_pocket_tag"] is True
+
+    def test_update_pocket_article(self, rootdir, session: Session, client: TestClient):
+        from mydiary.pocket_connector import MyDiaryPocket
+
+        mydiary_pocket = MyDiaryPocket()
+        fp = Path(rootdir).joinpath("pocketitem.json")
+        article_json = json.loads(fp.read_text())
+        article = PocketArticle.from_pocket_item(article_json)
+        article._pocket_tags = []
+        # session.add(article)
+        # session.commit()
+        mydiary_pocket.save_articles_to_database([article], session)
+
+        response = client.patch(
+            f"/pocket/articles/{article_json['item_id']}",
+            json={
+                "resolved_title": "dddd",
+                "pocket_tags": ["internet", "news", "quickbites"],
+            },
+        )
+        d = response.json()
+
+        assert response.status_code == 200
+        assert d["resolved_title"] == "dddd"
+        assert d["url"] == article.url
+        tags = d["tags"]
+        assert tags[0]["name"] == "internet"
+        assert tags[0]["is_pocket_tag"] is True
+        assert tags[1]["name"] == "news"
+        assert tags[1]["is_pocket_tag"] is True
+        assert tags[2]["name"] == "quickbites"
+        assert tags[2]["is_pocket_tag"] is True
 
     # def test_read_perform_song_missing(self, session: Session, client: TestClient):
     #     perform_song_id = 11

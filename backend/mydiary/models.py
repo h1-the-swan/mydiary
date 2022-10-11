@@ -191,7 +191,7 @@ class PocketArticle(SQLModel, table=True):
 
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
-    _pocket_tags: Optional[List[Tuple]] = PrivateAttr()
+    _pocket_tags: Optional[List[str]] = PrivateAttr()
 
     tags: List["Tag"] = Relationship(
         back_populates="pocket_articles", link_model=PocketArticleTagLink

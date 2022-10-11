@@ -2,7 +2,7 @@ from datetime import datetime
 import requests
 import io
 import pendulum
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -50,6 +50,23 @@ class TagRead(Tag):
 
 class PocketArticleRead(PocketArticle):
     tags_: List[TagRead] = Field(alias="tags")
+
+
+class PocketArticleUpdate(SQLModel):
+    given_title: Optional[str] = None
+    resolved_title: Optional[str] = None
+    url: Optional[str] = None
+    favorite: Optional[bool] = None
+    status: Optional[PocketStatusEnum]
+    time_added: Optional[datetime] = None
+    time_updated: Optional[datetime] = None
+    time_read: Optional[datetime] = None
+    time_favorited: Optional[datetime] = None
+    listen_duration_estimate: Optional[int] = None
+    word_count: Optional[int] = None
+    excerpt: Optional[str] = None
+    top_image_url: Optional[str] = None
+    pocket_tags: Optional[List[str]] = None
 
 
 class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):
@@ -286,6 +303,35 @@ def read_pocket_articles(
         stmt = stmt.where(PocketArticle.time_added < dt.end_of("year"))
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
     return articles
+
+
+@app.patch(
+    "/pocket/articles/{article_id}",
+    operation_id="updatePocketArticle",
+    response_model=PocketArticleRead,
+)
+def update_pocket_article(
+    *,
+    session: Session = Depends(get_session),
+    article_id: int,
+    article: PocketArticleUpdate,
+):
+    db_article = session.get(PocketArticle, article_id)
+    if not db_article:
+        raise HTTPException(status_code=404, detail="PocketArticle not found")
+    article_data = article.dict(exclude_unset=True)
+    for k, v in article_data.items():
+        try:
+            setattr(db_article, k, v)
+        except ValueError:
+            pass
+    if article_data.get("pocket_tags"):
+        db_article._pocket_tags = article_data["pocket_tags"]
+        db_article.collect_tags(session=session)
+    session.add(db_article)
+    session.commit()
+    session.refresh(db_article)
+    return db_article
 
 
 @app.get(
