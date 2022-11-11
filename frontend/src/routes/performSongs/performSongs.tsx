@@ -1,5 +1,9 @@
 import React, { useEffect } from "react";
-import { PerformSongRead, useReadPerformSongsList } from "../../api";
+import {
+  PerformSongRead,
+  usePerformSongCount,
+  useReadPerformSongsList,
+} from "../../api";
 import { Button, Table, TableColumnType } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import moment from "moment";
@@ -145,6 +149,12 @@ function PerformSongTable(props: PerformSongTableProps) {
 }
 
 const PerformSongs = () => {
+  // const { data: spotifyHistoryCount } = useSpotifyHistoryCount({
+  //   query: { select: (d) => d.data },
+  // });
+  const { data: performSongsCount } = usePerformSongCount({
+    query: { select: (d) => d.data },
+  });
   const { data: performSongs, isLoading } = useReadPerformSongsList(
     { limit: 5000 },
     {
@@ -157,6 +167,9 @@ const PerformSongs = () => {
 
   return (
     <main>
+      {performSongsCount && (
+        <p>There are {performSongsCount} items in the database.</p>
+      )}
       {isLoading ? (
         <span>Loading...</span>
       ) : (

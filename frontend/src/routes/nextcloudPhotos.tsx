@@ -221,12 +221,14 @@ const NextcloudPhotos = () => {
           <Alert
             message={`Error: ${mutationNextcloudPhotosAddToJoplin.error.message}`}
             type="error"
+            closable
           />
         )}
         {mutationNextcloudPhotosAddToJoplin.isSuccess && (
           <Alert
             message="Successfully added image(s) to Joplin note"
             type="success"
+            closable
           />
         )}
       </Form>

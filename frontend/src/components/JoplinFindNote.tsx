@@ -28,6 +28,7 @@ export default function JoplinFindNote(props: Props) {
 
   function handleButtonClick() {
     mutationJoplinSync.mutate();
+    noteId.refetch();
   }
   return (
     <>
