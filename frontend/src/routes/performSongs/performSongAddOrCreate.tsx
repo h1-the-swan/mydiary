@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Button, Checkbox, DatePicker, Form, Input, Image, Space } from "antd";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  DatePicker,
+  Form,
+  Input,
+  Image,
+  Space,
+} from "antd";
 import {
   useReadPerformSong,
   PerformSongRead,
@@ -95,10 +104,10 @@ const PerformSongForm: React.FC<IPerformSongForm> = (props) => {
           {performSong ? "Update" : "Submit"}
         </Button>
         {mutationCreatePerformSong.isSuccess && (
-          <Alert message="song added" type="success" />
+          <Alert message="song added" type="success" closable />
         )}
         {mutationUpdatePerformSong.isSuccess && (
-          <Alert message="song updated" type="success" />
+          <Alert message="song updated" type="success" closable />
         )}
         {mutationCreatePerformSong.isError && (
           <Alert

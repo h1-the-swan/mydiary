@@ -115,6 +115,23 @@ export const PocketStatusEnum = {
   NUMBER_2: 2,
 } as const;
 
+export interface PocketArticleUpdate {
+  given_title?: string;
+  resolved_title?: string;
+  url?: string;
+  favorite?: boolean;
+  status?: PocketStatusEnum;
+  time_added?: string;
+  time_updated?: string;
+  time_read?: string;
+  time_favorited?: string;
+  listen_duration_estimate?: number;
+  word_count?: number;
+  excerpt?: string;
+  top_image_url?: string;
+  pocket_tags?: string[];
+}
+
 export interface PocketArticleRead {
   id: number;
   given_title: string;
@@ -502,6 +519,43 @@ export const useReadPocketArticles = <TData = Awaited<ReturnType<typeof readPock
 }
 
 
+/**
+ * @summary Update Pocket Article
+ */
+export const updatePocketArticle = (
+    articleId: number,
+    pocketArticleUpdate: PocketArticleUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PocketArticleRead>> => {
+    return axios.patch(
+      `/pocket/articles/${articleId}`,
+      pocketArticleUpdate,options
+    );
+  }
+
+
+
+    export type UpdatePocketArticleMutationResult = NonNullable<Awaited<ReturnType<typeof updatePocketArticle>>>
+    export type UpdatePocketArticleMutationBody = PocketArticleUpdate
+    export type UpdatePocketArticleMutationError = AxiosError<HTTPValidationError>
+
+    export const useUpdatePocketArticle = <TError = AxiosError<HTTPValidationError>,
+    
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePocketArticle>>, TError,{articleId: number;data: PocketArticleUpdate}, TContext>, axios?: AxiosRequestConfig}
+) => {
+      const {mutation: mutationOptions, axios: axiosOptions} = options ?? {}
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePocketArticle>>, {articleId: number;data: PocketArticleUpdate}> = (props) => {
+          const {articleId,data} = props ?? {};
+
+          return  updatePocketArticle(articleId,data,axiosOptions)
+        }
+
+      return useMutation<Awaited<ReturnType<typeof updatePocketArticle>>, TError, {articleId: number;data: PocketArticleUpdate}, TContext>(mutationFn, mutationOptions)
+    }
+    
 /**
  * @summary Read Spotify History
  */
@@ -1082,6 +1136,45 @@ export const createPerformSong = (
       return useMutation<Awaited<ReturnType<typeof createPerformSong>>, TError, {data: PerformSongCreate}, TContext>(mutationFn, mutationOptions)
     }
     
+/**
+ * @summary Perform Song  Count
+ */
+export const performSongCount = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<number>> => {
+    return axios.get(
+      `/performsongs/count`,options
+    );
+  }
+
+
+export const getPerformSongCountQueryKey = () => [`/performsongs/count`];
+
+    
+export type PerformSongCountQueryResult = NonNullable<Awaited<ReturnType<typeof performSongCount>>>
+export type PerformSongCountQueryError = AxiosError<unknown>
+
+export const usePerformSongCount = <TData = Awaited<ReturnType<typeof performSongCount>>, TError = AxiosError<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof performSongCount>>, TError, TData>, axios?: AxiosRequestConfig}
+
+  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+
+  const {query: queryOptions, axios: axiosOptions} = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getPerformSongCountQueryKey();
+
+  
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof performSongCount>>> = ({ signal }) => performSongCount({ signal, ...axiosOptions });
+
+  const query = useQuery<Awaited<ReturnType<typeof performSongCount>>, TError, TData>(queryKey, queryFn, queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = queryKey;
+
+  return query;
+}
+
+
 /**
  * @summary Read Perform Song
  */

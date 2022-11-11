@@ -664,6 +664,12 @@ def create_perform_song(
     return db_perform_song
 
 
+@app.get("/performsongs/count", operation_id="performSongCount", response_model=int)
+async def perform_song__count(*, session: Session = Depends(get_session)):
+    stmt = select(func.count(PerformSong.id))
+    return session.exec(stmt).one()
+
+
 @app.get(
     "/performsongs/",
     operation_id="readPerformSongsList",
