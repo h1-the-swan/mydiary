@@ -160,7 +160,7 @@ const NextcloudPhotos = () => {
       }
     }
     console.log(submitPhotos);
-    if (submitPhotos && noteId) {
+    if (submitPhotos && noteId && noteId !== "does_not_exist") {
       mutationNextcloudPhotosAddToJoplin.mutate({
         noteId: noteId,
         data: submitPhotos,
@@ -208,7 +208,7 @@ const NextcloudPhotos = () => {
             />
           </div>
         </Form.Item>
-        {noteId && (
+        {noteId && noteId !== "does_not_exist" ? (
           <Button
             type="primary"
             htmlType="submit"
@@ -216,7 +216,7 @@ const NextcloudPhotos = () => {
           >
             Submit
           </Button>
-        )}
+        ) : null}
         {mutationNextcloudPhotosAddToJoplin.isError && (
           <Alert
             message={`Error: ${mutationNextcloudPhotosAddToJoplin.error.message}`}
