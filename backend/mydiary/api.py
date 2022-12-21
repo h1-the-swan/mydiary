@@ -26,7 +26,9 @@ from .models import (
     PocketStatusEnum,
     SpotifyTrackHistoryFrozen,
     Tag,
+    TagBase,
     PocketArticle,
+    PocketArticleBase,
     GooglePhotosThumbnail,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
@@ -43,12 +45,13 @@ class GoogleCalendarEventRead(GoogleCalendarEvent):
     pass
 
 
-class TagRead(Tag):
+class TagRead(TagBase):
     id_: int = Field(alias="id")
     num_pocket_articles: Optional[int] = None
 
 
-class PocketArticleRead(PocketArticle):
+class PocketArticleRead(PocketArticleBase):
+    id: int
     tags_: List[TagRead] = Field(alias="tags")
 
 

@@ -173,8 +173,7 @@ class PocketStatusEnum(IntEnum):
     SHOULD_BE_DELETED = 2
 
 
-class PocketArticle(SQLModel, table=True):
-    id: int = Field(primary_key=True)
+class PocketArticleBase(SQLModel):
     given_title: str = Field(index=True)
     resolved_title: str = Field(index=True)
     url: str
@@ -192,10 +191,6 @@ class PocketArticle(SQLModel, table=True):
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
     _pocket_tags: Optional[List[str]] = PrivateAttr()
-
-    tags: List["Tag"] = Relationship(
-        back_populates="pocket_articles", link_model=PocketArticleTagLink
-    )
 
     @property
     def pocket_url(self) -> str:
@@ -276,6 +271,14 @@ class PocketArticle(SQLModel, table=True):
             title = "Unknown title"
         pocket_link = f"[Pocket link]({self.pocket_url})"
         return f"[{title}]({self.url}) ({pocket_link})"
+
+
+class PocketArticle(PocketArticleBase, table=True):
+    id: int = Field(primary_key=True)
+
+    tags: List["Tag"] = Relationship(
+        back_populates="pocket_articles", link_model=PocketArticleTagLink
+    )
 
 
 class GoogleCalendarEvent(SQLModel, table=True):
@@ -392,11 +395,14 @@ class JoplinNote(SQLModel):
         )
 
 
-class Tag(SQLModel, table=True):
+class TagBase(SQLModel):
     # TODO
-    id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     is_pocket_tag: bool = False
+
+
+class Tag(TagBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
 
     pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
