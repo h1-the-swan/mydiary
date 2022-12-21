@@ -403,14 +403,16 @@ class Tag(SQLModel, table=True):
     )
 
 
-class MyDiaryImage(SQLModel):
-    # TODO: this isn't really implemented currently
-    id: int
-    hash: bytes
-    name: str
-    filepath: Union[str, Path]
+class MyDiaryImage(SQLModel, table=True):
+    id: int = Field(primary_key=True)
+    hash: str = Field(index=True)
+    name: str = None
+    filepath: str = None
+    nextcloud_path: str = None
     description: str = None
-    created_at: datetime = None
+    thumbnail_size: int
+    joplin_resource_id: str = Field(index=True, default=None)
+    created_at: datetime = Field(index=True)
 
 
 class MyDiaryDay(SQLModel):
