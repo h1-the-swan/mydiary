@@ -53,9 +53,9 @@ export interface ValidationError {
 }
 
 export interface TagRead {
-  id: number;
   name: string;
   is_pocket_tag?: boolean;
+  id: number;
   num_pocket_articles?: number;
 }
 
@@ -133,7 +133,6 @@ export interface PocketArticleUpdate {
 }
 
 export interface PocketArticleRead {
-  id: number;
   given_title: string;
   resolved_title: string;
   url: string;
@@ -147,6 +146,8 @@ export interface PocketArticleRead {
   word_count?: number;
   excerpt?: string;
   top_image_url?: string;
+  id: number;
+  tags: TagRead[];
 }
 
 export interface PerformSongUpdate {
