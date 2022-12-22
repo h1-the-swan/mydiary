@@ -46,8 +46,10 @@ export type ReadGCalEventsParams = { offset?: number; limit?: number };
 
 export type RefreshGCalTokenParams = { code: string };
 
+export type ValidationErrorLocItem = string | number;
+
 export interface ValidationError {
-  loc: string[];
+  loc: ValidationErrorLocItem[];
   msg: string;
   type: string;
 }
@@ -240,10 +242,6 @@ export interface DogCreate {
 }
 
 
-
-type AwaitedInput<T> = PromiseLike<T> | T;
-
-      type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 
 /**
