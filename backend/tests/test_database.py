@@ -131,3 +131,7 @@ def test_add_tags(caplog, db_session: Session):
 
     db_tags = db_session.exec(select(Tag)).all()
     assert len(db_tags) == n
+
+
+class TestMyDiaryImage:
+    JOPLIN_TEST_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
