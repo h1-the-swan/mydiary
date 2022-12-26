@@ -418,7 +418,7 @@ class MyDiaryImage(SQLModel, table=True):
     description: str = None
     thumbnail_size: int
     joplin_resource_id: str = Field(index=True, default=None)
-    created_at: datetime = Field(index=True)
+    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
 
 
 class MyDiaryDay(SQLModel):
