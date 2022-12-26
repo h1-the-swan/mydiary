@@ -1,6 +1,7 @@
 import json
 import uuid
 import logging
+import hashlib
 from pathlib import Path
 from mydiary.spotify_connector import MyDiarySpotify
 import pendulum
@@ -10,7 +11,8 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, GoogleCalendarEvent, PocketArticle, PocketStatusEnum, Tag, SpotifyTrackHistory
+from mydiary.models import Dog, GoogleCalendarEvent, PocketArticle, PocketStatusEnum, Tag, SpotifyTrackHistory, MyDiaryImage
+from mydiary.core import reduce_size_recurse
 
 
 @pytest.fixture(name="db_session")
@@ -135,3 +137,35 @@ def test_add_tags(caplog, db_session: Session):
 
 class TestMyDiaryImage:
     JOPLIN_TEST_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
+
+    def test_add_thumbnail(self, rootdir: str, db_session: Session):
+        fp = Path(rootdir).joinpath("images/22-04-28 17-20-37 4351.jpg")
+        image_name = fp.stem
+        image_bytes = fp.read_bytes()
+        image_bytes = reduce_size_recurse(image_bytes, (512, 512), 60000)
+        fmt = "YY-MM-DD HH-mm-ss SSSS"
+        image_dt = pendulum.from_format(image_name, fmt, tz="America/Los_Angeles")
+        image_hash = hashlib.md5()
+        image_hash.update(image_bytes)
+        nextcloud_path = '/remote.php/dav/files/admin/H1phone_sync/2022/04/22-04-19%2017-25-08%204306.jpg'
+        mydiary_image = MyDiaryImage(
+            hash=image_hash.hexdigest(),
+            name=image_name,
+            filepath=None,
+            nextcloud_path=nextcloud_path,
+            description=None,
+            thumbnail_size=len(image_bytes),
+            joplin_resource_id=None,
+            created_at=image_dt.in_timezone("UTC"),
+        )
+        db_session.add(mydiary_image)
+        db_session.commit()
+
+        db_image = db_session.exec(select(MyDiaryImage).where(MyDiaryImage.hash == image_hash.hexdigest())).one()
+        assert db_image.id == 1
+        assert db_image.hash == image_hash.hexdigest()
+        assert db_image.nextcloud_path == nextcloud_path
+        assert db_image.thumbnail_size == len(image_bytes)
+        assert db_image.thumbnail_size < 60000
+        db_image_dt = pendulum.instance(db_image.created_at, tz="UTC")
+        assert db_image_dt == image_dt

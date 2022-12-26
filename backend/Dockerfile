@@ -1,23 +1,28 @@
 FROM python:3.8
 
+ENV POETRY_VERSION=1.3.1
+
 # Setup a spot for the api code
 WORKDIR /usr/local/src/app/backend
 
 COPY poetry.lock .
 COPY pyproject.toml .
 
-RUN pip install poetry
-
-# Copy over the source code
-COPY . .
+RUN pip install "poetry==$POETRY_VERSION"
 
 # Project initialization:
 RUN poetry config virtualenvs.create false \
-  && poetry install --no-interaction --no-ansi
+  && poetry install --no-interaction --no-ansi --no-root
 
 # RUN poetry run python app.py --generate-openapi-json ./api.json
 
 # EXPOSE 8888
+
+# Copy over the source code
+COPY . .
+
+# Run poetry install again, this time to install the root package
+RUN poetry install --no-interaction --no-ansi
 
 # https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
 ENV NODE_VERSION=17.7.1
