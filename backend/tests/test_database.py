@@ -147,7 +147,7 @@ class TestMyDiaryImage:
         image_dt = pendulum.from_format(image_name, fmt, tz="America/Los_Angeles")
         image_hash = hashlib.md5()
         image_hash.update(image_bytes)
-        nextcloud_path = '/remote.php/dav/files/admin/H1phone_sync/2022/04/22-04-19%2017-25-08%204306.jpg'
+        nextcloud_path = 'H1phone_sync/2022/04/22-04-19%2017-25-08%204306.jpg'
         mydiary_image = MyDiaryImage(
             hash=image_hash.hexdigest(),
             name=image_name,
