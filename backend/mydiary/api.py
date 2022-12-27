@@ -3,6 +3,7 @@ import requests
 import io
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple
+from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -549,10 +550,10 @@ async def google_photos_add_to_joplin(
         await joplin_sync()
 
 
-def _modify_filepath(filepath):
-    filepath = filepath.split("/")[-4:]
-    filepath = "/".join(filepath)
-    return filepath
+# def _modify_filepath(filepath):
+#     filepath = filepath.split("/")[-4:]
+#     filepath = "/".join(filepath)
+#     return filepath
 
 
 @app.get(
@@ -571,7 +572,7 @@ def nextcloud_photos_thumbnails_url(dt: str):
     mydiary_nextcloud = MyDiaryNextcloud()
     filepaths = mydiary_nextcloud.get_filepaths_for_day(dt)
     # urls = [mydiary_nextcloud.get_image_thumbnail_url(fp) for fp in filepaths]
-    filepaths = [_modify_filepath(filepath) for filepath in filepaths]
+    # filepaths = [_modify_filepath(filepath) for filepath in filepaths]
     return filepaths
 
 
@@ -628,15 +629,22 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         sec_images = md_note.get_section_by_title("images")
         resource_ids = sec_images.get_resource_ids()
         if resource_ids:
+            # currently, an error is raised if there are already any images present.
+            # TODO: handle the case where there are already images present
             raise RuntimeError()
         size = (512, 512)
         bytes_threshold = 60000
         resource_ids = []
         for photo in photos:
             image_bytes = mydiary_nextcloud.get_image(photo)
-            if len(image_bytes) > bytes_threshold:
-                image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-            r = mydiary_joplin.create_resource(data=image_bytes)
+            image_name = Path(requests.utils.unquote(photo)).stem
+            created_at = mydiary_nextcloud.parse_datetime_from_filepath(photo)
+            r = mydiary_joplin.create_thumbnail(
+                image_bytes,
+                name=image_name,
+                nextcloud_path=photo,
+                created_at=created_at,
+            )
             r.raise_for_status()
             resource_id = r.json()["id"]
             resource_ids.append(f"![](:/{resource_id})")

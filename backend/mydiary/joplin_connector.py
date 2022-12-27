@@ -15,7 +15,8 @@ from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union
 
 from .core import reduce_image_size, reduce_size_recurse
-from .models import JoplinNote, JoplinFolder
+from .models import JoplinNote, JoplinFolder, MyDiaryImage
+from .db import engine, Session, select
 
 import logging
 
@@ -88,6 +89,10 @@ class MyDiaryJoplin:
     def __exit__(self, exc_type, exc_val, exc_tb):
         # this is called after the context manager ends
         self.teardown()
+
+    def new_session(self, engine=engine):
+        with Session(engine) as session:
+            return session
 
     @property
     def parent_notebook(self) -> JoplinFolder:
@@ -298,6 +303,7 @@ class MyDiaryJoplin:
             title = hash.hexdigest()
         if ext and ext.startswith("."):
             ext = ext[1:]
+        print(hash.hexdigest())
         props = {
             "id": hash.hexdigest(),
             "filename": f"{hash.hexdigest()}.{ext}",
@@ -403,4 +409,41 @@ class MyDiaryJoplin:
             f"{self.base_url}/resources/{resource_id}",
             params={"token": self.token},
         )
+        return r
+
+
+    def create_thumbnail(
+        self,
+        image_bytes: bytes,
+        name: Optional[str] = None,
+        nextcloud_path: Optional[str] = None,
+        created_at: Optional[pendulum.DateTime] = None,
+        session: Optional[Session] = None,
+    ) -> requests.Response:
+        size = (512, 512)
+        bytes_threshold = 60000
+        if len(image_bytes) > bytes_threshold:
+            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
+        r = self.create_resource(data=image_bytes, title=name)
+        r.raise_for_status()
+        if session is None:
+            session = self.new_session()
+        resource_id = r.json()["id"]
+        image_hash = hashlib.md5()
+        image_hash.update(image_bytes)
+        if created_at is None:
+            created_at = pendulum.now(tz="UTC")
+        mydiary_image = MyDiaryImage(
+            hash=image_hash.hexdigest(),
+            name=name,
+            filepath=None,
+            nextcloud_path=nextcloud_path,
+            description=None,
+            thumbnail_size=len(image_bytes),
+            joplin_resource_id=resource_id,
+            created_at=created_at.in_timezone("UTC"),
+        )
+        session.add(mydiary_image)
+        session.commit()
+
         return r

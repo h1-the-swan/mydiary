@@ -56,7 +56,6 @@ class MyDiaryNextcloud:
 
     def get_image(self, path_to_file: str) -> bytes:
         url = f"{self.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/{path_to_file}"
-        # TODO need to redo image urls/thumbnail urls and API interactions
         r = requests.get(url, auth=self.auth)
         r.raise_for_status()
         return r.content
@@ -89,6 +88,8 @@ class MyDiaryNextcloud:
             this_mimetype_type = self.get_mimetype_type(item)
             if this_mimetype_type == mimetype_type:
                 filepath = item.find("{DAV:}href").text
+                filepath = filepath.split("/")[-4:]
+                filepath = "/".join(filepath)
                 this_dt = self.parse_datetime_from_filepath(filepath)
                 if this_dt.is_same_day(dt):
                     yield filepath
