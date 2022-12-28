@@ -18,12 +18,6 @@ RUN poetry config virtualenvs.create false \
 
 # EXPOSE 8888
 
-# Copy over the source code
-COPY . .
-
-# Run poetry install again, this time to install the root package
-RUN poetry install --no-interaction --no-ansi
-
 # https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
 ENV NODE_VERSION=17.7.1
 # RUN apt install -y curl
@@ -35,8 +29,14 @@ RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
 ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
 RUN node --version
 RUN npm --version
-
 RUN npm install joplin
+
+# Copy over the source code
+COPY . .
+
+# Run poetry install again, this time to install the root package
+RUN poetry install --no-interaction --no-ansi
+
 RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
 RUN npx joplin config sync.5.username ${NEXTCLOUD_USERNAME}
 RUN npx joplin config sync.5.password ${NEXTCLOUD_PASSWORD}
