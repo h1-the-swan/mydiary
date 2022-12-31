@@ -1,9 +1,11 @@
 import React, { useCallback, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Form, Button, Alert, DatePicker, Space } from "antd";
+import { Form, Button, Alert, DatePicker, Space, Divider, Collapse } from "antd";
 import { useJoplinSync, useJoplinInitNote, useJoplinUpdateNote } from "../api";
 import JoplinFindNote from "../components/JoplinFindNote";
+import JoplinInitOrUpdateDiaryNote from "../components/JoplinInitOrUpdateDiaryNote";
 import moment from "moment";
+import GCalRefreshToken from "../components/GCalRefreshToken";
 
 const TestJoplin = () => {
   const [noteId, setNoteId] = useState<string>();
@@ -21,67 +23,19 @@ const TestJoplin = () => {
   } else {
     dtMoment = moment(dt);
   }
-  const mutationJoplinSync = useJoplinSync({
-    mutation: {
-      onSuccess: () => setLastSync(new Date()),
-    },
-  });
-  const mutationJoplinInitNote = useJoplinInitNote({ mutation: { retry: 5 } });
-  const mutationJoplinUpdateNote = useJoplinUpdateNote({
-    mutation: { retry: 5 },
-  });
   return (
     <main>
-      <Space direction="vertical">
-        <DatePicker
-          defaultValue={dtMoment}
-          onChange={(date: any, dateString: string) => {
-            setSearchParams({ dt: dateString });
-          }}
-        />
-        {lastSync ? <p>{`Last Joplin sync: ${lastSync}`}</p> : null}
-        {mutationJoplinSync.isLoading && <p>Joplin: currently syncing...</p>}
-        <JoplinFindNote
-          dt={dt}
-          setNoteId={setNoteId}
-          lastSync={lastSync}
-          setLastSync={setLastSync}
-          mutationJoplinSync={mutationJoplinSync}
-        />
-        {noteId === "does_not_exist" ? (
-          <Button
-            onClick={() => mutationJoplinInitNote.mutate({ dt: dt })}
-            loading={mutationJoplinInitNote.isLoading}
-          >
-            Init Note
-          </Button>
-        ) : (
-          <Button
-            onClick={() => mutationJoplinUpdateNote.mutate({ dt: dt })}
-            loading={mutationJoplinUpdateNote.isLoading}
-          >
-            Update Note: {dt}
-          </Button>
-        )}
-        {mutationJoplinInitNote.isError && (
-          <Alert
-            message={`Error: ${mutationJoplinInitNote.error.message}`}
-            type="error"
-          />
-        )}
-        {mutationJoplinInitNote.isSuccess && (
-          <Alert message={`Init note: success`} type="success" closable />
-        )}
-        {mutationJoplinUpdateNote.isError && (
-          <Alert
-            message={`Error: ${mutationJoplinUpdateNote.error.message}`}
-            type="error"
-          />
-        )}
-        {mutationJoplinUpdateNote.isSuccess && (
-          <Alert message={`Update note: success`} type="success" closable />
-        )}
-      </Space>
+      <Collapse defaultActiveKey={"2"}>
+        <Collapse.Panel header="Refresh Google Calendar Token" key="1">
+          <GCalRefreshToken />
+        </Collapse.Panel>
+        <Divider />
+        <Collapse.Panel header="Initialize or Update Joplin Note" key="2">
+          <Space direction="vertical">
+            <JoplinInitOrUpdateDiaryNote dt={dt} />
+          </Space>
+        </Collapse.Panel>
+      </Collapse>
     </main>
   );
 };
