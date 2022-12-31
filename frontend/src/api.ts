@@ -163,6 +163,7 @@ export interface PerformSongUpdate {
   key?: string;
   capo?: number;
   lyrics?: string;
+  learned_dt?: string;
 }
 
 export interface PerformSongRead {
@@ -176,6 +177,7 @@ export interface PerformSongRead {
   key?: string;
   capo?: number;
   lyrics?: string;
+  learned_dt?: string;
   id: number;
 }
 
@@ -190,6 +192,7 @@ export interface PerformSongCreate {
   key?: string;
   capo?: number;
   lyrics?: string;
+  learned_dt?: string;
 }
 
 export interface HTTPValidationError {
