@@ -102,6 +102,7 @@ class PerformSongUpdate(SQLModel):
     key: Optional[str]
     capo: Optional[int]
     lyrics: Optional[str]
+    learned_dt: Optional[datetime] = None
 
 
 class DogRead(DogBase):
