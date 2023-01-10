@@ -259,6 +259,7 @@ class PocketArticleBase(SQLModel):
         return ret
 
     def collect_tags(self, session: Optional["Session"] = None):
+        # TODO: This doesn't work. Fix it.
         from .pocket_connector import MyDiaryPocket
 
         return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session)

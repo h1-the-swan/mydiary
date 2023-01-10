@@ -599,7 +599,7 @@ def get_nextcloud_thumbnail_dims(url: str):
     # https://github.com/tiangolo/fastapi/issues/3258
     # response_class=Response,
 )
-def get_nextcloud_image(url: str) -> Response:
+def get_nextcloud_image(url: str):
     mydiary_nextcloud = MyDiaryNextcloud()
     print(url)
     # r = requests.get(url, auth=mydiary_nextcloud.auth)
