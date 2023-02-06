@@ -9,7 +9,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.8"
-python-dotenv = "^0.21.0"
+python-dotenv = "^0.21.1"
 pydantic = "^1.10.4"
 spotipy = "^2.19.0"
 pocket = "^0.3.6"
