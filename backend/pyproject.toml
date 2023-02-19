@@ -27,7 +27,7 @@ lxml = "^4.9.0"
 [tool.poetry.dev-dependencies]
 pytest = "^7.2"
 jupyter = "^1.0.0"
-black = "^23.1a1"
+black = "^23.1"
 humanfriendly = "^10.0"
 pandas = "^1.5.3"
 SQLAlchemy = "^1.4.27"
