@@ -31,6 +31,7 @@ from .models import (
     PocketArticle,
     PocketArticleBase,
     GooglePhotosThumbnail,
+    JoplinNote,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
@@ -444,6 +445,19 @@ async def joplin_init_note(dt: str, tz: str = "local"):
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
             print(e)
             raise
+
+
+@app.get(
+    "/joplin/get_note/{note_id}",
+    operation_id="joplinGetNote",
+    response_model=JoplinNote,
+)
+def joplin_get_note(note_id: str):
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        note = mydiary_joplin.get_note(id)
+        return note
 
 
 @app.post(
