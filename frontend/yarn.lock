@@ -1286,15 +1286,22 @@
   resolved "https://registry.yarnpkg.com/@humanwhocodes/object-schema/-/object-schema-1.2.1.tgz#b520529ec21d8e5945a1851dfd1c32e94e39ff45"
   integrity sha512-ZnQMnLV4e7hDlUvw8H+U8ASL02SS2Gn6+9Ac3wGGLIe7+je2AeAOxPY+izIPJDfFDb7eDjev0Us8MO1iFRN8hA==
 
-"@ibm-cloud/openapi-ruleset@0.37.3":
-  version "0.37.3"
-  resolved "https://registry.yarnpkg.com/@ibm-cloud/openapi-ruleset/-/openapi-ruleset-0.37.3.tgz#b7916359d860c5cc4af571d69b65d655b5334787"
-  integrity sha512-saQM/1YTfhW7ou/mtmC4BMUhW/UM54aD47KBZucjrZLvAelzt8Lykm5zeN59Cu4cs/LBDEcvJfyZzDpPhdcVjQ==
+"@ibm-cloud/openapi-ruleset-utilities@0.0.1":
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/@ibm-cloud/openapi-ruleset-utilities/-/openapi-ruleset-utilities-0.0.1.tgz#e3652622d04aba12214caca90886fb9a25891b5b"
+  integrity sha512-LBWf21EYmOJnM4azYPM4LsNbiH9GBK8rc1dwmDhuUELI43dEOGWSs2ateLn8/E9vyrVELGwQ1Y3Bu61YHa8kaA==
+
+"@ibm-cloud/openapi-ruleset@0.45.5":
+  version "0.45.5"
+  resolved "https://registry.yarnpkg.com/@ibm-cloud/openapi-ruleset/-/openapi-ruleset-0.45.5.tgz#d2de80302fe800e6abb335705d06b63d2528203e"
+  integrity sha512-8FqJQj8osll6iLOD5JsFWR+kOU1HbCp1Z2PjHeE67Wb/srz7V9B+YyjZOO9QAgLLHwvgt07XS13FQ+ArNNetGg==
   dependencies:
+    "@ibm-cloud/openapi-ruleset-utilities" "0.0.1"
     "@stoplight/spectral-formats" "^1.1.0"
     "@stoplight/spectral-functions" "^1.6.1"
     "@stoplight/spectral-rulesets" "^1.6.0"
     lodash "^4.17.21"
+    validator "^13.7.0"
 
 "@istanbuljs/load-nyc-config@^1.0.0":
   version "1.1.0"
@@ -1596,24 +1603,24 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@orval/angular@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/angular/-/angular-6.11.0.tgz#47fcca1a97d69ca2e19e2e6843b3eb45cce64541"
-  integrity sha512-4mYJ1KIloPn8W+ZWRszNJBxiV2AE2mCQ3KfQnUa/jh4YllOOjWto03GA3sr3IRGdJXwlN3/Esp6dQNQjto5Z+w==
+"@orval/angular@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/angular/-/angular-6.13.1.tgz#39bcd0588919de96412dae820c57e9b647a69d05"
+  integrity sha512-3OyRCs0ileJih+ptOsnSBVWy4Fwt4fhvauKXl14oNrJ+gqw6b04/5uWKF4KyKRTIRk3ZuXvIN6xdTwqHHF0yig==
   dependencies:
-    "@orval/core" "6.11.0"
+    "@orval/core" "6.13.1"
 
-"@orval/axios@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/axios/-/axios-6.11.0.tgz#4f4af25f3096327eb34914c0fefddb0fecff9715"
-  integrity sha512-SSuWbS68v/nfcvxDdXntyPxRY0lCAbgMwnZ+V0cnq00G9Lgljiql2gPKOO3cnQhmpAiYIf8Zs6skSeIzrXxfiA==
+"@orval/axios@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/axios/-/axios-6.13.1.tgz#f98b3f0556875a9fc43c4168fe24596e3300bfdf"
+  integrity sha512-Oo/oRPzb3sFElZhHm8wtEryF6zEmdgl9E71cOdc6vU2hUR9WmPJ30iVHfGgxEKLGu3YacE5o/rhS4GYjOcoiFA==
   dependencies:
-    "@orval/core" "6.11.0"
+    "@orval/core" "6.13.1"
 
-"@orval/core@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/core/-/core-6.11.0.tgz#6b1d6cfd9f4a7016692db07ea6a480dc166307f1"
-  integrity sha512-PbH2PbpHbnLXrQWvLHUAm0lZHiD+Np7IGcVTLyXdDE9lGDpMY7jVxMLAB2aYhTZiSiyI6tIhSeaXPOykgVL8+g==
+"@orval/core@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/core/-/core-6.13.1.tgz#47771b4e90514a736c61c18a849ade5577428d4a"
+  integrity sha512-uf5q0YNIMgWFUBGkkIjpBMm21N6rmvTBcvdOuNpPjnSjgpc9w6C8nr6lRwo40n+S7u+Grh32c0v7mnXo/+L16A==
   dependencies:
     "@apidevtools/swagger-parser" "^10.1.0"
     acorn "^8.8.0"
@@ -1625,7 +1632,7 @@
     esutils "2.0.3"
     fs-extra "^10.1.0"
     globby "11.1.0"
-    ibm-openapi-validator "^0.88.0"
+    ibm-openapi-validator "^0.97.3"
     lodash.get "^4.4.2"
     lodash.isempty "^4.4.0"
     lodash.omit "^4.5.0"
@@ -1635,34 +1642,40 @@
     micromatch "^4.0.5"
     openapi3-ts "^3.0.0"
     swagger2openapi "^7.0.8"
-    url "^0.11.0"
     validator "^13.7.0"
 
-"@orval/msw@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/msw/-/msw-6.11.0.tgz#eb517a5aa98847b6bf5da686bd88f3ed3009a43b"
-  integrity sha512-g9oHX6IgqEQIJS6J0SJa3dUkDeZe/Iv6dgZ5Y0LorOgYfduAcfVjRepG/vnNu6mxmHbh5d2ZrxrSDZmxmuWU6Q==
+"@orval/msw@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/msw/-/msw-6.13.1.tgz#333a6387e75c81e481811a230b2e6c8d213d5f28"
+  integrity sha512-PhSQw9AP/rWD0vm1b5DwebNcjunZsoRaiETIjoUy0ahs9aDLcXvanz+0G3zrjPC+qPcgv02rinBA6vwUMNqUgA==
   dependencies:
-    "@orval/core" "6.11.0"
+    "@orval/core" "6.13.1"
     cuid "^2.1.8"
     lodash.get "^4.4.2"
     lodash.omit "^4.5.0"
     openapi3-ts "^3.0.0"
 
-"@orval/query@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/query/-/query-6.11.0.tgz#3bfbe4a1aefb19dd93176ddf696a16a4512df19d"
-  integrity sha512-nYgHVpEc3reHGryWhyap74+NoZlCAqZh0aULKcJD5jYCIXn8+SNt3kEeB1tjIzTbiESc5DGa3pUzEP8hJ7FN9Q==
+"@orval/query@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/query/-/query-6.13.1.tgz#ad3cd630b8a30f6f04f1e640e73aa4688eeac1c2"
+  integrity sha512-J9wCpaiDBvXJzm6m798g61INL4tBEw3E7SkRzdIaDN5bekd7nrKatc3tCVPxjrEh0F6iPE6qy93V3brtYJecJQ==
   dependencies:
-    "@orval/core" "6.11.0"
+    "@orval/core" "6.13.1"
     lodash.omitby "^4.6.0"
 
-"@orval/swr@6.11.0":
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/@orval/swr/-/swr-6.11.0.tgz#52e5b01924c3cbb179aad46fc9b734eb907a9d73"
-  integrity sha512-ONwjmk6Hxt+ozVVZast4pvc/hnhBzC+KkWPmpdFdoyrpgvIkAsulkuWQV12Sgo3KwSDH5abIOvexgeha7UaZxA==
+"@orval/swr@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/swr/-/swr-6.13.1.tgz#b2b2dfad7688feced6331ea78429a6b4aa053dbc"
+  integrity sha512-4WVN+Dv7ntqJjGRZup+tc64F8HlMKpZhpENhBSHnKcDg2P2K2vU4GBTX6yuqSN0rRi8vvbsYlyDV4C0Lvkd6cg==
   dependencies:
-    "@orval/core" "6.11.0"
+    "@orval/core" "6.13.1"
+
+"@orval/zod@6.13.1":
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/@orval/zod/-/zod-6.13.1.tgz#0652460e10443c34e42eeb63b26ca774e951ec78"
+  integrity sha512-rKvtR8ccxxIbZd5FApY1AWWSOAo/+gVeqTZVXbQPK8OzBJ+NNBQiWbOI7IPzgyQpVqgXXzPg6KzojHCmzXmYUg==
+  dependencies:
+    "@orval/core" "6.13.1"
 
 "@pmmmwh/react-refresh-webpack-plugin@^0.5.3":
   version "0.5.4"
@@ -6037,12 +6050,12 @@ human-signals@^2.1.0:
   resolved "https://registry.yarnpkg.com/human-signals/-/human-signals-2.1.0.tgz#dc91fcba42e4d06e4abaed33b3e7a3c02f514ea0"
   integrity sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==
 
-ibm-openapi-validator@^0.88.0:
-  version "0.88.3"
-  resolved "https://registry.yarnpkg.com/ibm-openapi-validator/-/ibm-openapi-validator-0.88.3.tgz#3dc12ac9d81ee4c8feb75307ea4477d9fa94f4aa"
-  integrity sha512-WHkkO5TXWSS12P8VybB04Stq+yFloMlHy2aVzcLAZo425PYIVMuIWhsH7zN9vwcZcOB/qAnWQ4T3PKn6wrcT+Q==
+ibm-openapi-validator@^0.97.3:
+  version "0.97.5"
+  resolved "https://registry.yarnpkg.com/ibm-openapi-validator/-/ibm-openapi-validator-0.97.5.tgz#282c8e298066cae91ecbd9bc69f6f3a86ff9efa2"
+  integrity sha512-MlXLjQCZRU0yqQ6EFzBhCehkFXp/rXuGsjsEglK+ldDJZV/YQy7dw1V6ROzoiibjm0f00J7L3ubLvlbIlHilGQ==
   dependencies:
-    "@ibm-cloud/openapi-ruleset" "0.37.3"
+    "@ibm-cloud/openapi-ruleset" "0.45.5"
     "@stoplight/spectral-cli" "^6.4.2"
     "@stoplight/spectral-core" "^1.12.4"
     "@stoplight/spectral-parsers" "^1.0.1"
@@ -6060,7 +6073,6 @@ ibm-openapi-validator@^0.88.0:
     pad "^2.3.0"
     require-all "^3.0.0"
     semver "^5.7.1"
-    validator "^13.7.0"
     yaml-js "^0.2.3"
 
 iconv-lite@0.4.24:
@@ -7920,18 +7932,19 @@ optionator@^0.9.1:
     type-check "^0.4.0"
     word-wrap "^1.2.3"
 
-orval@^6.11.0:
-  version "6.11.0"
-  resolved "https://registry.yarnpkg.com/orval/-/orval-6.11.0.tgz#d63f9e85ddda6cb5df3395f082230832a2907e9f"
-  integrity sha512-oABYZWFKW4PtEv0Kb3Zqg0mIi75J3gMvq9Km8fjo+Ku0gzpdXhUKkeQUisvJXBPsRBTGkWBDRtCuRhqakCNH4w==
+orval@^6.13.1:
+  version "6.13.1"
+  resolved "https://registry.yarnpkg.com/orval/-/orval-6.13.1.tgz#5d23a1cfb189c116951c9cb8476e0da09f11d8bb"
+  integrity sha512-78q+fpJ+DawaIRJGl7pLDr3mJSK5hBnKeqt1T9gQcL6InWd60F9kUcjzV66hGoa5fO6kiB+pbzxLubhunxwPWg==
   dependencies:
     "@apidevtools/swagger-parser" "^10.1.0"
-    "@orval/angular" "6.11.0"
-    "@orval/axios" "6.11.0"
-    "@orval/core" "6.11.0"
-    "@orval/msw" "6.11.0"
-    "@orval/query" "6.11.0"
-    "@orval/swr" "6.11.0"
+    "@orval/angular" "6.13.1"
+    "@orval/axios" "6.13.1"
+    "@orval/core" "6.13.1"
+    "@orval/msw" "6.13.1"
+    "@orval/query" "6.13.1"
+    "@orval/swr" "6.13.1"
+    "@orval/zod" "6.13.1"
     ajv "^8.11.0"
     cac "^6.7.12"
     chalk "^4.1.2"
@@ -8828,11 +8841,6 @@ psl@^1.1.33:
   resolved "https://registry.yarnpkg.com/psl/-/psl-1.8.0.tgz#9326f8bcfb013adcc005fdff056acce020e51c24"
   integrity sha512-RIdOzyoavK+hA18OGGWDqUTsCLhtA7IcZ/6NCs4fFJaHBDab+pDDmDIByWFRQJq2Cd7r1OoQxBGKOaztq+hjIQ==
 
-punycode@1.3.2:
-  version "1.3.2"
-  resolved "https://registry.yarnpkg.com/punycode/-/punycode-1.3.2.tgz#9653a036fb7c1ee42342f2325cceefea3926c48d"
-  integrity sha1-llOgNvt8HuQjQvIyXM7v6jkmxI0=
-
 punycode@^2.1.0, punycode@^2.1.1:
   version "2.1.1"
   resolved "https://registry.yarnpkg.com/punycode/-/punycode-2.1.1.tgz#b58b010ac40c22c5657616c8d2c2c02c7bf479ec"
@@ -8847,11 +8855,6 @@ qs@6.9.7:
   version "6.9.7"
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.9.7.tgz#4610846871485e1e048f44ae3b94033f0e675afe"
   integrity sha512-IhMFgUmuNpyRfxA90umL7ByLlgRXu6tIfKPpF5TmcfRLlLCckfP/g3IQmju6jjpu+Hh8rA+2p6A27ZSPOOHdKw==
-
-querystring@0.2.0:
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/querystring/-/querystring-0.2.0.tgz#b209849203bb25df820da756e747005878521620"
-  integrity sha1-sgmEkgO7Jd+CDadW50cAWHhSFiA=
 
 queue-microtask@^1.2.2:
   version "1.2.3"
@@ -10800,14 +10803,6 @@ urijs@^1.19.11, urijs@^1.19.6:
   version "1.19.11"
   resolved "https://registry.yarnpkg.com/urijs/-/urijs-1.19.11.tgz#204b0d6b605ae80bea54bea39280cdb7c9f923cc"
   integrity sha512-HXgFDgDommxn5/bIv0cnQZsPhHDA90NPHD6+c/v21U5+Sx5hoP8+dP9IZXBU1gIfvdRfhG8cel9QNPeionfcCQ==
-
-url@^0.11.0:
-  version "0.11.0"
-  resolved "https://registry.yarnpkg.com/url/-/url-0.11.0.tgz#3838e97cfc60521eb73c525a8e55bfdd9e2e28f1"
-  integrity sha1-ODjpfPxgUh63PFJajlW/3Z4uKPE=
-  dependencies:
-    punycode "1.3.2"
-    querystring "0.2.0"
 
 util-deprecate@^1.0.1, util-deprecate@^1.0.2, util-deprecate@~1.0.1:
   version "1.0.2"
