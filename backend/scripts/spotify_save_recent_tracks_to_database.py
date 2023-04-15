@@ -22,33 +22,11 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from mydiary.spotify_connector import MyDiarySpotify
-from sqlmodel import Session, select
-from mydiary.spotify_history import SpotifyTrackHistory, SpotifyTrackHistoryCreate
-from mydiary.db import engine
 
 
 def main(args):
     mydiary_spotify = MyDiarySpotify()
-    recent_tracks = mydiary_spotify.sp.current_user_recently_played()['items']
-    with Session(engine) as session:
-        num_added = 0
-        num_skipped = 0
-        for t in recent_tracks:
-            spotify_track = SpotifyTrackHistoryCreate.from_spotify_track(t)
-            stmt = (
-                select(SpotifyTrackHistory)
-                .where(SpotifyTrackHistory.spotify_id == spotify_track.spotify_id)
-                .where(SpotifyTrackHistory.played_at == spotify_track.played_at)
-            )
-            existing_row = session.exec(stmt).one_or_none()
-            if existing_row:
-                num_skipped += 1
-                continue
-            session.add(SpotifyTrackHistory.from_orm(spotify_track))
-            num_added += 1
-        logger.debug(f"skipped {num_skipped} tracks because they were already in the database")
-        logger.info(f"adding {num_added} new rows to database")
-        session.commit()
+    mydiary_spotify.save_recent_tracks_to_database()
 
 
 if __name__ == "__main__":
