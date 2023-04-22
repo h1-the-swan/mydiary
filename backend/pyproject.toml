@@ -10,7 +10,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.8"
 python-dotenv = "^0.21.1"
-pydantic = "^1.10.4"
+pydantic = "^1.10.7"
 spotipy = "^2.22.1"
 pocket = "^0.3.6"
 google-api-python-client = "^2.78.0"
