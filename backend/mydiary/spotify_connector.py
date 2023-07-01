@@ -192,31 +192,39 @@ class MyDiarySpotify:
     def hydrate_context(self, context_uri: str, force: bool = False) -> Dict:
         if context_uri in self.context_cache and force is False:
             return self.context_cache[context_uri]
-        if "playlist" in context_uri:
-            r = self.sp.playlist(context_uri, fields="id,uri,name,type")
-            context_uri = r["uri"]
-            context_name = r["name"]
-            context_type = r["type"]
-        elif "artist" in context_uri:
-            r = self.sp.artist(context_uri)
-            context_uri = r["uri"]
-            context_name = r["name"]
-            context_type = r["type"]
-        elif "album" in context_uri:
-            r = self.sp.album(context_uri)
-            artists = ", ".join([artist["name"] for artist in r["artists"]])
-            album_name = f"{artists} - {r['name']}"
-            context_uri = r["uri"]
-            context_name = album_name
-            context_type = r["type"]
-        else:
-            raise ValueError(
-                "invalid context_uri. must be one of [playlist, album, artist]"
-            )
+        bypass_cache = False
+        try:
+            if "playlist" in context_uri:
+                r = self.sp.playlist(context_uri, fields="id,uri,name,type")
+                context_uri = r["uri"]
+                context_name = r["name"]
+                context_type = r["type"]
+            elif "artist" in context_uri:
+                r = self.sp.artist(context_uri)
+                context_uri = r["uri"]
+                context_name = r["name"]
+                context_type = r["type"]
+            elif "album" in context_uri:
+                r = self.sp.album(context_uri)
+                artists = ", ".join([artist["name"] for artist in r["artists"]])
+                album_name = f"{artists} - {r['name']}"
+                context_uri = r["uri"]
+                context_name = album_name
+                context_type = r["type"]
+            else:
+                raise ValueError(
+                    "invalid context_uri. must be one of [playlist, album, artist]"
+                )
+        except spotipy.SpotifyException as e:
+            logger.warning(f"HTTPError found when trying to get data for {context_uri}")
+            logger.exception(e)
+            context_name = ""
+            context_type = context_uri.split(':')[1]
         context = {
             "context_uri": context_uri,
             "context_name": context_name,
             "context_type": context_type,
         }
-        self.context_cache[context_uri] = context
+        if bypass_cache is False:
+            self.context_cache[context_uri] = context
         return context

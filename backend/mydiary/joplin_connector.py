@@ -181,7 +181,7 @@ class MyDiaryJoplin:
         if self.server_process is not None:
             self.server_process.terminate()
 
-    def sync(self, timeout: int = 30) -> bool:
+    def sync(self, timeout: int = 200) -> bool:
         # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
         pattern = re.compile(r"Completed: (\d.*)\(")
         p = subprocess.run(
