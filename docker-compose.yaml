@@ -75,22 +75,23 @@ services:
     networks:
       - proxy-tier
       - default
-  cloudflared:
-    image: cloudflare/cloudflared:2022.7.1
-    # volumes: 
-    #   - ./cloudflared:/etc/cloudflared
-    # env_file:
-    #   - ./cloudflared/cloudflared.env
-    # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --hello-world'
-    # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --url http://localhost:48916'
-    command: 'tunnel --no-autoupdate --loglevel debug run --token ${CLOUDFLARED_TOKEN} --url http://proxy:80'
-    # ports:
-    #   - 8080:8080
-    restart: 'on-failure'
-    networks:
-      - proxy-tier
-    depends_on:
-      - proxy
+  # cloudflared:
+  #   image: cloudflare/cloudflared:2023.5.1
+  #   # volumes: 
+  #   #   - ./cloudflared:/etc/cloudflared
+  #   # env_file:
+  #   #   - ./cloudflared/cloudflared.env
+  #   # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --hello-world'
+  #   # command: 'tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN} --url http://localhost:48916'
+  #   # command: 'tunnel --no-autoupdate --loglevel debug run --token ${CLOUDFLARED_TOKEN} --url http://proxy:80'
+  #   command: 'tunnel --no-autoupdate --loglevel debug run --token ${CLOUDFLARED_TOKEN}'
+  #   # ports:
+  #   #   - 8080:8080
+  #   restart: 'on-failure'
+  #   networks:
+  #     - proxy-tier
+  #   depends_on:
+  #     - proxy
 
 volumes:
   joplin_data:
