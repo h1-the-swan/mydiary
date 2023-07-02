@@ -5,10 +5,10 @@ ENV POETRY_VERSION=1.5.1
 # Setup a spot for the api code
 WORKDIR /usr/local/src/app/backend
 
+RUN pip install "poetry==$POETRY_VERSION"
+
 COPY poetry.lock .
 COPY pyproject.toml .
-
-RUN pip install "poetry==$POETRY_VERSION"
 
 # Project initialization:
 RUN poetry config virtualenvs.create false \
