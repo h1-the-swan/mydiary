@@ -608,13 +608,13 @@ tests = ["asttokens", "littleutils", "pytest", "rich"]
 
 [[package]]
 name = "fastapi"
-version = "0.99.0"
+version = "0.99.1"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "fastapi-0.99.0-py3-none-any.whl", hash = "sha256:b87fffddf9c761c5618f638b492cfb73bba1d208ab170b89122cce52d1fb044a"},
-    {file = "fastapi-0.99.0.tar.gz", hash = "sha256:eab70f072d6c424d16f02ba635dc0945fecab549210e7961c838f4b467f0b4a7"},
+    {file = "fastapi-0.99.1-py3-none-any.whl", hash = "sha256:976df7bab51ac7beda9f68c4513b8c4490b5c1135c72aafd0a5ee4023ec5282e"},
+    {file = "fastapi-0.99.1.tar.gz", hash = "sha256:ac78f717cd80d657bd183f94d33b9bda84aa376a46a9dab513586b8eef1dc6fc"},
 ]
 
 [package.dependencies]
@@ -3736,4 +3736,4 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "e35fce1aef8e019451763d4827721f29825976a675d29e3892cffdc42a315ff7"
+content-hash = "1ac7e3662f0e626a605ac47cf3a0e8280b090c319c5bf7d074c140f3cda715fc"
