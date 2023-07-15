@@ -32,7 +32,7 @@
 				</v-card-text>
 			</div>
 		</v-expand-transition>
-		<li v-for="item in performSongs" :key="item.name">
+		<li v-for="item in performSongs" :key="item.id">
 			{{ item.name }}
 		</li>
 	</v-card>
@@ -49,5 +49,5 @@ const performSongs = ref<PerformSongRead[]>()
 onMounted(async () => {
 	performSongs.value = await readPerformSongsList().then((res) => res.data);
 })
-console.log(performSongs);
+// const performSongs = await readPerformSongsList().then((res) => res.data);  // this would require Suspense (currently experimental)
 </script>
