@@ -1,0 +1,25 @@
+{
+	"name": "mydiary-vuetify-dev",
+	"dockerComposeFile": [
+		"../docker-compose.yaml"
+	],
+	"service": "mydiary-vuetify",
+	"workspaceFolder": "/usr/local/src/app/mydiary-vuetify",
+	"shutdownAction": "none",
+
+	// Configure tool-specific properties.
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			// Add the IDs of extensions you want installed when the container is created.
+			"extensions": [
+				"dbaeumer.vscode-eslint",
+				"Vue.volar",
+				"Vue.vscode-typescript-vue-plugin"
+			]
+		}
+	}
+	
+
+}
+
