@@ -1,15 +1,17 @@
 <template>
-  <v-data-table :headers="headers" :items="desserts" :sort-by="[{ key: 'calories', order: 'asc' }]" class="elevation-1">
+  <v-data-table :headers="headers" :items="desserts" :sort-by="[{ key: 'calories', order: 'asc' }]" :search="search"
+    class="elevation-1">
     <template v-slot:top>
       <v-toolbar flat>
         <v-toolbar-title>My CRUD</v-toolbar-title>
         <v-divider class="mx-4" inset vertical></v-divider>
         <v-spacer></v-spacer>
+      <v-text-field v-model="search" append-icon="mdi-magnify" label="Search" single-line hide-details></v-text-field>
         <data-table-modal v-model:dialog="dialog" v-model:edited-index="editedIndex" v-model:edited-item="editedItem"
           @save="onSave" @close="onClose" />
-      <v-btn color="primary" dark class="mb-2" @click="dialog = true">
-        New Item
-      </v-btn>
+        <v-btn color="primary" dark class="mb-2" @click="dialog = true">
+          New Item
+        </v-btn>
         <v-dialog v-model="dialogDelete" max-width="500px">
           <v-card>
             <v-card-title class="text-h5">Are you sure you want to delete this item?</v-card-title>
@@ -43,6 +45,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import DataTableModal from './DataTableModal.vue';
 
+const search = ref('');
 const dialog = ref(false);
 const dialogDelete = ref(false);
 interface IHeader {
