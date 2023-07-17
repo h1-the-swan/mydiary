@@ -5,6 +5,11 @@
         <v-toolbar-title>My CRUD</v-toolbar-title>
         <v-divider class="mx-4" inset vertical></v-divider>
         <v-spacer></v-spacer>
+        <data-table-modal v-model:dialog="dialog" v-model:edited-index="editedIndex" v-model:edited-item="editedItem"
+          @save="onSave" @close="onClose" />
+      <v-btn color="primary" dark class="mb-2" @click="dialog = true">
+        New Item
+      </v-btn>
         <v-dialog v-model="dialogDelete" max-width="500px">
           <v-card>
             <v-card-title class="text-h5">Are you sure you want to delete this item?</v-card-title>
@@ -36,8 +41,10 @@
 
 <script lang="ts" setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import DataTableModal from './DataTableModal.vue';
 
-const dialogDelete = ref(false)
+const dialog = ref(false);
+const dialogDelete = ref(false);
 interface IHeader {
   key: string;
   title: string;
@@ -168,13 +175,6 @@ function deleteItemConfirm() {
   desserts.value.splice(editedIndex.value, 1)
   closeDelete()
 }
-function close() {
-  dialog.value = false
-  nextTick(() => {
-    editedItem.value = Object.assign({}, defaultItem.value)
-    editedIndex.value = -1
-  })
-}
 function closeDelete() {
   dialogDelete.value = false
   nextTick(() => {
@@ -182,13 +182,18 @@ function closeDelete() {
     editedIndex.value = -1
   })
 }
-function save() {
+function onSave() {
   if (editedIndex.value > -1) {
     Object.assign(desserts.value[editedIndex.value], editedItem.value)
   } else {
     desserts.value.push(editedItem.value)
   }
-  close()
+}
+function onClose() {
+  nextTick(() => {
+    editedItem.value = Object.assign({}, defaultItem.value)
+    editedIndex.value = -1
+  })
 }
 watch(dialog, val => {
   val || close()

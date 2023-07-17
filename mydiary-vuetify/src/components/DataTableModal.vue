@@ -1,57 +1,50 @@
 <template>
-	<v-dialog v-model="dialog" max-width="500px">
-		<template v-slot:activator="{ props }">
-			<v-btn color="primary" dark class="mb-2" v-bind="props">
-				New Item
-			</v-btn>
-		</template>
-		<v-card>
-			<v-card-title>
-				<span class="text-h5">{{ formTitle }}</span>
-			</v-card-title>
+  <v-dialog v-model="dialog" max-width="500px">
+    <template v-slot:activator="{ props }">
+    </template>
+    <v-card>
+      <v-card-title>
+        <span class="text-h5">{{ formTitle }}</span>
+      </v-card-title>
 
-			<v-card-text>
-				<v-container>
-					<v-row>
-						<v-col cols="12" sm="6" md="4">
-							<v-text-field v-model="editedItem.name"
-								label="Dessert name"></v-text-field>
-						</v-col>
-						<v-col cols="12" sm="6" md="4">
-							<v-text-field v-model="editedItem.calories"
-								label="Calories"></v-text-field>
-						</v-col>
-						<v-col cols="12" sm="6" md="4">
-							<v-text-field v-model="editedItem.fat" label="Fat (g)"></v-text-field>
-						</v-col>
-						<v-col cols="12" sm="6" md="4">
-							<v-text-field v-model="editedItem.carbs"
-								label="Carbs (g)"></v-text-field>
-						</v-col>
-						<v-col cols="12" sm="6" md="4">
-							<v-text-field v-model="editedItem.protein"
-								label="Protein (g)"></v-text-field>
-						</v-col>
-					</v-row>
-				</v-container>
-			</v-card-text>
+      <v-card-text>
+        <v-container>
+          <v-row>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="editedItem.name" label="Dessert name"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="editedItem.calories" label="Calories"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="editedItem.fat" label="Fat (g)"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="editedItem.carbs" label="Carbs (g)"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="editedItem.protein" label="Protein (g)"></v-text-field>
+            </v-col>
+          </v-row>
+        </v-container>
+      </v-card-text>
 
-			<v-card-actions>
-				<v-spacer></v-spacer>
-				<v-btn color="blue-darken-1" variant="text" @click="close">
-					Cancel
-				</v-btn>
-				<v-btn color="blue-darken-1" variant="text" @click="save">
-					Save
-				</v-btn>
-			</v-card-actions>
-		</v-card>
-	</v-dialog>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="blue-darken-1" variant="text" @click="close">
+          Cancel
+        </v-btn>
+        <v-btn color="blue-darken-1" variant="text" @click="save">
+          Save
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script lang="ts" setup>
+import { toRefs } from 'vue';
 import { computed, nextTick, ref, watch } from 'vue'
-const dialog = ref(false)
 interface IDessert {
   name: string;
   calories: number;
@@ -59,120 +52,32 @@ interface IDessert {
   carbs: number;
   protein: number;
 }
-const desserts = ref<IDessert[]>([])
-const editedIndex = ref(-1)
-const editedItem = ref({
-  name: '',
-  calories: 0,
-  fat: 0,
-  carbs: 0,
-  protein: 0,
-})
-const defaultItem = ref({
-  name: '',
-  calories: 0,
-  fat: 0,
-  carbs: 0,
-  protein: 0,
-})
+interface IProps {
+  dialog: boolean;
+  editedIndex: number;
+  editedItem: IDessert;
+}
+const props = defineProps<IProps>();
+const emit = defineEmits(['save', 'update:dialog', 'update:editedItem', 'update:editedIndex', 'close']);
+const { dialog, editedIndex, editedItem } = toRefs(props);
 const formTitle = computed(() => {
   return editedIndex.value === -1 ? 'New Item' : 'Edit Item'
 })
-function initialize() {
-  desserts.value = [
-    {
-      name: 'Frozen Yogurt',
-      calories: 159,
-      fat: 6,
-      carbs: 24,
-      protein: 4,
-    },
-    {
-      name: 'Ice cream sandwich',
-      calories: 237,
-      fat: 9,
-      carbs: 37,
-      protein: 4.3,
-    },
-    {
-      name: 'Eclair',
-      calories: 262,
-      fat: 16,
-      carbs: 23,
-      protein: 6,
-    },
-    {
-      name: 'Cupcake',
-      calories: 305,
-      fat: 3.7,
-      carbs: 67,
-      protein: 4.3,
-    },
-    {
-      name: 'Gingerbread',
-      calories: 356,
-      fat: 16,
-      carbs: 49,
-      protein: 3.9,
-    },
-    {
-      name: 'Jelly bean',
-      calories: 375,
-      fat: 0,
-      carbs: 94,
-      protein: 0,
-    },
-    {
-      name: 'Lollipop',
-      calories: 392,
-      fat: 0.2,
-      carbs: 98,
-      protein: 0,
-    },
-    {
-      name: 'Honeycomb',
-      calories: 408,
-      fat: 3.2,
-      carbs: 87,
-      protein: 6.5,
-    },
-    {
-      name: 'Donut',
-      calories: 452,
-      fat: 25,
-      carbs: 51,
-      protein: 4.9,
-    },
-    {
-      name: 'KitKat',
-      calories: 518,
-      fat: 26,
-      carbs: 65,
-      protein: 7,
-    },
-  ]
-}
-function editItem(item: IDessert) {
-  editedIndex.value = desserts.value.indexOf(item)
-  editedItem.value = Object.assign({}, item)
-  dialog.value = true
+function save() {
+  // if (editedIndex.value > -1) {
+  //   Object.assign(desserts.value[editedIndex.value], editedItem.value)
+  // } else {
+  //   desserts.value.push(editedItem.value)
+  // }
+  emit('save');
+  close();
 }
 function close() {
-  dialog.value = false
-  nextTick(() => {
-    editedItem.value = Object.assign({}, defaultItem.value)
-    editedIndex.value = -1
-  })
+  emit('update:dialog', false);
+  // nextTick(() => {
+  //   editedItem.value = Object.assign({}, defaultItem.value)
+  //   editedIndex.value = -1
+  // })
+  emit('close');
 }
-function save() {
-  if (editedIndex.value > -1) {
-    Object.assign(desserts.value[editedIndex.value], editedItem.value)
-  } else {
-    desserts.value.push(editedItem.value)
-  }
-  close()
-}
-watch(dialog, val => {
-  val || close()
-})
 </script>
