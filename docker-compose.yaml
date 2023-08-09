@@ -75,6 +75,45 @@ services:
     networks:
       - proxy-tier
       - default
+  mydiary-vuetify:
+    build: ./mydiary-vuetify
+    # We can't mount the entire UI directory, since JavaScript dependencies
+    # (`node_modules`) live at that location.
+    restart: unless-stopped
+    # user: ${UID}:${GUID}
+    volumes:
+      - ./mydiary-vuetify/src:/usr/local/src/app/mydiary-vuetify/src
+      - ./mydiary-vuetify/public:/usr/local/src/app/mydiary-vuetify/public
+      - ./mydiary-vuetify/build:/usr/local/src/app/mydiary-vuetify/build
+      - ./mydiary-vuetify/package.json:/usr/local/src/app/mydiary-vuetify/package.json
+      - ./mydiary-vuetify/tsconfig.json:/usr/local/src/app/mydiary-vuetify/tsconfig.json
+      - ./mydiary-vuetify/tsconfig.node.json:/usr/local/src/app/mydiary-vuetify/tsconfig.node.json
+      - ./mydiary-vuetify/package-lock.json:/usr/local/src/app/mydiary-vuetify/package-lock.json
+      - ./mydiary-vuetify/vite.config.ts:/usr/local/src/app/mydiary-vuetify/vite.config.ts
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro 
+      # use timezone information from host machine
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - NODE_ENV=development
+    ports:
+        - 3001:3001
+    depends_on:
+      - backend
+  proxy-vue:
+    image: nginx:1.25
+    restart: unless-stopped
+    volumes:
+      - ./nginx-vue/nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 8086:80
+    depends_on:
+      - backend
+      - mydiary-vuetify
+    networks:
+      - proxy-tier
+      - default
   # cloudflared:
   #   image: cloudflare/cloudflared:2023.5.1
   #   # volumes: 
