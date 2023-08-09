@@ -17,12 +17,12 @@ const routes = [
       {
         path: '/test',
         name: 'Test',
-        component: () => import(/* webpackChunkName: "home" */ '@/views/Test.vue'),
+        component: () => import(/* webpackChunkName: "test" */ '@/views/Test.vue'),
       },
       {
         path: '/performSongs/:id',
         name: 'performSongs',
-        component: () => import(/* webpackChunkName: "home" */ '@/views/PerformSongs.vue'),
+        component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'),
         props: true,
       },
     ],
