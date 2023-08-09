@@ -705,7 +705,7 @@ def read_perform_songs(
     *,
     session: Session = Depends(get_session),
     offset: int = 0,
-    limit: int = Query(default=100, lte=1000),
+    limit: int = Query(default=100, lte=5000),
 ):
     perform_songs = session.exec(select(PerformSong).offset(offset).limit(limit)).all()
     return perform_songs
