@@ -127,7 +127,9 @@ class MyDiarySpotify:
         if spotify_track_history.context_uri is not None:
             context = self.hydrate_context(spotify_track_history.context_uri)
             spotify_track_history.context_name = context["context_name"]
-            spotify_track_history.context_type = SpotifyContextTypeEnum[context["context_type"]]
+            spotify_track_history.context_type = SpotifyContextTypeEnum[
+                context["context_type"]
+            ]
         session.add(spotify_track_history)
         if add_or_update_track is True:
             self.add_or_update_track_in_database(t, session=session, commit=False)
@@ -135,7 +137,7 @@ class MyDiarySpotify:
             session.commit()
         return "added"
 
-    def save_recent_tracks_to_database(self, session: Optional[Session] = None):
+    def save_recent_tracks_to_database(self, session: Optional[Session] = None) -> int:
         logger.info(
             "getting recently played Spotify tracks from API and saving to database"
         )
@@ -155,6 +157,7 @@ class MyDiarySpotify:
         )
         logger.info(f"adding {num_added} new rows (in spotifytrackhistory) to database")
         session.commit()
+        return num_added
 
     def get_tracks_for_day(
         self, dt: datetime, session: Optional[Session] = None
@@ -219,7 +222,7 @@ class MyDiarySpotify:
             logger.warning(f"HTTPError found when trying to get data for {context_uri}")
             logger.exception(e)
             context_name = ""
-            context_type = context_uri.split(':')[1]
+            context_type = context_uri.split(":")[1]
         context = {
             "context_uri": context_uri,
             "context_name": context_name,
