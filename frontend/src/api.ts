@@ -874,6 +874,56 @@ export const useGetSpotifyImageUrl = <TData = Awaited<ReturnType<typeof getSpoti
 
 
 /**
+ * @summary Spotify Save Recent Tracks To Database
+ */
+export const spotifySaveRecentTracksToDatabase = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<number>> => {
+    return axios.post(
+      `/spotify/save_recent_tracks_to_database`,undefined,options
+    );
+  }
+
+
+
+export const getSpotifySaveRecentTracksToDatabaseMutationOptions = <TError = AxiosError<unknown>,
+    TVariables = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof spotifySaveRecentTracksToDatabase>>, TError,TVariables, TContext>, axios?: AxiosRequestConfig}
+): UseMutationOptions<Awaited<ReturnType<typeof spotifySaveRecentTracksToDatabase>>, TError,TVariables, TContext> => {
+ const {mutation: mutationOptions, axios: axiosOptions} = options ?? {};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof spotifySaveRecentTracksToDatabase>>, TVariables> = () => {
+          
+
+          return  spotifySaveRecentTracksToDatabase(axiosOptions)
+        }
+
+        
+
+ 
+   return  { mutationFn, ...mutationOptions }}
+
+    export type SpotifySaveRecentTracksToDatabaseMutationResult = NonNullable<Awaited<ReturnType<typeof spotifySaveRecentTracksToDatabase>>>
+    
+    export type SpotifySaveRecentTracksToDatabaseMutationError = AxiosError<unknown>
+
+    /**
+ * @summary Spotify Save Recent Tracks To Database
+ */
+export const useSpotifySaveRecentTracksToDatabase = <TError = AxiosError<unknown>,
+    TVariables = void,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof spotifySaveRecentTracksToDatabase>>, TError,TVariables, TContext>, axios?: AxiosRequestConfig}
+) => {
+    
+      const mutationOptions = getSpotifySaveRecentTracksToDatabaseMutationOptions(options);
+     
+      return useMutation(mutationOptions);
+    }
+    
+/**
  * @summary Joplin Sync
  */
 export const joplinSync = (

@@ -1,10 +1,12 @@
 <template>
   <h1>Hello world</h1>
   <DataTableBase v-if="performSongs" :headers="headers" :items="performSongs" />
+  <SpotifySaveRecentTracksButton />
 </template>
 
 <script lang="ts" setup>
 import DataTableBase from '@/components/DataTableBase.vue';
+import SpotifySaveRecentTracksButton from '@/components/SpotifySaveRecentTracksButton.vue';
 import { computed, nextTick, ref, watchEffect } from 'vue';
 import Axios from 'axios';
 Axios.defaults.baseURL = '/api';

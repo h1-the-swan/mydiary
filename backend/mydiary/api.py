@@ -384,6 +384,19 @@ async def get_spotify_image_url(
     return track["album"]["images"][0]["url"]
 
 
+@app.post(
+    "/spotify/save_recent_tracks_to_database",
+    operation_id="spotifySaveRecentTracksToDatabase",
+    response_model=int,
+)
+async def spotify_save_recent_tracks_to_database():
+    from mydiary.spotify_connector import MyDiarySpotify
+
+    mydiary_spotify = MyDiarySpotify()
+    num_saved = mydiary_spotify.save_recent_tracks_to_database()
+    return num_saved
+
+
 @app.post("/joplin/sync", operation_id="joplinSync")
 async def joplin_sync():
     from mydiary.joplin_connector import MyDiaryJoplin

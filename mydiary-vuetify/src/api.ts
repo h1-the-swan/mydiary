@@ -421,6 +421,17 @@ export const getSpotifyImageUrl = <TData = AxiosResponse<string>>(
   }
 
 /**
+ * @summary Spotify Save Recent Tracks To Database
+ */
+export const spotifySaveRecentTracksToDatabase = <TData = AxiosResponse<number>>(
+     options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.post(
+      `/spotify/save_recent_tracks_to_database`,undefined,options
+    );
+  }
+
+/**
  * @summary Joplin Sync
  */
 export const joplinSync = <TData = AxiosResponse<unknown>>(
@@ -733,6 +744,7 @@ export type UpdatePocketArticleResult = AxiosResponse<PocketArticleRead>
 export type ReadSpotifyHistoryResult = AxiosResponse<SpotifyTrackHistoryRead[]>
 export type SpotifyHistoryCountResult = AxiosResponse<number>
 export type GetSpotifyImageUrlResult = AxiosResponse<string>
+export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
 export type JoplinSyncResult = AxiosResponse<unknown>
 export type JoplinGetNoteIdResult = AxiosResponse<string>
 export type JoplinInitNoteResult = AxiosResponse<unknown>
