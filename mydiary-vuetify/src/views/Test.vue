@@ -1,6 +1,7 @@
 <template>
   <h1>Hello world</h1>
-  <DataTableBase v-if="performSongs" :headers="headers" :items="performSongs" />
+  <v-progress-circular indeterminate color="primary" v-if="performSongsLoading"></v-progress-circular>
+  <DataTableBase v-if="performSongs" :headers="headers" :items="performSongs" :on-save="onSave" />
   <SpotifySaveRecentTracksButton />
 </template>
 
@@ -19,10 +20,24 @@ const headers = ref([
   { title: 'learned', key: 'learned' },
 ])
 const performSongs = ref<PerformSongRead[]>();
+const performSongsLoading = ref(false);
 onMounted(async () => {
-  performSongs.value = await readPerformSongsList({ limit: 5000 }).then((res) => res.data.sort((a, b) => a.name.localeCompare(b.name)));
+  performSongsLoading.value = true;
+  performSongs.value = await readPerformSongsList({ limit: 5000 })
+    .then((res) => {
+      performSongsLoading.value = false;
+      return res.data.sort((a, b) => a.name.localeCompare(b.name));
+    });
 });
 watchEffect(async () => {
   console.log(performSongs.value);
 });
+function onSave() {
+  // if (editedIndex.value > -1) {
+  //   Object.assign(desserts.value[editedIndex.value], editedItem.value)
+  // } else {
+  //   desserts.value.push(editedItem.value)
+  // }
+  console.log("onSave()")
+}
 </script>

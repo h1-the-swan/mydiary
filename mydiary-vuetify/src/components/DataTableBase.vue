@@ -39,6 +39,7 @@
 <script lang="ts" setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import DataTableModal from './DataTableModal.vue';
+import { VoidTypeAnnotation } from '@babel/types';
 
 const search = ref('');
 const dialog = ref(false);
@@ -49,10 +50,15 @@ interface IHeader {
   align?: 'start' | 'end' | 'center';
   sortable?: boolean;
 }
-const props = defineProps<{
+
+interface IProps {
   headers: IHeader[];
   items: any[];
-}>();
+  onSave(): void;
+
+}
+const props = defineProps<IProps>();
+
 const headers = [...props.headers, { title: 'Actions', key: 'actions', sortable: false }];
 interface IDessert {
   name: string;
@@ -97,13 +103,6 @@ function closeDelete() {
     editedItem.value = Object.assign({}, defaultItem.value)
     editedIndex.value = -1
   })
-}
-function onSave() {
-  if (editedIndex.value > -1) {
-    Object.assign(desserts.value[editedIndex.value], editedItem.value)
-  } else {
-    desserts.value.push(editedItem.value)
-  }
 }
 function onClose() {
   nextTick(() => {
