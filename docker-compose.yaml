@@ -25,6 +25,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      - HOSTNAME=${NAME}
       # This ensures that errors are printed as they occur, which
       # makes debugging easier.
       - PYTHONUNBUFFERED=1

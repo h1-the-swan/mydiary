@@ -23,14 +23,19 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from alembic.migration import MigrationContext
-from mydiary.db import sqlite_file_name, engine
+from mydiary.db import sqlite_file_name, rootdir, engine
 
 
 def main(args):
     logger.info(f"creating backup of file {sqlite_file_name}")
+    # get alembic version (db migration info)
     context = MigrationContext.configure(engine.connect())
     current_rev = context.get_current_revision()
-    backup_fp = Path(sqlite_file_name).with_name(
+    # backup file
+    backup_dir = Path(rootdir).joinpath('db_backup')
+    if not backup_dir.exists():
+        backup_dir.mkdir()
+    backup_fp = backup_dir.joinpath(
         f"database_backup{pendulum.now().strftime('%Y%m%dT%H%M%S')}_alembic{current_rev}.db"
     )
     logger.info(f"backup filename: {backup_fp}")

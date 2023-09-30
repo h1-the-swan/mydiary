@@ -9,8 +9,8 @@ FROM node:${VARIANT}
 WORKDIR /usr/local/src/app/mydiary-vuetify
 
 # Install dependencies
-# COPY package.json yarn.lock ./
 COPY package.json ./
+COPY package-lock.json ./
 RUN npm install
 
 # Copy in the source code
