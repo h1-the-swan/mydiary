@@ -2,7 +2,8 @@
 
 DESCRIPTION = """create a backup of the sqlite database"""
 
-import sys, os, time, shutil
+import sys, os, time, shutil, platform
+import requests
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
@@ -23,7 +24,16 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from alembic.migration import MigrationContext
-from mydiary.db import sqlite_file_name, rootdir, engine
+from mydiary.db import sqlite_file_name, rootdir, engine, MydiaryDatabaseBackup, Session
+
+
+def save_to_nextcloud(fp: Path):
+    from mydiary.nextcloud_connector import MyDiaryNextcloud, NEXTCLOUD_USERNAME
+
+    ncld = MyDiaryNextcloud()
+    url = f"{ncld.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/mydiary/db/{fp.name}"
+    with fp.open("rb") as f:
+        r = requests.put(url=url, data=f, auth=ncld.auth)
 
 
 def main(args):
@@ -32,14 +42,29 @@ def main(args):
     context = MigrationContext.configure(engine.connect())
     current_rev = context.get_current_revision()
     # backup file
-    backup_dir = Path(rootdir).joinpath('db_backup')
+    backup_dir = Path(rootdir).joinpath("db_backup")
     if not backup_dir.exists():
         backup_dir.mkdir()
+    now = pendulum.now()
     backup_fp = backup_dir.joinpath(
-        f"database_backup{pendulum.now().strftime('%Y%m%dT%H%M%S')}_alembic{current_rev}.db"
+        f"database_backup{now.strftime('%Y%m%dT%H%M%S')}_alembic{current_rev}.db"
     )
     logger.info(f"backup filename: {backup_fp}")
     shutil.copyfile(sqlite_file_name, str(backup_fp))
+    hostname = os.getenv("HOSTNAME") or platform.node()
+    logger.info("adding database entry")
+    with Session(engine) as session:
+        db_obj = MydiaryDatabaseBackup(
+            filename=backup_fp.name,
+            created_at=now,
+            alembic_rev=current_rev,
+            hostname=hostname,
+            size=os.path.getsize(backup_fp),
+        )
+        session.add(db_obj)
+        session.commit()
+    logger.info("saving to nextcloud")
+    save_to_nextcloud(backup_fp)
 
 
 if __name__ == "__main__":
