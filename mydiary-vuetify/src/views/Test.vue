@@ -3,11 +3,13 @@
   <v-progress-circular indeterminate color="primary" v-if="performSongsLoading"></v-progress-circular>
   <DataTableBase v-if="performSongs" :headers="headers" :items="performSongs" :on-save="onSave" />
   <SpotifySaveRecentTracksButton />
+  <GCalAuth />
 </template>
 
 <script lang="ts" setup>
 import DataTableBase from '@/components/DataTableBase.vue';
 import SpotifySaveRecentTracksButton from '@/components/SpotifySaveRecentTracksButton.vue';
+import GCalAuth from '@/components/GCalAuth.vue';
 import { computed, nextTick, ref, watchEffect } from 'vue';
 import Axios from 'axios';
 Axios.defaults.baseURL = '/api';
