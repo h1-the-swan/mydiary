@@ -101,8 +101,12 @@ class MyDiaryJoplin:
         return self._parent_notebook
 
     def get_notebook(self, notebook_id: str) -> JoplinFolder:
+        params = {
+            "token": self.token,
+            "fields": "id,parent_id,title,created_time,updated_time",
+        }
         r = requests.get(
-            f"{self.base_url}/folders/{notebook_id}", params={"token": self.token}
+            f"{self.base_url}/folders/{notebook_id}", params=params
         )
         r.raise_for_status()
         return JoplinFolder.from_api_response(r)

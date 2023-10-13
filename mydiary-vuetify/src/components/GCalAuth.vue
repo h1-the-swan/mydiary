@@ -1,6 +1,6 @@
 <template>
   <v-btn @click="onClick" :loading="loading">
-    Save recent Spotify tracks
+    Check GCal Auth
   </v-btn>
 </template>
 
