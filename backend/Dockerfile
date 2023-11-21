@@ -1,10 +1,11 @@
 FROM python:3.10
 
-ENV POETRY_VERSION=1.5.1
+ENV POETRY_VERSION=1.7
 
 # Setup a spot for the api code
 WORKDIR /usr/local/src/app/backend
 
+RUN pip install --upgrade pip
 RUN pip install "poetry==$POETRY_VERSION"
 
 COPY poetry.lock .

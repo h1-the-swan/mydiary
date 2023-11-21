@@ -3,7 +3,6 @@
 DESCRIPTION = """Joplin API (local instance)"""
 
 import sys, os, time, json, re
-from numpy import bytes_
 import requests
 import subprocess
 import hashlib
