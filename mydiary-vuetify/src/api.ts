@@ -98,25 +98,12 @@ export interface SpotifyTrackBase {
   uri: string;
 }
 
-/**
- * An enumeration.
- */
-export type SpotifyContextTypeEnum = typeof SpotifyContextTypeEnum[keyof typeof SpotifyContextTypeEnum];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const SpotifyContextTypeEnum = {
-  NUMBER_0: 0,
-  NUMBER_1: 1,
-  NUMBER_2: 2,
-} as const;
-
 export interface SpotifyTrackHistoryRead {
   id: number;
   played_at: string;
   context_uri?: string;
   context_name?: string;
-  context_type?: SpotifyContextTypeEnum;
+  context_type?: number;
   spotify_id: string;
   track: SpotifyTrackBase;
 }
