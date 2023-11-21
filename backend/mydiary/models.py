@@ -83,7 +83,8 @@ class SpotifyTrackHistoryBase(SQLModel):
     played_at: datetime = Field(index=True)  # stored in the database in UTC timezone
     context_uri: Optional[str] = Field(default=None, index=True)
     context_name: Optional[str] = Field(default=None, index=True)
-    context_type: Optional[SpotifyContextTypeEnum]
+    # context_type: Optional[SpotifyContextTypeEnum]
+    context_type: Optional[int]
 
     spotify_id: str = Field(foreign_key="spotifytrack.spotify_id", index=True)
 
@@ -119,7 +120,8 @@ class SpotifyTrackHistoryFrozen(SQLModel):
     played_at: datetime
     context_uri: Optional[str]
     context_name: Optional[str]
-    context_type: Optional[SpotifyContextTypeEnum]
+    # context_type: Optional[SpotifyContextTypeEnum]
+    context_type: Optional[int]
     track: SpotifyTrack
 
     def to_markdown(self, timezone=None) -> str:
