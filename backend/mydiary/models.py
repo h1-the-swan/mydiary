@@ -181,7 +181,7 @@ class PocketArticleBase(SQLModel):
     resolved_title: str = Field(index=True)
     url: str
     favorite: bool = Field(index=True)
-    status: PocketStatusEnum
+    status: str
     time_added: Optional[datetime] = Field(default=None, index=True)
     time_updated: Optional[datetime] = Field(default=None, index=True)
     time_read: Optional[datetime] = Field(default=None, index=True)

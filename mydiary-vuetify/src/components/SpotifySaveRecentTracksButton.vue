@@ -6,7 +6,7 @@
     {{ text }}
 
     <template v-slot:actions>
-      <v-btn color="pink" variant="text" @click="snackbar = false">
+      <v-btn color="green" variant="text" @click="snackbar = false">
         Close
       </v-btn>
     </template>

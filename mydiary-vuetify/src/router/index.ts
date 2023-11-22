@@ -20,9 +20,20 @@ const routes = [
         component: () => import(/* webpackChunkName: "test" */ '@/views/Test.vue'),
       },
       {
-        path: '/performSongs/:id',
+        path: '/performSongs',
         name: 'performSongs',
         component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'),
+      },
+      {
+        path: '/performSongs/:id',
+        name: 'performSong',
+        component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'),
+        props: true,
+      },
+      {
+        path: '/pocket',
+        name: 'pocket',
+        component: () => import(/* webpackChunkName: "pocket" */ '@/views/Pocket.vue'),
         props: true,
       },
     ],

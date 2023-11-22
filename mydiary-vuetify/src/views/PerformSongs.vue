@@ -1,5 +1,6 @@
 <template>
   <v-container>
+    <p>props.id is {{ props.id ? props.id : 'undefined' }}</p>
     <PerformSongsDropdown v-if="performSongsList" :items="performSongsList" />
     <PerformSongsRandomButton v-if="performSongsList" :items="performSongsList" :current-id="Number(props.id)" />
     <PerformSongCard :perform-song="performSong" :image-url="imageUrl" />
@@ -16,7 +17,7 @@ Axios.defaults.baseURL = '/api';
 import { readPerformSong, PerformSongRead, getSpotifyImageUrl, readPerformSongsList } from '@/api';
 import { onMounted } from 'vue';
 const props = defineProps<{
-  id: number | string;
+  id: number | string | undefined;
 }>();
 const performSong = ref<PerformSongRead>();
 const imageUrl = ref('');
