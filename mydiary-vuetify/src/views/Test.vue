@@ -4,6 +4,7 @@
   <DataTableBase v-if="performSongs" :headers="headers" :items="performSongs" :on-save="onSave" />
   <SpotifySaveRecentTracksButton />
   <GCalAuth />
+  <p v-if="numSpotifyHistory">Spotify history records: {{ numSpotifyHistory }}</p>"
 </template>
 
 <script lang="ts" setup>
@@ -13,7 +14,7 @@ import GCalAuth from '@/components/GCalAuth.vue';
 import { computed, nextTick, ref, watchEffect } from 'vue';
 import Axios from 'axios';
 Axios.defaults.baseURL = '/api';
-import { readPerformSongsList, PerformSongRead } from '@/api';
+import { readPerformSongsList, PerformSongRead, spotifyHistoryCount } from '@/api';
 import { onMounted } from 'vue';
 const headers = ref([
   { title: 'id', key: 'id' },
@@ -23,6 +24,7 @@ const headers = ref([
 ])
 const performSongs = ref<PerformSongRead[]>();
 const performSongsLoading = ref(false);
+const numSpotifyHistory = ref<Number>()
 onMounted(async () => {
   performSongsLoading.value = true;
   performSongs.value = await readPerformSongsList({ limit: 5000 })
@@ -30,6 +32,7 @@ onMounted(async () => {
       performSongsLoading.value = false;
       return res.data.sort((a, b) => a.name.localeCompare(b.name));
     });
+  numSpotifyHistory.value = await spotifyHistoryCount().then((res) => res.data)
 });
 watchEffect(async () => {
   console.log(performSongs.value);
