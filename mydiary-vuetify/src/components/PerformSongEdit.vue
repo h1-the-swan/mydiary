@@ -46,8 +46,17 @@
       </v-card-text>
       <v-card-actions>
         <v-btn color="primary" variant="elevated" @click="onSave">Save</v-btn>
+        <v-btn color="red" disabled variant="elevated" @click="onDelete">Delete</v-btn>
       </v-card-actions>
     </v-form>
+    <v-snackbar v-if="submitted" v-model="snackbar">
+      PerformSong saved. ID: {{ submitted.id }}
+      <template v-slot:actions>
+        <v-btn color="green" variant="text" @click="snackbar = false">
+          Close
+        </v-btn>
+      </template>
+    </v-snackbar>
   </v-card>
 </template>
 
@@ -58,8 +67,7 @@ import { watchEffect } from 'vue';
 import { PerformSongUpdate } from '@/api';
 import { ref } from 'vue';
 import { useDate } from 'vuetify';
-import { updatePerformSong } from '@/api';
-import { DeprecationTypes } from 'vue';
+import { updatePerformSong, createPerformSong, PerformSongCreate, deletePerformSong } from '@/api';
 import { useAppStore } from '@/store/app';
 const date = useDate()
 const props = defineProps<{
@@ -67,6 +75,8 @@ const props = defineProps<{
 }>();
 const app = useAppStore()
 const submitPerformSong = ref<PerformSongUpdate>({})
+const submitted = ref<PerformSongRead>()
+const snackbar = ref(false)
 const formTitle = computed(() => {
   if (props.performSong) {
     return `Edit PerformSong (ID: ${props.performSong.id})`
@@ -79,15 +89,25 @@ function dateFmt(dateStr: string | undefined) {
   return new Date(dateStr).toISOString().substring(0, 10)
 }
 async function onSave() {
-  if (!props.performSong) return
+  if (!submitPerformSong.value.name) throw Error
   if (submitPerformSong.value.created_at) {
     submitPerformSong.value.created_at = new Date(submitPerformSong.value.created_at).toISOString()
   }
   if (submitPerformSong.value.learned_dt) {
     submitPerformSong.value.learned_dt = new Date(submitPerformSong.value.learned_dt).toISOString()
   }
-  await updatePerformSong(props.performSong.id, submitPerformSong.value)
+  if (!props.performSong) {
+    submitted.value = (await createPerformSong(submitPerformSong.value as PerformSongCreate)).data
+  } else {
+    submitted.value = (await updatePerformSong(props.performSong.id, submitPerformSong.value)).data
+  }
+  snackbar.value = true
+  console.log(submitted.value)
   app.loadPerformSongs()
+}
+async function onDelete() {
+  if (!props.performSong) throw Error
+  deletePerformSong(props.performSong.id)
 }
 watchEffect(() => {
   if (props.performSong) {
