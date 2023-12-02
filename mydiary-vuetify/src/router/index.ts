@@ -25,6 +25,11 @@ const routes = [
         component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'),
       },
       {
+        path: '/performSongs/new',
+        name: 'new performSong',
+        component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongNew.vue'),
+      },
+      {
         path: '/performSongs/:id',
         name: 'performSong',
         component: () => import(/* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'),
