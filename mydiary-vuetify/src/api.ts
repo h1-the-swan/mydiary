@@ -156,7 +156,7 @@ export interface PocketArticleRead {
   resolved_title: string;
   url: string;
   favorite: boolean;
-  status: PocketStatusEnum;
+  status: string;
   time_added?: string;
   time_updated?: string;
   time_read?: string;
