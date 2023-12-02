@@ -27,7 +27,6 @@ lxml = "^4.9.0"
 [tool.poetry.dev-dependencies]
 humanfriendly = "^10.0"
 pytest-cov = "^4.1.0"
-httpx = "^0.24.1"
 
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.2"
