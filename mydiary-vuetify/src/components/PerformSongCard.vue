@@ -1,6 +1,6 @@
 <template>
   <v-card v-if="performSong" style="max-width: 50em;">
-    <v-img v-if="imageUrl" :src="imageUrl" cover></v-img>
+    <v-img v-if="imageUrl" :src="imageUrl" max-height="500px"></v-img>
     <v-card-title>
       {{ performSong.name }}
     </v-card-title>

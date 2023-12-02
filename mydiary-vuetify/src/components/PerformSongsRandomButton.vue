@@ -1,21 +1,32 @@
 <template>
-	<v-btn @click="$router.push(`/performSongs/${randomPerformSong()}`)">
-		Random song
-	</v-btn>
-
+<v-row justify="start">
+<v-col cols="2">
+  <v-btn @click="$router.push(`/performSongs/${randomPerformSong()}`)">
+    Random song
+  </v-btn>
+</v-col>
+<v-col>
+  <v-switch v-model="includeUnlearned" label="Include unlearned" color="primary"/>
+</v-col>
+</v-row>
 </template>
 
 <script lang="ts" setup>
 import { PerformSongRead } from '@/api';
+import { ref } from 'vue';
 
 const props = defineProps<{
-	items: PerformSongRead[];
-	currentId?: number;
+  items: PerformSongRead[];
+  currentId?: number;
 }>();
+const includeUnlearned = ref(false)
 function randomPerformSong() {
-	const learnedSongs = props.items.filter((song) => song.learned === true)
-		.filter((song) => song.id !== props.currentId);
-	const randomSong = learnedSongs[Math.floor(Math.random() * learnedSongs.length)];
-	return randomSong.id;
+  let songs = props.items
+  if (includeUnlearned.value === false) {
+    songs = songs.filter((song) => song.learned === true)
+  }
+  songs = songs.filter((song) => song.id !== props.currentId)
+  const randomSong = songs[Math.floor(Math.random() * songs.length)];
+  return randomSong.id;
 }
 </script>
