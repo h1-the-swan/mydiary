@@ -1,0 +1,108 @@
+<template>
+  <v-card>
+    <v-form>
+      <v-card-title>
+        <span class="text-h5">{{ formTitle }}</span>
+      </v-card-title>
+
+      <v-card-text>
+        <v-container>
+          <v-row>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.name" label="Name"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.artist_name" label="Artist Name"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-checkbox v-model="submitPerformSong.learned" label="Learned"></v-checkbox>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.spotify_id" label="Spotify ID"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.notes" label="notes"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.perform_url" label="perform_url"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.created_at" label="created_at"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.key" label="key"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.capo" label="capo"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.lyrics" label="lyrics"></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6" md="4">
+              <v-text-field v-model="submitPerformSong.learned_dt" label="learned_dt"></v-text-field>
+            </v-col>
+          </v-row>
+        </v-container>
+      </v-card-text>
+      <v-card-actions>
+        <v-btn color="primary" variant="elevated" @click="onSave">Save</v-btn>
+      </v-card-actions>
+    </v-form>
+  </v-card>
+</template>
+
+<script lang="ts" setup>
+import { PerformSongRead } from '@/api';
+import { computed } from 'vue';
+import { watchEffect } from 'vue';
+import { PerformSongUpdate } from '@/api';
+import { ref } from 'vue';
+import { useDate } from 'vuetify';
+import { updatePerformSong } from '@/api';
+import { DeprecationTypes } from 'vue';
+import { useAppStore } from '@/store/app';
+const date = useDate()
+const props = defineProps<{
+  performSong?: PerformSongRead;
+}>();
+const app = useAppStore()
+const submitPerformSong = ref<PerformSongUpdate>({})
+const formTitle = computed(() => {
+  if (props.performSong) {
+    return `Edit PerformSong (ID: ${props.performSong.id})`
+  } else {
+    return 'New PerformSong'
+  }
+})
+function dateFmt(dateStr: string | undefined) {
+  if (!dateStr) return
+  return new Date(dateStr).toISOString().substring(0, 10)
+}
+async function onSave() {
+  if (!props.performSong) return
+  if (submitPerformSong.value.created_at) {
+    submitPerformSong.value.created_at = new Date(submitPerformSong.value.created_at).toISOString()
+  }
+  if (submitPerformSong.value.learned_dt) {
+    submitPerformSong.value.learned_dt = new Date(submitPerformSong.value.learned_dt).toISOString()
+  }
+  await updatePerformSong(props.performSong.id, submitPerformSong.value)
+  app.loadPerformSongs()
+}
+watchEffect(() => {
+  if (props.performSong) {
+    submitPerformSong.value.name = props.performSong.name
+    submitPerformSong.value.artist_name = props.performSong.artist_name
+    submitPerformSong.value.learned = props.performSong.learned
+    submitPerformSong.value.spotify_id = props.performSong.spotify_id
+    submitPerformSong.value.notes = props.performSong.notes
+    submitPerformSong.value.perform_url = props.performSong.perform_url
+    submitPerformSong.value.created_at = dateFmt(props.performSong.created_at)
+    submitPerformSong.value.key = props.performSong.key
+    submitPerformSong.value.capo = props.performSong.capo
+    submitPerformSong.value.lyrics = props.performSong.lyrics
+    submitPerformSong.value.learned_dt = dateFmt(props.performSong.learned_dt)
+  }
+})
+watchEffect(() => console.log(submitPerformSong.value))
+</script>
