@@ -66,6 +66,10 @@ class MyDiaryNextcloud:
         filepath = requests.utils.unquote(filepath)
         name = Path(filepath).stem
         # name will look like: "22-06-11 17-50-16 4704"
+        # I've encountered a weird one: "23-12-10 11-38-04 zed_"
+        # let's deal with that case:
+        if not name[-4:].isnumeric():
+            name = f"{name[:-4]}0000"
         return pendulum.from_format(name, "YY-MM-DD HH-mm-ss SSSS", tz=tz)
 
     def get_mimetype_type(self, xml_item) -> str:
