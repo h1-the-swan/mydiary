@@ -429,6 +429,7 @@ class MyDiaryJoplin:
             image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
         r = self.create_resource(data=image_bytes, title=name)
         r.raise_for_status()
+        # if failed, need to run self.delete_resource(hash)
         if session is None:
             session = self.new_session()
         resource_id = r.json()["id"]
