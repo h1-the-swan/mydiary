@@ -14,14 +14,15 @@
 			// You can edit these settings after create using File > Preferences > Settings > Remote.
 			"settings": {
 				"python.pythonPath": "/usr/local/bin/python",
-				"python.formatting.provider": "black",
+    				"editor.defaultFormatter": "ms-python.black-formatter",
 				"python.testing.pytestEnabled": true
 			},
 			// Add the IDs of extensions you want installed when the container is created in the array below.
 			"extensions": [
 				"ms-python.python",
 				"ryanluker.vscode-coverage-gutters",
-				"ms-toolsai.jupyter"
+				"ms-toolsai.jupyter",
+				"ms-python.black-formatter"
 			]
 		}
 	}
