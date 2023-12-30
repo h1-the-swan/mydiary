@@ -84,7 +84,7 @@ class SpotifyTrackHistoryBase(SQLModel):
     context_uri: Optional[str] = Field(default=None, index=True)
     context_name: Optional[str] = Field(default=None, index=True)
     # context_type: Optional[SpotifyContextTypeEnum]
-    context_type: Optional[int]
+    context_type: Optional[int] = Field(default=None)
 
     spotify_id: str = Field(foreign_key="spotifytrack.spotify_id", index=True)
 
@@ -92,6 +92,8 @@ class SpotifyTrackHistoryBase(SQLModel):
     def from_spotify_track(cls, t: Dict) -> "SpotifyTrackHistoryBase":
         # Parse a spotify track from the Spotify API
         played_at = t.get("played_at", None)
+        if played_at is not None:
+            played_at = pendulum.parse(played_at)
         if "track" in t:
             track_data = t["track"]
         else:
@@ -151,13 +153,13 @@ class PerformSongBase(SQLModel):
     name: str = Field(index=True)
     artist_name: Optional[str] = Field(default=None, index=True)
     learned: bool = Field(default=True, index=True)
-    spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", index=True)
-    notes: Optional[str]
-    perform_url: Optional[str]
+    spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", default=None, index=True)
+    notes: Optional[str] = Field(default=None)
+    perform_url: Optional[str] = Field(default=None)
     created_at: Optional[datetime] = Field(default=None, index=True)
     key: Optional[str] = Field(default=None, index=True)  # musical key of the song
     capo: Optional[int] = Field(default=None, index=True)  # fret of capo (0 if no capo)
-    lyrics: Optional[str]
+    lyrics: Optional[str] = Field(default=None)
     learned_dt: Optional[datetime] = Field(default=None, index=True)
 
 
@@ -188,8 +190,8 @@ class PocketArticleBase(SQLModel):
     time_favorited: Optional[datetime] = Field(default=None, index=True)
     listen_duration_estimate: Optional[int] = Field(default=None, index=True)
     word_count: Optional[int] = Field(default=None, index=True)
-    excerpt: Optional[str] = None
-    top_image_url: Optional[str] = None
+    excerpt: Optional[str] = Field(default=None)
+    top_image_url: Optional[str] = Field(default=None)
 
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
@@ -260,11 +262,11 @@ class PocketArticleBase(SQLModel):
         ret._pocket_tags = _pocket_tags
         return ret
 
-    def collect_tags(self, session: Optional["Session"] = None):
+    def collect_tags(self, session: Optional["Session"] = None, commit=True):
         # TODO: This doesn't work. Fix it.
         from .pocket_connector import MyDiaryPocket
 
-        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session)
+        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session, commit=commit)
 
     def to_markdown(self) -> str:
         if self.resolved_title:
@@ -289,9 +291,9 @@ class GoogleCalendarEvent(SQLModel, table=True):
     id: str = Field(primary_key=True)
     summary: str = Field(index=True)
     location: Optional[str] = Field(default=None, index=True)
-    description: Optional[str] = None
-    start: pendulum.DateTime = Field(index=True)
-    end: pendulum.DateTime = Field(index=True)
+    description: Optional[str] = Field(default=None)
+    start: datetime = Field(index=True)
+    end: datetime = Field(index=True)
     start_timezone: str
     end_timezone: str
     # new_test_col: Optional[str] = Field(default=None)
@@ -427,7 +429,7 @@ class MyDiaryImage(SQLModel, table=True):
 
 class MyDiaryDay(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
-    dt: pendulum.DateTime = now().start_of("day")
+    dt: datetime = now().start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
     joplin_connector: Any = Field(None, exclude=True)
@@ -441,9 +443,8 @@ class MyDiaryDay(SQLModel):
         str, List[PocketArticle]
     ] = {}  # interactions with Pocket articles on this day
     google_calendar_events: List[GoogleCalendarEvent] = []
-    rating: Optional[
-        int
-    ]  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
+    rating: Optional[int] = Field(default=None) 
+    # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
     flagged: bool = (
         False  # flagged for inspection, in the case of some potential problem
     )
@@ -662,10 +663,10 @@ class DogBase(SQLModel):
     name: str = Field(index=True)
     how_met: Optional[str] = Field(default=None, index=True)
     when_met: Optional[datetime] = Field(default=None, index=True)
-    owners: Optional[str]
+    owners: Optional[str] = Field(default=None)
     # images: List[MyDiaryImage] = []
     estimated_bday: Optional[datetime] = Field(default=None, index=True)
-    notes: Optional[str]
+    notes: Optional[str] = Field(default=None)
 
 
 class Dog(DogBase, table=True):
@@ -700,7 +701,7 @@ class Recipe(RecipeBase, table=True):
 
 class RecipeEventBase(SQLModel):
     timestamp: int = Field(index=True)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None)
 
     recipe_id: int = Field(foreign_key="recipe.id", index=True)
 

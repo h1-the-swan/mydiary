@@ -112,6 +112,7 @@ class MyDiaryPocket:
         article: PocketArticle,
         pocket_tags: List[str],
         session: Optional[Session] = None,
+        commit=True,
     ) -> PocketArticle:
         """Add tags to database if they are not already there
 
@@ -132,7 +133,8 @@ class MyDiaryPocket:
             tag.is_pocket_tag = True
             session.add(tag)
             article.tags.append(tag)
-        session.commit()
+        if commit is True:
+            session.commit()
         return article
 
     def save_articles_to_database(
@@ -158,9 +160,10 @@ class MyDiaryPocket:
             existing_row = session.get(PocketArticle, article.id)
             if existing_row:
                 session.delete(existing_row)
+                session.commit()
                 num_updated += 1
             session.add(article)
-            article.collect_tags(session=session)
+            article.collect_tags(session=session, commit=False)
         session.commit()
         for article in articles_list:
             session.refresh(article)

@@ -469,7 +469,7 @@ def joplin_get_note(note_id: str):
     from mydiary.joplin_connector import MyDiaryJoplin
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        note = mydiary_joplin.get_note(id)
+        note = mydiary_joplin.get_note(note_id)
         return note
 
 
