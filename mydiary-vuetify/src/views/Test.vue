@@ -4,8 +4,8 @@
   <v-progress-circular indeterminate color="primary" v-else></v-progress-circular>
   <SpotifySaveRecentTracksButton />
   <GCalAuth />
-  <PerformSongEdit v-if="app.performSongs" :perform-song="app.performSongs[1]" />
-  <p v-if="numSpotifyHistory">Spotify history records: {{ numSpotifyHistory }}</p>"
+  <p v-if="numSpotifyHistory">Spotify history records: {{ numSpotifyHistory }}</p>
+  <div v-if="diaryNote" v-html="md.render(diaryNote.body)"></div>
 </template>
 
 <script lang="ts" setup>
@@ -15,9 +15,10 @@ import GCalAuth from '@/components/GCalAuth.vue';
 import PerformSongEdit from '@/components/PerformSongEdit.vue';
 import { computed, nextTick, ref, watchEffect } from 'vue';
 import { useAppStore } from '@/store/app';
+import markdownit from 'markdown-it'
 import Axios from 'axios';
 Axios.defaults.baseURL = '/api';
-import { readPerformSongsList, PerformSongRead, spotifyHistoryCount } from '@/api';
+import { readPerformSongsList, PerformSongRead, spotifyHistoryCount, joplinGetNoteId, joplinGetNote, JoplinNote } from '@/api';
 import { onMounted } from 'vue';
 const headers = ref([
   { title: 'id', key: 'id' },
@@ -27,8 +28,11 @@ const headers = ref([
 ])
 // const performSongs = ref<PerformSongRead[]>();
 const app = useAppStore()
+const md = markdownit()
 const performSongsLoading = ref(false);
 const numSpotifyHistory = ref<Number>()
+const joplinNoteId = ref<string>()
+const diaryNote = ref<JoplinNote>()
 onMounted(async () => {
   await app.loadPerformSongs()
   console.log('loadPerformSongs() finished')
@@ -39,10 +43,18 @@ onMounted(async () => {
   //     return res.data.sort((a, b) => a.name.localeCompare(b.name));
   //   });
   numSpotifyHistory.value = await spotifyHistoryCount().then((res) => res.data)
+  joplinNoteId.value = (await joplinGetNoteId('2023-12-12')).data
 });
 watchEffect(async () => {
   // console.log(app.performSongs.value);
 });
+watchEffect(async () => {
+  if (joplinNoteId.value) {
+    console.log(joplinNoteId.value)
+    diaryNote.value = (await joplinGetNote(joplinNoteId.value)).data
+    console.log(diaryNote.value)
+  }
+})
 function onSave() {
   // if (editedIndex.value > -1) {
   //   Object.assign(desserts.value[editedIndex.value], editedItem.value)

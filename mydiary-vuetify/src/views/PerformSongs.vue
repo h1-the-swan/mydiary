@@ -1,11 +1,15 @@
 <template>
   <v-container>
-    <p>props.id is {{ props.id ? props.id : 'undefined' }}</p>
-    <div v-if="props.id">
-      <PerformSongsDropdown v-if="performSongsList" :items="performSongsList" />
-      <PerformSongsRandomButton v-if="performSongsList" :items="performSongsList" :current-id="Number(props.id)" />
-      <PerformSongCard :perform-song="performSong" :image-url="imageUrl" />
-    </div>
+    <v-list>
+      <v-list-item>
+        <PerformSongsDropdown v-if="performSongsList" :items="performSongsList" />
+      </v-list-item>
+      <v-list-item>
+        <PerformSongsRandomButton v-if="performSongsList" :items="performSongsList" :current-id="Number(props.id)" />
+      </v-list-item>
+    </v-list>
+    <PerformSongCard :perform-song="performSong" :image-url="imageUrl" />
+    <PerformSongEdit :perform-song="performSong" />
   </v-container>
 </template>
 
