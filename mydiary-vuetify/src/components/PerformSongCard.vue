@@ -10,7 +10,10 @@
       <p v-if="performSong.key">Key: {{ performSong.key }}</p>
       <p v-if="performSong.capo">Capo: {{ performSong.capo }}</p>
       <p v-if="performSong.notes">Notes: {{ performSong.notes }}</p>
-      <p v-if="performSong.lyrics">Lyrics: {{ performSong.lyrics }}</p>
+      <div v-if="performSong.lyrics">
+        <p>Lyrics:</p>
+        <div style="white-space: pre;" v-html="md.render(performSong.lyrics)"></div>
+      </div>
       <p v-if="performSong.learned_dt">Learned: {{ new Date(performSong.learned_dt).toDateString() }}</p>
     </v-card-text>
   </v-card>
@@ -19,6 +22,8 @@
 <script lang="ts" setup>
 import { PerformSongRead } from '@/api';
 import { watchEffect } from 'vue';
+import markdownit from 'markdown-it';
+const md = markdownit()
 const props = defineProps<{
   performSong?: PerformSongRead;
   imageUrl?: string;
