@@ -460,6 +460,20 @@ async def joplin_init_note(dt: str, tz: str = "local"):
             raise
 
 
+@app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
+async def day_init_markdown(dt: str, tz: str = "local"):
+    from mydiary import MyDiaryDay
+
+    if dt == "today":
+        dt = pendulum.today(tz=tz)
+    elif dt == "yesterday":
+        dt = pendulum.yesterday(tz=tz)
+    else:
+        dt = pendulum.parse(dt, tz=tz)
+    day = MyDiaryDay.from_dt(dt)
+    return day.init_markdown()
+
+
 @app.get(
     "/joplin/get_note/{note_id}",
     operation_id="joplinGetNote",

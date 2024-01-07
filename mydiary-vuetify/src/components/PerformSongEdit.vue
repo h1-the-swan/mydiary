@@ -96,6 +96,11 @@ async function onSave() {
   if (submitPerformSong.value.learned_dt) {
     submitPerformSong.value.learned_dt = new Date(submitPerformSong.value.learned_dt).toISOString()
   }
+  if (submitPerformSong.value.spotify_id && submitPerformSong.value.spotify_id.startsWith('http')) {
+    const spotifyIdURL = new URL(submitPerformSong.value.spotify_id)
+    const cleanedId = spotifyIdURL.pathname.split('/').at(-1)
+    submitPerformSong.value.spotify_id = cleanedId
+  }
   if (!props.performSong) {
     submitted.value = (await createPerformSong(submitPerformSong.value as PerformSongCreate)).data
   } else {
