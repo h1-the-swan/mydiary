@@ -22,7 +22,7 @@ sqlmodel = "^0.0.14"
 alembic = "^1.13.1"
 fastapi = "^0.106"
 uvicorn = {extras = ["standard"], version = "^0.24.0"}
-lxml = "^4.9.0"
+lxml = "^5.1.0"
 
 [tool.poetry.dev-dependencies]
 humanfriendly = "^10.0"
