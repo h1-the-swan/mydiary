@@ -20,7 +20,8 @@ RUN poetry config virtualenvs.create false \
 # EXPOSE 8888
 
 # https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
-ENV NODE_VERSION=17.7.1
+# ENV NODE_VERSION=17.7.1
+ENV NODE_VERSION=17.7.2
 # RUN apt install -y curl
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
 ENV NVM_DIR=/root/.nvm
