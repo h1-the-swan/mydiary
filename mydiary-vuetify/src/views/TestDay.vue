@@ -1,7 +1,7 @@
 <template>
   <h1>Test Day</h1>
-  <v-btn @click="console.log(route.query.dt)">check dt</v-btn>
   <v-date-picker :model-value="getDate" @update:model-value="updateDate" />
+  <g-cal-auth />
   <v-btn @click="fetchInitMarkdown">get init markdown</v-btn>
   <v-expansion-panels style="max-width: 800px;">
     <v-expansion-panel>
@@ -32,6 +32,8 @@
       </v-expansion-panel-text>
     </v-expansion-panel>
   </v-expansion-panels>
+  <joplin-sync-button />
+  <nextcloud-thumbnails :dt="getDateStr" />
 </template>
 
 <script setup lang="ts">
@@ -40,6 +42,9 @@ import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
 import { joplinGetNote, joplinGetNoteId, JoplinNote } from '@/api';
+import GCalAuth from '@/components/GCalAuth.vue';
+import JoplinSyncButton from '@/components/JoplinSyncButton.vue';
+import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue';
 axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
