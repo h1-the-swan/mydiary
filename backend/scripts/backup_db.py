@@ -50,7 +50,6 @@ def main(args):
         f"database_backup{now.strftime('%Y%m%dT%H%M%S')}_alembic{current_rev}.db"
     )
     logger.info(f"backup filename: {backup_fp}")
-    shutil.copyfile(sqlite_file_name, str(backup_fp))
     hostname = os.getenv("HOSTNAME") or platform.node()
     logger.info("adding database entry")
     with Session(engine) as session:
@@ -63,6 +62,7 @@ def main(args):
         )
         session.add(db_obj)
         session.commit()
+    shutil.copyfile(sqlite_file_name, str(backup_fp))
     logger.info("saving to nextcloud")
     save_to_nextcloud(backup_fp)
 

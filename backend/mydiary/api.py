@@ -435,7 +435,7 @@ def joplin_get_note_id(dt: str) -> str:
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
 )
-async def joplin_init_note(dt: str, tz: str = "local"):
+async def joplin_init_note(dt: str, tz: str = "local", post_sync=True):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
 
@@ -452,7 +452,7 @@ async def joplin_init_note(dt: str, tz: str = "local"):
             logger.debug("sync complete")
             day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
             logger.debug("created MyDiaryDay instance")
-            day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+            day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=post_sync)
             logger.debug("initialized note")
         except Exception as e:
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
