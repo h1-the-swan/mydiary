@@ -58,7 +58,7 @@ def main(args):
             created_at=now,
             alembic_rev=current_rev,
             hostname=hostname,
-            size=os.path.getsize(backup_fp),
+            size=os.path.getsize(sqlite_file_name),
         )
         session.add(db_obj)
         session.commit()
