@@ -20,7 +20,7 @@ pendulum = "^3.0.0"
 Pillow = "^10.2.0"
 sqlmodel = "^0.0.16"
 alembic = "^1.13.1"
-fastapi = "^0.109.2"
+fastapi = "^0.110.1"
 uvicorn = {extras = ["standard"], version = "^0.27.1"}
 lxml = "5.1.0"
 
