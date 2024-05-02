@@ -10,7 +10,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.10"
 python-dotenv = "^1.0.0"
-pydantic = "^2.5.3"
+pydantic = "^2.7.1"
 spotipy = "^2.22.1"
 pocket = "^0.3.6"
 google-api-python-client = "^2.111.0"
@@ -31,7 +31,7 @@ pytest-cov = "^4.1.0"
 [tool.poetry.group.dev.dependencies]
 pylint = "^3.0.2"
 jupyter = "^1.0.0"
-black = "^24.2.0"
+black = "^24.4.2"
 pytest = "7.4.4"
 
 [build-system]
