@@ -1,5 +1,6 @@
 import os, json
 from pathlib import Path
+import pendulum
 from mydiary.models import SpotifyTrack, SpotifyTrackHistory
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -36,7 +37,7 @@ def test_spotify_track(rootdir):
     )
     track_history = SpotifyTrackHistory(
         spotify_id=track_json["track"]["id"],
-        played_at=track_json["played_at"],
+        played_at=pendulum.parse(track_json["played_at"]),
     )
     assert track.name == "Always"
     assert track.artist_name == "Erasure"

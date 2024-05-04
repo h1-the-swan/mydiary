@@ -208,7 +208,7 @@ class PocketArticleBase(SQLModel):
         given_title = item.get("given_title", "")
         resolved_title = item.get("resolved_title", "")
         url = item.get("resolved_url", "")
-        favorite = int(item.get("favorite", "0"))
+        favorite = bool(int(item.get("favorite", "0")))
         status = int(item["status"])
         time_added = (
             datetime.fromtimestamp(int(item["time_added"]))
@@ -418,12 +418,12 @@ class Tag(TagBase, table=True):
 class MyDiaryImage(SQLModel, table=True):
     id: int = Field(primary_key=True)
     hash: str = Field(index=True)
-    name: str = None
-    filepath: str = None
-    nextcloud_path: str = None
-    description: str = None
+    name: Optional[str] = None
+    filepath: Optional[str] = None
+    nextcloud_path: Optional[str] = None
+    description: Optional[str] = None
     thumbnail_size: int
-    joplin_resource_id: str = Field(index=True, default=None)
+    joplin_resource_id: Optional[str] = Field(index=True, default=None)
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
 
 
