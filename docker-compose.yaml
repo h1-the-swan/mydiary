@@ -18,8 +18,8 @@ services:
       # specify joplin data as a persistent docker volume (defined below)
       - joplin_data:/root/.config/joplin
       # use timezone information from host machine
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
+      # - /etc/timezone:/etc/timezone:ro
+      # - /etc/localtime:/etc/localtime:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro 
     env_file:

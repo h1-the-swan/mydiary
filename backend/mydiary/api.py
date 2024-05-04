@@ -62,7 +62,7 @@ class PocketArticleUpdate(SQLModel):
     resolved_title: Optional[str] = None
     url: Optional[str] = None
     favorite: Optional[bool] = None
-    status: Optional[PocketStatusEnum]
+    status: Optional[PocketStatusEnum] = None
     time_added: Optional[datetime] = None
     time_updated: Optional[datetime] = None
     time_read: Optional[datetime] = None
@@ -100,9 +100,9 @@ class PerformSongUpdate(SQLModel):
     notes: Optional[str] = None
     perform_url: Optional[str] = None
     created_at: Optional[datetime] = None
-    key: Optional[str]
-    capo: Optional[int]
-    lyrics: Optional[str]
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    lyrics: Optional[str] = None
     learned_dt: Optional[datetime] = None
 
 
@@ -768,9 +768,8 @@ def update_perform_song(
     db_perform_song = session.get(PerformSong, perform_song_id)
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
-    perform_song_data = perform_song.dict(exclude_unset=True)
-    for k, v in perform_song_data.items():
-        setattr(db_perform_song, k, v)
+    perform_song_data = perform_song.model_dump(exclude_unset=True)
+    db_perform_song.sqlmodel_update(perform_song_data)
     session.add(db_perform_song)
     session.commit()
     session.refresh(db_perform_song)
