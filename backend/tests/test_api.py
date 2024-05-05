@@ -234,21 +234,23 @@ class TestDog:
         {
             "name": "Bizzy",
             "how_met": "internet",
-            "when_met": pendulum.today().to_datetime_string(),
+            "when_met": pendulum.today(),
             "owners": "Josh Gondelman and Maris Kreizman",
             "notes": "Bizzy is a pug",
         },
         {
             "name": "Lucy",
             "how_met": "Rover",
-            "when_met": pendulum.yesterday().to_datetime_string(),
+            "when_met": pendulum.yesterday(),
             "owners": "Chris?",
             "notes": "Lucy is a French Bulldog.",
         },
     ]
 
     def test_create_dog(self, client: TestClient):
-        response = client.post("/dogs/", json=self.dog_data[0])
+        body = self.dog_data[0].copy()
+        body['when_met'] = body['when_met'].to_iso8601_string()
+        response = client.post("/dogs/", json=body)
         d = response.json()
 
         assert response.status_code == 200

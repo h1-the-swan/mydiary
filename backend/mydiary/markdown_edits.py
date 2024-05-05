@@ -83,6 +83,11 @@ class MarkdownDoc:
         # this_section_txt = "\n".join(this_section)
         yield this_section_title, this_section
 
+    def get_image_resource_ids(self):
+        sec = self.get_section_by_title('images')
+        resource_ids = sec.get_resource_ids()
+        return resource_ids
+
     def refresh_all_sections(self):
         for sec in self.sections:
             sec.refresh()
