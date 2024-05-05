@@ -2,6 +2,7 @@
   <div v-if="imgUrls">
     <p v-for="(url) in imgUrls" :key="url">
       {{ url }}
+      <v-img :src="`/api/nextcloud/thumbnail_img?url=${url}`"></v-img>
     </p>
   </div>
 </template>
@@ -19,5 +20,5 @@ async function fetchImageUrls() {
   imgUrls.value = undefined
   imgUrls.value = (await nextcloudPhotosThumbnailUrls(props.dt)).data
 }
-watch(props, fetchImageUrls, {immediate: true})
+watch(props, fetchImageUrls, { immediate: true })
 </script>

@@ -668,8 +668,7 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         note = mydiary_joplin.get_note(note_id)
         md_note = MarkdownDoc(note.body, parent=note)
 
-        sec_images = md_note.get_section_by_title("images")
-        resource_ids = sec_images.get_resource_ids()
+        resource_ids = md_note.get_image_resource_ids()
         if resource_ids:
             # currently, an error is raised if there are already any images present.
             # TODO: handle the case where there are already images present

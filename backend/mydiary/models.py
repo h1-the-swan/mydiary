@@ -183,7 +183,7 @@ class PocketArticleBase(SQLModel):
     resolved_title: str = Field(index=True)
     url: str
     favorite: bool = Field(index=True)
-    status: str
+    status: PocketStatusEnum = Field(index=True)
     time_added: Optional[datetime] = Field(default=None, index=True)
     time_updated: Optional[datetime] = Field(default=None, index=True)
     time_read: Optional[datetime] = Field(default=None, index=True)
@@ -471,19 +471,20 @@ class MyDiaryDay(SQLModel):
         google_calendar_events = mydiary_gcal.get_events_for_day(dt)
         mydiary_gcal.save_events_to_database(google_calendar_events)
 
-        # TODO: figure out how to actually use the Habitica data instead of just saving it
-        mydiary_habitica = MyDiaryHabitica()
-        habitica_data = mydiary_habitica.get_user_data()
-        # check if there is any new data
-        habitica_files = list(Path("mydiary/habitica_backups").glob('habitica_userdata*.json'))
-        habitica_files.sort(reverse=True)
-        habitica_most_recent = json.loads(habitica_files[0].read_text())
-        if not mydiary_habitica.iseq_user_data(habitica_most_recent, habitica_data):
-            outfile = Path("mydiary/habitica_backups").joinpath(
-                f"habitica_userdata_{pendulum.now():%Y%m%dT%H%M%S}.json"
-            )
-            logger.info(f"saving Habitica userdata to {outfile}")
-            outfile.write_text(json.dumps(habitica_data))
+        # DEPRECATED: I stopped using Habitica
+        # # TODO: figure out how to actually use the Habitica data instead of just saving it
+        # mydiary_habitica = MyDiaryHabitica()
+        # habitica_data = mydiary_habitica.get_user_data()
+        # # check if there is any new data
+        # habitica_files = list(Path("mydiary/habitica_backups").glob('habitica_userdata*.json'))
+        # habitica_files.sort(reverse=True)
+        # habitica_most_recent = json.loads(habitica_files[0].read_text())
+        # if not mydiary_habitica.iseq_user_data(habitica_most_recent, habitica_data):
+        #     outfile = Path("mydiary/habitica_backups").joinpath(
+        #         f"habitica_userdata_{pendulum.now():%Y%m%dT%H%M%S}.json"
+        #     )
+        #     logger.info(f"saving Habitica userdata to {outfile}")
+        #     outfile.write_text(json.dumps(habitica_data))
 
         return cls(
             dt=dt,
