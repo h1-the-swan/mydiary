@@ -50,7 +50,7 @@ def test_pocket_article(rootdir, caplog, db_session: Session):
     # for t in article._pocket_item["tags"].values():
     #     tag = Tag(name=t["tag"], pocket_tag_id=t["item_id"])
     #     article.tags.append(tag)
-    article.collect_tags(db_session)
+    # article.collect_tags(db_session)
     tag_names = [tag.name for tag in article.tags]
     assert "internet" in tag_names
     assert "news" in tag_names

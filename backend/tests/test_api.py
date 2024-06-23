@@ -78,7 +78,7 @@ class TestPocketArticle:
         fp = Path(rootdir).joinpath("pocketitem.json")
         article_json = json.loads(fp.read_text())
         article = PocketArticle.from_pocket_item(article_json)
-        article._pocket_tags = []
+        # article._pocket_tags = []
         # session.add(article)
         # session.commit()
         mydiary_pocket.save_articles_to_database([article], session)

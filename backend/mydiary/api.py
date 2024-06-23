@@ -10,6 +10,7 @@ from fastapi.responses import Response
 import pydantic
 from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
+from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
 from .db import Session, engine, select, func
 from .models import (
@@ -48,13 +49,12 @@ class GoogleCalendarEventRead(GoogleCalendarEvent):
 
 
 class TagRead(TagBase):
-    id_: int = Field(alias="id")
     num_pocket_articles: Optional[int] = None
 
 
 class PocketArticleRead(PocketArticleBase):
-    id: int
-    tags_: List[TagRead] = Field(alias="tags")
+    # tags_: List[TagRead] = Field(alias="tags")
+    tags: List[TagRead] = []
 
 
 class PocketArticleUpdate(SQLModel):
@@ -254,7 +254,7 @@ def read_tags(
     ret: List[TagRead] = []
     for tag in tags:
         num_pocket_articles = len(tag.pocket_articles)
-        item = TagRead.from_orm(tag)
+        item = TagRead.model_validate(tag)
         item.num_pocket_articles = num_pocket_articles
         ret.append(item)
     return ret
@@ -325,18 +325,25 @@ def update_pocket_article(
     db_article = session.get(PocketArticle, article_id)
     if not db_article:
         raise HTTPException(status_code=404, detail="PocketArticle not found")
-    article_data = article.dict(exclude_unset=True)
+    article_data = article.model_dump(exclude_unset=True)
     for k, v in article_data.items():
         try:
             setattr(db_article, k, v)
         except ValueError:
             pass
     if article_data.get("pocket_tags"):
-        db_article._pocket_tags = article_data["pocket_tags"]
-        db_article.collect_tags(session=session)
-    session.add(db_article)
+        new_tags = []
+        # sqlalchemy is weird. I couldn't get the merge to work right, so instead I avoid creating new Tag objects if they already exist
+        existing_tags_map = {t.name: t for t in db_article.tags}
+        for tag_name in article_data["pocket_tags"]:
+            if tag_name in existing_tags_map:
+                new_tags.append(existing_tags_map[tag_name])
+            else:
+                new_tags.append(Tag(name=tag_name, is_pocket_tag=True))
+        db_article.tags = new_tags
+    session.merge(db_article)
     session.commit()
-    session.refresh(db_article)
+    # session.refresh(db_article)
     return db_article
 
 
@@ -668,8 +675,8 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         note = mydiary_joplin.get_note(note_id)
         md_note = MarkdownDoc(note.body, parent=note)
 
-        resource_ids = md_note.get_image_resource_ids()
-        if resource_ids:
+        sec_images = md_note.get_section_by_title("images")
+        if not md_note.get_image_resource_ids():
             # currently, an error is raised if there are already any images present.
             # TODO: handle the case where there are already images present
             raise RuntimeError()
@@ -709,7 +716,7 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
 def create_perform_song(
     *, session: Session = Depends(get_session), perform_song: PerformSongCreate
 ):
-    db_perform_song = PerformSong.from_orm(perform_song)
+    db_perform_song = PerformSong.model_validate(perform_song)
     session.add(db_perform_song)
     session.commit()
     session.refresh(db_perform_song)
@@ -789,7 +796,7 @@ def delete_perform_song(
 
 @app.post("/dogs/", operation_id="createDog", response_model=DogRead)
 def create_dog(*, session: Session = Depends(get_session), dog: DogCreate):
-    db_dog = Dog.from_orm(dog)
+    db_dog = Dog.model_validate(dog)
     session.add(db_dog)
     session.commit()
     session.refresh(db_dog)
@@ -829,7 +836,7 @@ def update_dog(
     db_dog = session.get(Dog, dog_id)
     if not db_dog:
         raise HTTPException(status_code=404, detail="Dog not found")
-    dog_data = dog.dict(exclude_unset=True)
+    dog_data = dog.model_dump(exclude_unset=True)
     for k, v in dog_data.items():
         setattr(db_dog, k, v)
     session.add(db_dog)
@@ -850,7 +857,7 @@ def delete_dog(*, session: Session = Depends(get_session), dog_id: int):
 
 @app.post("/recipes/", operation_id="createRecipe", response_model=RecipeRead)
 def create_recipe(*, session: Session = Depends(get_session), recipe: RecipeCreate):
-    db_recipe = Recipe.from_orm(recipe)
+    db_recipe = Recipe.model_validate(recipe)
     session.add(db_recipe)
     session.commit()
     session.refresh(db_recipe)
