@@ -195,11 +195,35 @@ class PocketArticleBase(SQLModel):
 
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
-    _pocket_tags: Optional[List[str]] = PrivateAttr()
+    # _pocket_tags: Optional[List[str]] = PrivateAttr()
 
     @property
     def pocket_url(self) -> str:
         return f"https://getpocket.com/read/{self.id}"
+
+    def collect_tags(self, session: Optional["Session"] = None, commit=True):
+        # TODO: This doesn't work. Fix it.
+        from .pocket_connector import MyDiaryPocket
+
+        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session, commit=commit)
+
+    def to_markdown(self) -> str:
+        if self.resolved_title:
+            title = self.resolved_title
+        elif self.given_title:
+            title = self.given_title
+        else:
+            title = "Unknown title"
+        pocket_link = f"[Pocket link]({self.pocket_url})"
+        return f"[{title}]({self.url}) ({pocket_link})"
+
+
+class PocketArticle(PocketArticleBase, table=True):
+    id: int = Field(primary_key=True)
+
+    tags: List["Tag"] = Relationship(
+        back_populates="pocket_articles", link_model=PocketArticleTagLink, sa_relationship_kwargs={'cascade': 'save-update,merge'}
+    )
 
     @classmethod
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
@@ -238,10 +262,10 @@ class PocketArticleBase(SQLModel):
         word_count = int(item["word_count"]) if "word_count" in item else None
         excerpt = item.get("excerpt", None)
         top_image_url = item.get("top_image_url", None)
-        if "tags" in item:
-            _pocket_tags = [t["tag"] for t in item["tags"].values()]
-        else:
-            _pocket_tags = []
+        _pocket_tags = []
+        for t in item.get("tags", {}).values():
+            tag_name = t["tag"]
+            _pocket_tags.append(Tag(name=tag_name, is_pocket_tag=True))
         ret = cls(
             id=id,
             given_title=given_title,
@@ -257,34 +281,11 @@ class PocketArticleBase(SQLModel):
             word_count=word_count,
             excerpt=excerpt,
             top_image_url=top_image_url,
+            tags = _pocket_tags,
         )
         ret._pocket_item = item
-        ret._pocket_tags = _pocket_tags
+        # ret._pocket_tags = _pocket_tags
         return ret
-
-    def collect_tags(self, session: Optional["Session"] = None, commit=True):
-        # TODO: This doesn't work. Fix it.
-        from .pocket_connector import MyDiaryPocket
-
-        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session, commit=commit)
-
-    def to_markdown(self) -> str:
-        if self.resolved_title:
-            title = self.resolved_title
-        elif self.given_title:
-            title = self.given_title
-        else:
-            title = "Unknown title"
-        pocket_link = f"[Pocket link]({self.pocket_url})"
-        return f"[{title}]({self.url}) ({pocket_link})"
-
-
-class PocketArticle(PocketArticleBase, table=True):
-    id: int = Field(primary_key=True)
-
-    tags: List["Tag"] = Relationship(
-        back_populates="pocket_articles", link_model=PocketArticleTagLink
-    )
 
 
 class GoogleCalendarEvent(SQLModel, table=True):
@@ -402,14 +403,12 @@ class JoplinNote(SQLModel):
 
 
 class TagBase(SQLModel):
-    # TODO
-    name: str = Field(index=True)
+    name: str
     is_pocket_tag: bool = False
 
 
 class Tag(TagBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-
     pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
     )

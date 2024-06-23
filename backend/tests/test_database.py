@@ -75,7 +75,7 @@ def test_add_pocket_article_to_database(rootdir: str, db_session: Session):
     fp = Path(rootdir).joinpath("pocketitem.json")
     article_json = json.loads(fp.read_text())
     article = PocketArticle.from_pocket_item(article_json)
-    article.collect_tags(db_session)
+    # article.collect_tags(db_session)
     db_session.add(article)
     db_session.commit()
 
@@ -105,8 +105,8 @@ def test_add_pocket_article_existing_tag(rootdir: str, db_session: Session):
 
     article_json = json.loads(fp.read_text())
     article = PocketArticle.from_pocket_item(article_json)
-    article.collect_tags(db_session)
-    db_session.add(article)
+    # article.collect_tags(db_session)
+    db_session.merge(article)
     db_session.commit()
 
     db_tags = db_session.exec(select(Tag)).all()
@@ -127,7 +127,7 @@ def test_add_tags(caplog, db_session: Session):
     caplog.set_level(logging.DEBUG)
     n = 10
     for i in range(n):
-        tag = Tag(name="test tag")
+        tag = Tag(name=f"test tag {i}")
         db_session.add(tag)
         db_session.commit()
 

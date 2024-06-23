@@ -37,8 +37,8 @@ def main(args):
             if existing is not None:
                 num_existing += 1
                 continue
-            article.collect_tags(session=session)
-            session.add(article)
+            # article.collect_tags(session=session)
+            session.merge(article)
             num_added += 1
             if num_added % 500 == 0:
                 logger.debug(f"{num_added} articles added. committing")

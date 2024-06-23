@@ -162,11 +162,11 @@ class MyDiaryPocket:
                 session.delete(existing_row)
                 session.commit()
                 num_updated += 1
-            session.add(article)
-            article.collect_tags(session=session, commit=False)
+            session.merge(article)
+            # article.collect_tags(session=session, commit=False)
         session.commit()
-        for article in articles_list:
-            session.refresh(article)
+        # for article in articles_list:
+        #     session.refresh(article)
         if num_updated > 0:
             logger.debug(
                 f"{num_updated} articles were already in the database and were updated"
