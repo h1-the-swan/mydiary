@@ -169,7 +169,7 @@ class PerformSong(PerformSongBase, table=True):
 
 class PocketArticleTagLink(SQLModel, table=True):
     article_id: int = Field(foreign_key="pocketarticle.id", primary_key=True)
-    tag_id: int = Field(foreign_key="tag.id", primary_key=True)
+    tag_name: str = Field(foreign_key="tag.name", primary_key=True)
 
 
 class PocketStatusEnum(IntEnum):
@@ -403,12 +403,11 @@ class JoplinNote(SQLModel):
 
 
 class TagBase(SQLModel):
-    name: str
-    is_pocket_tag: bool = False
+    name: str = Field(primary_key=True)
+    is_pocket_tag: bool = Field(index=True, default=False)
 
 
 class Tag(TagBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
     pocket_articles: List[PocketArticle] = Relationship(
         back_populates="tags", link_model=PocketArticleTagLink
     )
@@ -681,7 +680,7 @@ class GooglePhotosThumbnail(SQLModel):
 
 class RecipeTagLink(SQLModel, table=True):
     recipe_id: int = Field(foreign_key="recipe.id", primary_key=True)
-    tag_id: int = Field(foreign_key="tag.id", primary_key=True)
+    tag_name: str = Field(foreign_key="tag.name", primary_key=True)
 
 
 class RecipeBase(SQLModel):

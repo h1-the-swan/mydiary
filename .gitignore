@@ -40,3 +40,5 @@ cov*.xml
 .coverage
 
 habitica_backups/
+
+.pytest_cache
