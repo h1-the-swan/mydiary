@@ -18,7 +18,7 @@ google-auth-httplib2 = "^0.2.0"
 google-auth-oauthlib = "^1.0.0"
 pendulum = "^3.0.0"
 Pillow = "^10.2.0"
-sqlmodel = "^0.0.18"
+sqlmodel = "^0.0.19"
 alembic = "^1.13.1"
 fastapi = "^0.110.3"
 uvicorn = {extras = ["standard"], version = "^0.27.1"}

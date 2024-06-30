@@ -5,15 +5,15 @@ ENV POETRY_VERSION=1.7
 # Setup a spot for the api code
 WORKDIR /usr/local/src/app/backend
 
-RUN pip install --upgrade pip
-RUN pip install "poetry==$POETRY_VERSION"
+RUN python -m pip install --upgrade pip
+RUN python -m pip install "poetry==$POETRY_VERSION"
 
 COPY poetry.lock .
 COPY pyproject.toml .
 
 # Project initialization:
-RUN poetry config virtualenvs.create false \
-  && poetry install --no-interaction --no-ansi --no-root
+RUN python -m poetry config virtualenvs.create false \
+  && python -m poetry install --no-interaction --no-ansi --no-root
 
 # RUN poetry run python app.py --generate-openapi-json ./api.json
 
@@ -31,13 +31,13 @@ RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
 ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
 RUN node --version
 RUN npm --version
-RUN npm install joplin
+RUN npm -g install joplin
 
 # Copy over the source code
 COPY . .
 
 # Run poetry install again, this time to install the root package
-RUN poetry install --no-interaction --no-ansi
+RUN python -m poetry install --no-interaction --no-ansi
 
 # Configure Joplin-Nextcloud sync
 RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
@@ -47,6 +47,7 @@ RUN npx joplin config sync.target 5
 RUN npx joplin config api.token $JOPLIN_AUTH_TOKEN
 
 # Kick things off
-ENTRYPOINT [ "poetry" ]
-CMD ["run", "python", "-m", "mydiary.api" ]
-# CMD ["run", "python", "mydiary/api.py" ]
+# ENTRYPOINT [ "poetry" ]
+# CMD ["run", "python", "-m", "mydiary.api" ]
+ENTRYPOINT [ "python" ]
+CMD [ "-m",  "mydiary.api" ]
