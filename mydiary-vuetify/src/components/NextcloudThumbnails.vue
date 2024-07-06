@@ -24,10 +24,11 @@
 <script setup lang="ts">
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
-import { nextcloudPhotosThumbnailUrls } from '@/api'
+import { nextcloudPhotosThumbnailUrls, joplinNoteImages, MyDiaryImageRead } from '@/api'
 import { ref, watch, watchEffect } from 'vue';
 const props = defineProps<{
   dt: string;
+  joplinNoteId?: string;
 }>()
 interface INextCloudThumb {
   url: string;
@@ -35,6 +36,7 @@ interface INextCloudThumb {
   selected: boolean;
 }
 const nextCloudThumbs = ref<INextCloudThumb[]>([])
+const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 async function fetchImageUrls() {
   const imgUrls = (await nextcloudPhotosThumbnailUrls(props.dt)).data
   nextCloudThumbs.value = imgUrls.map((url => {
@@ -45,7 +47,18 @@ async function fetchImageUrls() {
     }
   }))
 }
+async function fetchJoplinNoteImages() {
+  diaryNoteImages.value = []
+  if (props.joplinNoteId) {
+    diaryNoteImages.value = (await joplinNoteImages(props.joplinNoteId)).data
+  }
+}
 watch(props, fetchImageUrls, { immediate: true })
+watch(props, fetchJoplinNoteImages, { immediate: true })
+watchEffect(() => {
+  const existingUrls = diaryNoteImages.value.map((item) => item.nextcloud_path)
+  nextCloudThumbs.value.forEach((item) => item.selected = existingUrls.includes(item.url))
+})
 watchEffect(() => {
   const numSelected = nextCloudThumbs.value.filter((t => t.selected)).length
   console.log(`${numSelected} selected!`)
@@ -55,6 +68,7 @@ watchEffect(() => {
 function onSubmit() {
   const numSelected = nextCloudThumbs.value.filter((t => t.selected)).length
   console.log(`submitted! ${numSelected} selected!`)
+  // TODO: implement add thumbnail to joplin
 
 }
 </script>

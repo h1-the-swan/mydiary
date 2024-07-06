@@ -28,16 +28,17 @@ export type GetNextcloudImageNextcloudThumbnailImgGetParams = {
 url: string;
 };
 
-export type GetNextcloudPhotosThumbnailDimsParams = {
-url: string;
+export type JoplinUpdateNoteParams = {
+tz?: string;
 };
 
-export type JoplinUpdateNoteParams = {
+export type DayInitMarkdownParams = {
 tz?: string;
 };
 
 export type JoplinInitNoteParams = {
 tz?: string;
+post_sync?: unknown;
 };
 
 export type ReadSpotifyHistoryParams = {
@@ -48,23 +49,23 @@ limit?: number;
 export type ReadPocketArticlesParams = {
 offset?: number;
 limit?: number;
-status?: number[];
+status?: number[] | null;
 /**
  * Tag names (comma separated
  */
-tags?: string;
-dateMin?: string;
-dateMax?: string;
+tags?: string | null;
+dateMin?: string | null;
+dateMax?: string | null;
 /**
  * Year added (ignored if dateRange is specified)
  */
-year?: number;
+year?: number | null;
 };
 
 export type ReadTagsParams = {
 offset?: number;
 limit?: number;
-is_pocket_tag?: boolean;
+is_pocket_tag?: boolean | null;
 };
 
 export type ReadGCalEventsParams = {
@@ -84,12 +85,21 @@ export interface ValidationError {
   type: string;
 }
 
+export type TagReadNumPocketArticles = number | null;
+
 export interface TagRead {
   name: string;
   is_pocket_tag?: boolean;
-  id: number;
-  num_pocket_articles?: number;
+  num_pocket_articles?: TagReadNumPocketArticles;
 }
+
+export type SpotifyTrackHistoryReadContextType = number | null;
+
+export type SpotifyTrackHistoryReadContextName = string | null;
+
+export type SpotifyTrackHistoryReadContextUri = string | null;
+
+export type SpotifyTrackHistoryReadId = number | null;
 
 export interface SpotifyTrackBase {
   spotify_id: string;
@@ -99,31 +109,33 @@ export interface SpotifyTrackBase {
 }
 
 export interface SpotifyTrackHistoryRead {
-  id: number;
+  id?: SpotifyTrackHistoryReadId;
   played_at: string;
-  context_uri?: string;
-  context_name?: string;
-  context_type?: number;
+  context_uri?: SpotifyTrackHistoryReadContextUri;
+  context_name?: SpotifyTrackHistoryReadContextName;
+  context_type?: SpotifyTrackHistoryReadContextType;
   spotify_id: string;
+  id_: number;
   track: SpotifyTrackBase;
 }
+
+export type RecipeReadNotes = string | null;
 
 export interface RecipeRead {
   name: string;
   upvotes?: number;
-  notes?: string;
+  notes?: RecipeReadNotes;
   id: number;
 }
+
+export type RecipeCreateNotes = string | null;
 
 export interface RecipeCreate {
   name: string;
   upvotes?: number;
-  notes?: string;
+  notes?: RecipeCreateNotes;
 }
 
-/**
- * An enumeration.
- */
 export type PocketStatusEnum = typeof PocketStatusEnum[keyof typeof PocketStatusEnum];
 
 
@@ -134,82 +146,205 @@ export const PocketStatusEnum = {
   NUMBER_2: 2,
 } as const;
 
+export type PocketArticleUpdatePocketTags = string[] | null;
+
+export type PocketArticleUpdateTopImageUrl = string | null;
+
+export type PocketArticleUpdateExcerpt = string | null;
+
+export type PocketArticleUpdateWordCount = number | null;
+
+export type PocketArticleUpdateListenDurationEstimate = number | null;
+
+export type PocketArticleUpdateTimeFavorited = string | null;
+
+export type PocketArticleUpdateTimeRead = string | null;
+
+export type PocketArticleUpdateTimeUpdated = string | null;
+
+export type PocketArticleUpdateTimeAdded = string | null;
+
+export type PocketArticleUpdateStatus = PocketStatusEnum | null;
+
+export type PocketArticleUpdateFavorite = boolean | null;
+
+export type PocketArticleUpdateUrl = string | null;
+
+export type PocketArticleUpdateResolvedTitle = string | null;
+
+export type PocketArticleUpdateGivenTitle = string | null;
+
 export interface PocketArticleUpdate {
-  given_title?: string;
-  resolved_title?: string;
-  url?: string;
-  favorite?: boolean;
-  status?: PocketStatusEnum;
-  time_added?: string;
-  time_updated?: string;
-  time_read?: string;
-  time_favorited?: string;
-  listen_duration_estimate?: number;
-  word_count?: number;
-  excerpt?: string;
-  top_image_url?: string;
-  pocket_tags?: string[];
+  given_title?: PocketArticleUpdateGivenTitle;
+  resolved_title?: PocketArticleUpdateResolvedTitle;
+  url?: PocketArticleUpdateUrl;
+  favorite?: PocketArticleUpdateFavorite;
+  status?: PocketArticleUpdateStatus;
+  time_added?: PocketArticleUpdateTimeAdded;
+  time_updated?: PocketArticleUpdateTimeUpdated;
+  time_read?: PocketArticleUpdateTimeRead;
+  time_favorited?: PocketArticleUpdateTimeFavorited;
+  listen_duration_estimate?: PocketArticleUpdateListenDurationEstimate;
+  word_count?: PocketArticleUpdateWordCount;
+  excerpt?: PocketArticleUpdateExcerpt;
+  top_image_url?: PocketArticleUpdateTopImageUrl;
+  pocket_tags?: PocketArticleUpdatePocketTags;
 }
+
+export type PocketArticleReadTopImageUrl = string | null;
+
+export type PocketArticleReadExcerpt = string | null;
+
+export type PocketArticleReadWordCount = number | null;
+
+export type PocketArticleReadListenDurationEstimate = number | null;
+
+export type PocketArticleReadTimeFavorited = string | null;
+
+export type PocketArticleReadTimeRead = string | null;
+
+export type PocketArticleReadTimeUpdated = string | null;
+
+export type PocketArticleReadTimeAdded = string | null;
 
 export interface PocketArticleRead {
   given_title: string;
   resolved_title: string;
   url: string;
   favorite: boolean;
-  status: string;
-  time_added?: string;
-  time_updated?: string;
-  time_read?: string;
-  time_favorited?: string;
-  listen_duration_estimate?: number;
-  word_count?: number;
-  excerpt?: string;
-  top_image_url?: string;
-  id: number;
-  tags: TagRead[];
+  status: PocketStatusEnum;
+  time_added?: PocketArticleReadTimeAdded;
+  time_updated?: PocketArticleReadTimeUpdated;
+  time_read?: PocketArticleReadTimeRead;
+  time_favorited?: PocketArticleReadTimeFavorited;
+  listen_duration_estimate?: PocketArticleReadListenDurationEstimate;
+  word_count?: PocketArticleReadWordCount;
+  excerpt?: PocketArticleReadExcerpt;
+  top_image_url?: PocketArticleReadTopImageUrl;
+  tags?: TagRead[];
 }
 
+export type PerformSongUpdateLearnedDt = string | null;
+
+export type PerformSongUpdateLyrics = string | null;
+
+export type PerformSongUpdateCapo = number | null;
+
+export type PerformSongUpdateKey = string | null;
+
+export type PerformSongUpdateCreatedAt = string | null;
+
+export type PerformSongUpdatePerformUrl = string | null;
+
+export type PerformSongUpdateNotes = string | null;
+
+export type PerformSongUpdateSpotifyId = string | null;
+
+export type PerformSongUpdateLearned = boolean | null;
+
+export type PerformSongUpdateArtistName = string | null;
+
+export type PerformSongUpdateName = string | null;
+
 export interface PerformSongUpdate {
-  name?: string;
-  artist_name?: string;
-  learned?: boolean;
-  spotify_id?: string;
-  notes?: string;
-  perform_url?: string;
-  created_at?: string;
-  key?: string;
-  capo?: number;
-  lyrics?: string;
-  learned_dt?: string;
+  name?: PerformSongUpdateName;
+  artist_name?: PerformSongUpdateArtistName;
+  learned?: PerformSongUpdateLearned;
+  spotify_id?: PerformSongUpdateSpotifyId;
+  notes?: PerformSongUpdateNotes;
+  perform_url?: PerformSongUpdatePerformUrl;
+  created_at?: PerformSongUpdateCreatedAt;
+  key?: PerformSongUpdateKey;
+  capo?: PerformSongUpdateCapo;
+  lyrics?: PerformSongUpdateLyrics;
+  learned_dt?: PerformSongUpdateLearnedDt;
 }
+
+export type PerformSongReadLearnedDt = string | null;
+
+export type PerformSongReadLyrics = string | null;
+
+export type PerformSongReadCapo = number | null;
+
+export type PerformSongReadKey = string | null;
+
+export type PerformSongReadCreatedAt = string | null;
+
+export type PerformSongReadPerformUrl = string | null;
+
+export type PerformSongReadNotes = string | null;
+
+export type PerformSongReadSpotifyId = string | null;
+
+export type PerformSongReadArtistName = string | null;
 
 export interface PerformSongRead {
   name: string;
-  artist_name?: string;
+  artist_name?: PerformSongReadArtistName;
   learned?: boolean;
-  spotify_id?: string;
-  notes?: string;
-  perform_url?: string;
-  created_at?: string;
-  key?: string;
-  capo?: number;
-  lyrics?: string;
-  learned_dt?: string;
+  spotify_id?: PerformSongReadSpotifyId;
+  notes?: PerformSongReadNotes;
+  perform_url?: PerformSongReadPerformUrl;
+  created_at?: PerformSongReadCreatedAt;
+  key?: PerformSongReadKey;
+  capo?: PerformSongReadCapo;
+  lyrics?: PerformSongReadLyrics;
+  learned_dt?: PerformSongReadLearnedDt;
   id: number;
 }
 
+export type PerformSongCreateLearnedDt = string | null;
+
+export type PerformSongCreateLyrics = string | null;
+
+export type PerformSongCreateCapo = number | null;
+
+export type PerformSongCreateKey = string | null;
+
+export type PerformSongCreateCreatedAt = string | null;
+
+export type PerformSongCreatePerformUrl = string | null;
+
+export type PerformSongCreateNotes = string | null;
+
+export type PerformSongCreateSpotifyId = string | null;
+
+export type PerformSongCreateArtistName = string | null;
+
 export interface PerformSongCreate {
   name: string;
-  artist_name?: string;
+  artist_name?: PerformSongCreateArtistName;
   learned?: boolean;
-  spotify_id?: string;
-  notes?: string;
-  perform_url?: string;
-  created_at?: string;
-  key?: string;
-  capo?: number;
-  lyrics?: string;
-  learned_dt?: string;
+  spotify_id?: PerformSongCreateSpotifyId;
+  notes?: PerformSongCreateNotes;
+  perform_url?: PerformSongCreatePerformUrl;
+  created_at?: PerformSongCreateCreatedAt;
+  key?: PerformSongCreateKey;
+  capo?: PerformSongCreateCapo;
+  lyrics?: PerformSongCreateLyrics;
+  learned_dt?: PerformSongCreateLearnedDt;
+}
+
+export type MyDiaryImageReadJoplinResourceId = string | null;
+
+export type MyDiaryImageReadDescription = string | null;
+
+export type MyDiaryImageReadNextcloudPath = string | null;
+
+export type MyDiaryImageReadFilepath = string | null;
+
+export type MyDiaryImageReadName = string | null;
+
+export interface MyDiaryImageRead {
+  hash: string;
+  name?: MyDiaryImageReadName;
+  filepath?: MyDiaryImageReadFilepath;
+  nextcloud_path?: MyDiaryImageReadNextcloudPath;
+  description?: MyDiaryImageReadDescription;
+  thumbnail_size: number;
+  joplin_resource_id?: MyDiaryImageReadJoplinResourceId;
+  created_at: string;
+  id: number;
 }
 
 export interface JoplinNote {
@@ -231,43 +366,79 @@ export interface GooglePhotosThumbnail {
   height: number;
 }
 
+export type GoogleCalendarEventReadDescription = string | null;
+
+export type GoogleCalendarEventReadLocation = string | null;
+
 export interface GoogleCalendarEventRead {
-  id: string;
-  summary: string;
-  location?: string;
-  description?: string;
-  start: string;
-  end: string;
-  start_timezone: string;
-  end_timezone: string;
+  id?: string;
+  summary?: string;
+  location?: GoogleCalendarEventReadLocation;
+  description?: GoogleCalendarEventReadDescription;
+  start?: string;
+  end?: string;
+  start_timezone?: string;
+  end_timezone?: string;
 }
 
+export type DogUpdateNotes = string | null;
+
+export type DogUpdateEstimatedBday = string | null;
+
+export type DogUpdateOwners = string | null;
+
+export type DogUpdateWhenMet = string | null;
+
+export type DogUpdateHowMet = string | null;
+
+export type DogUpdateName = string | null;
+
 export interface DogUpdate {
-  name?: string;
-  how_met?: string;
-  when_met?: string;
-  owners?: string;
-  estimated_bday?: string;
-  notes?: string;
+  name?: DogUpdateName;
+  how_met?: DogUpdateHowMet;
+  when_met?: DogUpdateWhenMet;
+  owners?: DogUpdateOwners;
+  estimated_bday?: DogUpdateEstimatedBday;
+  notes?: DogUpdateNotes;
 }
+
+export type DogReadNotes = string | null;
+
+export type DogReadEstimatedBday = string | null;
+
+export type DogReadOwners = string | null;
+
+export type DogReadWhenMet = string | null;
+
+export type DogReadHowMet = string | null;
 
 export interface DogRead {
   name: string;
-  how_met?: string;
-  when_met?: string;
-  owners?: string;
-  estimated_bday?: string;
-  notes?: string;
+  how_met?: DogReadHowMet;
+  when_met?: DogReadWhenMet;
+  owners?: DogReadOwners;
+  estimated_bday?: DogReadEstimatedBday;
+  notes?: DogReadNotes;
   id: number;
 }
 
+export type DogCreateNotes = string | null;
+
+export type DogCreateEstimatedBday = string | null;
+
+export type DogCreateOwners = string | null;
+
+export type DogCreateWhenMet = string | null;
+
+export type DogCreateHowMet = string | null;
+
 export interface DogCreate {
   name: string;
-  how_met?: string;
-  when_met?: string;
-  owners?: string;
-  estimated_bday?: string;
-  notes?: string;
+  how_met?: DogCreateHowMet;
+  when_met?: DogCreateWhenMet;
+  owners?: DogCreateOwners;
+  estimated_bday?: DogCreateEstimatedBday;
+  notes?: DogCreateNotes;
 }
 
 
@@ -400,7 +571,7 @@ export const spotifyHistoryCount = <TData = AxiosResponse<number>>(
  * @summary Get Spotify Image Url
  */
 export const getSpotifyImageUrl = <TData = AxiosResponse<string>>(
-    trackId: string, options?: AxiosRequestConfig
+    trackId: string | null, options?: AxiosRequestConfig
  ): Promise<TData> => {
     return axios.get(
       `/spotify/album_image_url/${trackId}`,options
@@ -455,6 +626,20 @@ export const joplinInitNote = <TData = AxiosResponse<unknown>>(
   }
 
 /**
+ * @summary Day Init Markdown
+ */
+export const dayInitMarkdown = <TData = AxiosResponse<unknown>>(
+    dt: string,
+    params?: DayInitMarkdownParams, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/day_init_markdown/${dt}`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
  * @summary Joplin Get Note
  */
 export const joplinGetNote = <TData = AxiosResponse<JoplinNote>>(
@@ -462,6 +647,17 @@ export const joplinGetNote = <TData = AxiosResponse<JoplinNote>>(
  ): Promise<TData> => {
     return axios.get(
       `/joplin/get_note/${noteId}`,options
+    );
+  }
+
+/**
+ * @summary Joplin Get Note Images
+ */
+export const joplinNoteImages = <TData = AxiosResponse<MyDiaryImageRead[]>>(
+    noteId: string, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/joplin/get_note_images/${noteId}`,options
     );
   }
 
@@ -515,19 +711,6 @@ export const nextcloudPhotosThumbnailUrls = <TData = AxiosResponse<string[]>>(
   }
 
 /**
- * @summary Get Nextcloud Thumbnail Dims
- */
-export const getNextcloudPhotosThumbnailDims = <TData = AxiosResponse<unknown[]>>(
-    params: GetNextcloudPhotosThumbnailDimsParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
-    return axios.get(
-      `/nextcloud/thumbnail_dims`,{
-    ...options,
-        params: {...params, ...options?.params},}
-    );
-  }
-
-/**
  * @summary Get Nextcloud Image
  */
 export const getNextcloudImageNextcloudThumbnailImgGet = <TData = AxiosResponse<unknown>>(
@@ -554,6 +737,18 @@ export const nextcloudPhotosAddToJoplin = <TData = AxiosResponse<unknown>>(
   }
 
 /**
+ * @summary Create Perform Song
+ */
+export const createPerformSong = <TData = AxiosResponse<PerformSongRead>>(
+    performSongCreate: PerformSongCreate, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.post(
+      `/performsongs/`,
+      performSongCreate,options
+    );
+  }
+
+/**
  * @summary Read Perform Songs
  */
 export const readPerformSongsList = <TData = AxiosResponse<PerformSongRead[]>>(
@@ -563,18 +758,6 @@ export const readPerformSongsList = <TData = AxiosResponse<PerformSongRead[]>>(
       `/performsongs/`,{
     ...options,
         params: {...params, ...options?.params},}
-    );
-  }
-
-/**
- * @summary Create Perform Song
- */
-export const createPerformSong = <TData = AxiosResponse<PerformSongRead>>(
-    performSongCreate: PerformSongCreate, options?: AxiosRequestConfig
- ): Promise<TData> => {
-    return axios.post(
-      `/performsongs/`,
-      performSongCreate,options
     );
   }
 
@@ -601,6 +784,19 @@ export const readPerformSong = <TData = AxiosResponse<PerformSongRead>>(
   }
 
 /**
+ * @summary Update Perform Song
+ */
+export const updatePerformSong = <TData = AxiosResponse<PerformSongRead>>(
+    performSongId: number,
+    performSongUpdate: PerformSongUpdate, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.patch(
+      `/performsongs/${performSongId}`,
+      performSongUpdate,options
+    );
+  }
+
+/**
  * @summary Delete Perform Song
  */
 export const deletePerformSong = <TData = AxiosResponse<unknown>>(
@@ -612,15 +808,14 @@ export const deletePerformSong = <TData = AxiosResponse<unknown>>(
   }
 
 /**
- * @summary Update Perform Song
+ * @summary Create Dog
  */
-export const updatePerformSong = <TData = AxiosResponse<PerformSongRead>>(
-    performSongId: number,
-    performSongUpdate: PerformSongUpdate, options?: AxiosRequestConfig
+export const createDog = <TData = AxiosResponse<DogRead>>(
+    dogCreate: DogCreate, options?: AxiosRequestConfig
  ): Promise<TData> => {
-    return axios.patch(
-      `/performsongs/${performSongId}`,
-      performSongUpdate,options
+    return axios.post(
+      `/dogs/`,
+      dogCreate,options
     );
   }
 
@@ -638,35 +833,12 @@ export const readDogsList = <TData = AxiosResponse<DogRead[]>>(
   }
 
 /**
- * @summary Create Dog
- */
-export const createDog = <TData = AxiosResponse<DogRead>>(
-    dogCreate: DogCreate, options?: AxiosRequestConfig
- ): Promise<TData> => {
-    return axios.post(
-      `/dogs/`,
-      dogCreate,options
-    );
-  }
-
-/**
  * @summary Read Dog
  */
 export const readDog = <TData = AxiosResponse<DogRead>>(
     dogId: number, options?: AxiosRequestConfig
  ): Promise<TData> => {
     return axios.get(
-      `/dogs/${dogId}`,options
-    );
-  }
-
-/**
- * @summary Delete Dog
- */
-export const deleteDog = <TData = AxiosResponse<unknown>>(
-    dogId: number, options?: AxiosRequestConfig
- ): Promise<TData> => {
-    return axios.delete(
       `/dogs/${dogId}`,options
     );
   }
@@ -685,15 +857,13 @@ export const updateDog = <TData = AxiosResponse<DogRead>>(
   }
 
 /**
- * @summary Read Recipes
+ * @summary Delete Dog
  */
-export const readRecipesList = <TData = AxiosResponse<RecipeRead>>(
-    params?: ReadRecipesListParams, options?: AxiosRequestConfig
+export const deleteDog = <TData = AxiosResponse<unknown>>(
+    dogId: number, options?: AxiosRequestConfig
  ): Promise<TData> => {
-    return axios.get(
-      `/recipes/`,{
-    ...options,
-        params: {...params, ...options?.params},}
+    return axios.delete(
+      `/dogs/${dogId}`,options
     );
   }
 
@@ -706,6 +876,19 @@ export const createRecipe = <TData = AxiosResponse<RecipeRead>>(
     return axios.post(
       `/recipes/`,
       recipeCreate,options
+    );
+  }
+
+/**
+ * @summary Read Recipes
+ */
+export const readRecipesList = <TData = AxiosResponse<RecipeRead>>(
+    params?: ReadRecipesListParams, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/recipes/`,{
+    ...options,
+        params: {...params, ...options?.params},}
     );
   }
 
@@ -735,25 +918,26 @@ export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
 export type JoplinSyncResult = AxiosResponse<unknown>
 export type JoplinGetNoteIdResult = AxiosResponse<string>
 export type JoplinInitNoteResult = AxiosResponse<unknown>
+export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
+export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>
 export type GooglePhotosThumbnailUrlsResult = AxiosResponse<GooglePhotosThumbnail[]>
 export type GooglePhotosAddToJoplinResult = AxiosResponse<unknown>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>
-export type GetNextcloudPhotosThumbnailDimsResult = AxiosResponse<unknown[]>
 export type GetNextcloudImageNextcloudThumbnailImgGetResult = AxiosResponse<unknown>
 export type NextcloudPhotosAddToJoplinResult = AxiosResponse<unknown>
-export type ReadPerformSongsListResult = AxiosResponse<PerformSongRead[]>
 export type CreatePerformSongResult = AxiosResponse<PerformSongRead>
+export type ReadPerformSongsListResult = AxiosResponse<PerformSongRead[]>
 export type PerformSongCountResult = AxiosResponse<number>
 export type ReadPerformSongResult = AxiosResponse<PerformSongRead>
-export type DeletePerformSongResult = AxiosResponse<unknown>
 export type UpdatePerformSongResult = AxiosResponse<PerformSongRead>
-export type ReadDogsListResult = AxiosResponse<DogRead[]>
+export type DeletePerformSongResult = AxiosResponse<unknown>
 export type CreateDogResult = AxiosResponse<DogRead>
+export type ReadDogsListResult = AxiosResponse<DogRead[]>
 export type ReadDogResult = AxiosResponse<DogRead>
-export type DeleteDogResult = AxiosResponse<unknown>
 export type UpdateDogResult = AxiosResponse<DogRead>
-export type ReadRecipesListResult = AxiosResponse<RecipeRead>
+export type DeleteDogResult = AxiosResponse<unknown>
 export type CreateRecipeResult = AxiosResponse<RecipeRead>
+export type ReadRecipesListResult = AxiosResponse<RecipeRead>
 export type SendApiJsonGenerateOpenapiJsonGetResult = AxiosResponse<unknown>

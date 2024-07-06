@@ -401,6 +401,11 @@ class JoplinNote(SQLModel):
             updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
         )
 
+    @property
+    def md_note(self):
+        from .markdown_edits import MarkdownDoc
+        return MarkdownDoc(self.body, parent=self)
+
 
 class TagBase(SQLModel):
     name: str = Field(primary_key=True)
@@ -413,8 +418,7 @@ class Tag(TagBase, table=True):
     )
 
 
-class MyDiaryImage(SQLModel, table=True):
-    id: int = Field(primary_key=True)
+class MyDiaryImageBase(SQLModel):
     hash: str = Field(index=True)
     name: Optional[str] = None
     filepath: Optional[str] = None
@@ -423,6 +427,10 @@ class MyDiaryImage(SQLModel, table=True):
     thumbnail_size: int
     joplin_resource_id: Optional[str] = Field(index=True, default=None)
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+
+
+class MyDiaryImage(MyDiaryImageBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
 
 
 class MyDiaryDay(SQLModel):
