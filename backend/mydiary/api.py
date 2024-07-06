@@ -2,7 +2,7 @@ from datetime import datetime
 import requests
 import io
 import pendulum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +33,8 @@ from .models import (
     PocketArticleBase,
     GooglePhotosThumbnail,
     JoplinNote,
+    MyDiaryImageBase,
+    MyDiaryImage,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
@@ -104,6 +106,10 @@ class PerformSongUpdate(SQLModel):
     capo: Optional[int] = None
     lyrics: Optional[str] = None
     learned_dt: Optional[datetime] = None
+
+
+class MyDiaryImageRead(MyDiaryImageBase):
+    id: int
 
 
 class DogRead(DogBase):
@@ -494,6 +500,26 @@ def joplin_get_note(note_id: str):
         return note
 
 
+@app.get(
+    "/joplin/get_note_images/{note_id}",
+    operation_id="joplinNoteImages",
+    response_model=List[MyDiaryImageRead],
+)
+def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)):
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        note = mydiary_joplin.get_note(note_id)
+        return [
+            session.exec(
+                select(MyDiaryImage).where(
+                    MyDiaryImage.joplin_resource_id == resource_id
+                )
+            ).one()
+            for resource_id in note.md_note.get_image_resource_ids()
+        ]
+
+
 @app.post(
     "/joplin/update_note/{dt}",
     operation_id="joplinUpdateNote",
@@ -625,16 +651,16 @@ def nextcloud_photos_thumbnails_url(dt: str):
     return filepaths
 
 
-@app.get(
-    "/nextcloud/thumbnail_dims",
-    operation_id="getNextcloudPhotosThumbnailDims",
-    response_model=Tuple[int, int],
-)
-def get_nextcloud_thumbnail_dims(url: str):
-    if not url:
-        return (0, 0)
-    mydiary_nextcloud = MyDiaryNextcloud()
-    return mydiary_nextcloud.get_image_thumbnail_dimensions(url)
+# @app.get(
+#     "/nextcloud/thumbnail_dims",
+#     operation_id="getNextcloudPhotosThumbnailDims",
+#     response_model=Tuple[int, int],
+# )
+# def get_nextcloud_thumbnail_dims(url: str):
+#     if not url:
+#         return (0, 0)
+#     mydiary_nextcloud = MyDiaryNextcloud()
+#     return mydiary_nextcloud.get_image_thumbnail_dimensions(url)
 
 
 @app.get(
@@ -680,8 +706,6 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
             # currently, an error is raised if there are already any images present.
             # TODO: handle the case where there are already images present
             raise RuntimeError()
-        size = (512, 512)
-        bytes_threshold = 60000
         resource_ids = []
         for photo in photos:
             image_bytes = mydiary_nextcloud.get_image(photo)

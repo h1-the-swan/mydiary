@@ -33,7 +33,7 @@
     </v-expansion-panel>
   </v-expansion-panels>
   <joplin-sync-button />
-  <nextcloud-thumbnails :dt="getDateStr" />
+  <nextcloud-thumbnails :dt="getDateStr" :joplin-note-id="joplinNoteId" />
 </template>
 
 <script setup lang="ts">
@@ -41,7 +41,7 @@ import { onMounted, computed, ref, watch, watchEffect } from 'vue';
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { joplinGetNote, joplinGetNoteId, JoplinNote } from '@/api';
+import { joplinGetNote, joplinGetNoteId, JoplinNote, joplinNoteImages, MyDiaryImageRead } from '@/api';
 import GCalAuth from '@/components/GCalAuth.vue';
 import JoplinSyncButton from '@/components/JoplinSyncButton.vue';
 import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue';
@@ -52,6 +52,7 @@ const initMarkdown = ref('')
 const md = markdownit()
 const joplinNoteId = ref('')
 const diaryNote = ref<JoplinNote>()
+const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const getDate = computed(() => {
   const qd = route.query.dt
   if (!qd || qd === 'yesterday') {
@@ -88,7 +89,16 @@ async function fetchJoplinNote() {
     diaryNote.value = (await joplinGetNote(joplinNoteId.value)).data
   }
 }
+async function fetchJoplinNoteImages() {
+  diaryNoteImages.value = []
+  if (diaryNoteExists.value) {
+    diaryNoteImages.value = (await joplinNoteImages(joplinNoteId.value)).data
+  }
+}
 watch(getDate, fetchInitMarkdown, { immediate: true })
 watch(getDate, fetchJoplinNoteId, { immediate: true })
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
+watch(joplinNoteId, fetchJoplinNoteImages, { immediate: true })
+watchEffect(() => console.log(diaryNote.value))
+watchEffect(() => console.log(diaryNoteImages.value))
 </script>
