@@ -43,6 +43,7 @@ services:
       - ./mydiary-vuetify/package.json:/usr/local/src/app/mydiary-vuetify/package.json
       - ./mydiary-vuetify/tsconfig.json:/usr/local/src/app/mydiary-vuetify/tsconfig.json
       - ./mydiary-vuetify/tsconfig.node.json:/usr/local/src/app/mydiary-vuetify/tsconfig.node.json
+      - ./mydiary-vuetify/.prettierrc:/usr/local/src/app/mydiary-vuetify/.prettierrc
       - ./mydiary-vuetify/package-lock.json:/usr/local/src/app/mydiary-vuetify/package-lock.json
       - ./mydiary-vuetify/vite.config.ts:/usr/local/src/app/mydiary-vuetify/vite.config.ts
       - /etc/passwd:/etc/passwd:ro
