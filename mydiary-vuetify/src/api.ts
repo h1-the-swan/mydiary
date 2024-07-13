@@ -676,6 +676,17 @@ export const joplinUpdateNote = <TData = AxiosResponse<unknown>>(
   }
 
 /**
+ * @summary Joplin Get Info All Days
+ */
+export const joplinGetInfoAllDays = <TData = AxiosResponse<unknown>>(
+     options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/joplin/get_info_all_days`,options
+    );
+  }
+
+/**
  * @summary Google Photos Thumbnails Url
  */
 export const googlePhotosThumbnailUrls = <TData = AxiosResponse<GooglePhotosThumbnail[]>>(
@@ -922,6 +933,7 @@ export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>
+export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown>
 export type GooglePhotosThumbnailUrlsResult = AxiosResponse<GooglePhotosThumbnail[]>
 export type GooglePhotosAddToJoplinResult = AxiosResponse<unknown>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>

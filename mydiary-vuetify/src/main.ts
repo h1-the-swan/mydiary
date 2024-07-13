@@ -17,4 +17,9 @@ const app = createApp(App)
 
 registerPlugins(app)
 
+import { setupCalendar } from 'v-calendar';
+
+// Use calendar defaults (optional)
+app.use(setupCalendar, {})
+
 app.mount('#app')
