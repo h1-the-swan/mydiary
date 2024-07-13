@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { computed, nextTick, ref, watchEffect } from 'vue'
 import Axios from 'axios'
-import { readPerformSongsList, PerformSongRead, spotifyHistoryCount } from '@/api'
+import { readPerformSongsList, PerformSongRead, spotifyHistoryCount, joplinGetInfoAllDays } from '@/api'
 
 // export const useAppStore = defineStore('app', {
 //   state: () => ({
@@ -25,5 +25,10 @@ export const useAppStore = defineStore('app', () => {
     return performSongs.value.filter((performSong) => performSong.id === id)[0]
   }
 
-  return { performSongs, loadPerformSongs, getPerformSongById }
+  const joplinInfoAllDays = ref<any>()
+  async function loadJoplinInfoAllDays() {
+    joplinInfoAllDays.value = (await joplinGetInfoAllDays()).data
+  }
+
+  return { performSongs, loadPerformSongs, getPerformSongById, joplinInfoAllDays, loadJoplinInfoAllDays }
 })

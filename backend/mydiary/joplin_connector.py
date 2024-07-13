@@ -104,9 +104,7 @@ class MyDiaryJoplin:
             "token": self.token,
             "fields": "id,parent_id,title,created_time,updated_time",
         }
-        r = requests.get(
-            f"{self.base_url}/folders/{notebook_id}", params=params
-        )
+        r = requests.get(f"{self.base_url}/folders/{notebook_id}", params=params)
         r.raise_for_status()
         return JoplinFolder.from_api_response(r)
 
@@ -414,7 +412,6 @@ class MyDiaryJoplin:
         )
         return r
 
-
     def create_thumbnail(
         self,
         image_bytes: bytes,
@@ -451,3 +448,25 @@ class MyDiaryJoplin:
         session.commit()
 
         return r
+
+    def get_info_all_days(
+        self, min_dt=pendulum.parse("2022-01-01"), max_dt=pendulum.today()
+    ) -> List[Dict]:
+        dt = min_dt
+        data = []
+        while dt < max_dt:
+            note_id = self.get_note_id_by_date(dt)
+            if note_id and note_id != "does_not_exist":
+                note = self.get_note(note_id)
+                words_content = note.md_note.get_section_by_title("words").get_content()
+                resource_ids = note.md_note.get_image_resource_ids()
+                data.append(
+                    {
+                        "title": note.title,
+                        "note_id": note_id,
+                        "has_words": len(words_content) > 0,
+                        "has_images": len(resource_ids) > 0,
+                    }
+                )
+            dt = dt.add(days=1)
+        return data

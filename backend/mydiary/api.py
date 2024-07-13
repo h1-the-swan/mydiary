@@ -506,6 +506,9 @@ def joplin_get_note(note_id: str):
     response_model=List[MyDiaryImageRead],
 )
 def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)):
+    if not note_id or note_id == "does_not_exist":
+        return []
+
     from mydiary.joplin_connector import MyDiaryJoplin
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
@@ -547,6 +550,17 @@ async def joplin_update_note(dt: str, tz: str = "local"):
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
             print(e)
             raise
+
+
+@app.get(
+    "/joplin/get_info_all_days",
+    operation_id="joplinGetInfoAllDays",
+)
+async def joplin_get_info_all_days():
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        return mydiary_joplin.get_info_all_days()
 
 
 @app.get(
