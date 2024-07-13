@@ -1,84 +1,93 @@
 <template>
-  <div v-if="nextCloudThumbs">
-    <v-form @submit.prevent="onSubmit">
-      <v-row>
-        <v-col
-          v-for="(nImage) in nextCloudThumbs"
-          :key="nImage.url"
-          class="d-flex child-flex nextcloud-thumb"
-          :class="{selectedImg: nImage.selected}"
-          cols="4"
-        >
-        <v-img
-          :src="nImage.src"
-          aspect-ratio="1"
-          @click="nImage.selected = !nImage.selected"
-        ></v-img>
-        </v-col>
-      </v-row>
-      <v-btn class="mt-2" type="submit" block>Submit</v-btn>
-    </v-form>
-  </div>
+    <div v-if="nextCloudThumbs">
+        <v-form @submit.prevent="onSubmit">
+            <v-row>
+                <v-col
+                    v-for="nImage in nextCloudThumbs"
+                    :key="nImage.url"
+                    class="d-flex child-flex nextcloud-thumb"
+                    :class="{ selectedImg: nImage.selected }"
+                    cols="4"
+                >
+                    <v-img
+                        :src="nImage.src"
+                        aspect-ratio="1"
+                        @click="nImage.selected = !nImage.selected"
+                    ></v-img>
+                </v-col>
+            </v-row>
+            <v-btn class="mt-2" type="submit" block>Submit</v-btn>
+        </v-form>
+    </div>
 </template>
 
 <script setup lang="ts">
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
-import { nextcloudPhotosThumbnailUrls, joplinNoteImages, MyDiaryImageRead } from '@/api'
-import { ref, watch, watchEffect } from 'vue';
+import {
+    nextcloudPhotosThumbnailUrls,
+    joplinNoteImages,
+    MyDiaryImageRead,
+} from '@/api'
+import { ref, watch, watchEffect } from 'vue'
 const props = defineProps<{
-  dt: string;
-  joplinNoteId?: string;
+    dt: string
+    joplinNoteId?: string
 }>()
 interface INextCloudThumb {
-  url: string;
-  src: string;
-  selected: boolean;
+    url: string
+    src: string
+    selected: boolean
 }
 const nextCloudThumbs = ref<INextCloudThumb[]>([])
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 async function fetchImageUrls() {
-  const imgUrls = (await nextcloudPhotosThumbnailUrls(props.dt)).data
-  nextCloudThumbs.value = imgUrls.map((url => {
-    return {
-      url: url,
-      src: `/api/nextcloud/thumbnail_img?url=${url}`,
-      selected: false
-    }
-  }))
+    const imgUrls = (await nextcloudPhotosThumbnailUrls(props.dt)).data
+    nextCloudThumbs.value = imgUrls.map((url) => {
+        return {
+            url: url,
+            src: `/api/nextcloud/thumbnail_img?url=${url}`,
+            selected: false,
+        }
+    })
 }
 async function fetchJoplinNoteImages() {
-  diaryNoteImages.value = []
-  if (props.joplinNoteId) {
-    diaryNoteImages.value = (await joplinNoteImages(props.joplinNoteId)).data
-  }
+    diaryNoteImages.value = []
+    if (props.joplinNoteId) {
+        diaryNoteImages.value = (
+            await joplinNoteImages(props.joplinNoteId)
+        ).data
+    }
 }
 watch(props, fetchImageUrls, { immediate: true })
 watch(props, fetchJoplinNoteImages, { immediate: true })
 watchEffect(() => {
-  const existingUrls = diaryNoteImages.value.map((item) => item.nextcloud_path)
-  nextCloudThumbs.value.forEach((item) => item.selected = existingUrls.includes(item.url))
+    const existingUrls = diaryNoteImages.value.map(
+        (item) => item.nextcloud_path
+    )
+    nextCloudThumbs.value.forEach(
+        (item) => (item.selected = existingUrls.includes(item.url))
+    )
 })
 watchEffect(() => {
-  const numSelected = nextCloudThumbs.value.filter((t => t.selected)).length
-  console.log(`${numSelected} selected!`)
-  console.log(nextCloudThumbs.value)
+    const numSelected = nextCloudThumbs.value.filter((t) => t.selected).length
+    console.log(`${numSelected} selected!`)
+    console.log(nextCloudThumbs.value)
 })
 
 function onSubmit() {
-  const numSelected = nextCloudThumbs.value.filter((t => t.selected)).length
-  console.log(`submitted! ${numSelected} selected!`)
-  // TODO: implement add thumbnail to joplin
-
+    const numSelected = nextCloudThumbs.value.filter((t) => t.selected).length
+    console.log(`submitted! ${numSelected} selected!`)
+    // TODO: implement add thumbnail to joplin
 }
 </script>
 
 <style>
 .nextcloud-thumb {
-  opacity: 50%;
+    opacity: 50%;
 }
 
 .nextcloud-thumb.selectedImg {
-  opacity: 100%;
+    opacity: 100%;
 }
 </style>
