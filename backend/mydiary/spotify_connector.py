@@ -5,6 +5,8 @@ DESCRIPTION = """Get spotify data using the Spotify API and the spotipy library"
 import sys, os, time
 from pathlib import Path
 from datetime import date, datetime
+import re
+from urllib.parse import urlsplit
 import pendulum
 from timeit import default_timer as timer
 from typing import Dict, Optional, List, Union
@@ -37,9 +39,19 @@ from .db import engine, Session, select
 
 scopes = ["user-library-read", "user-read-recently-played", "user-top-read"]
 
-# from dotenv import load_dotenv, find_dotenv
 
-# load_dotenv(find_dotenv())
+def normalize_spotify_id(s: str) -> str:
+    if re.match(r"https?:\/\/", s):
+        if "spotify" not in s:
+            raise ValueError(f"This doesn't seem to be a valid spotify id: {s}")
+        p = urlsplit(s).path
+        return p.split("/")[-1]
+    elif ":" in s:
+        if "spotify" not in s:
+            raise ValueError(f"This doesn't seem to be a valid spotify id: {s}")
+        return s.split(":")[-1]
+    else:
+        return s
 
 
 class MyDiarySpotify:
@@ -127,7 +139,7 @@ class MyDiarySpotify:
         if spotify_track_history.context_uri is not None:
             context = self.hydrate_context(spotify_track_history.context_uri)
             spotify_track_history.context_name = context["context_name"]
-            spotify_track_history.context_type = context['context_type']
+            spotify_track_history.context_type = context["context_type"]
         session.add(spotify_track_history)
         if add_or_update_track is True:
             self.add_or_update_track_in_database(t, session=session, commit=False)
