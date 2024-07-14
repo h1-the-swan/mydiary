@@ -138,6 +138,8 @@ async function onSave() {
         submitPerformSong.value.created_at = new Date(
             submitPerformSong.value.created_at
         ).toISOString()
+    } else {
+        submitPerformSong.value.created_at = new Date().toISOString()
     }
     if (submitPerformSong.value.learned_dt) {
         submitPerformSong.value.learned_dt = new Date(
