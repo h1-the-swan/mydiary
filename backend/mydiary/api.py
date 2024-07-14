@@ -38,6 +38,7 @@ from .models import (
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
+from .spotify_connector import normalize_spotify_id
 import uvicorn
 
 import logging
@@ -754,6 +755,7 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
 def create_perform_song(
     *, session: Session = Depends(get_session), perform_song: PerformSongCreate
 ):
+    perform_song.spotify_id = normalize_spotify_id(perform_song.spotify_id)
     db_perform_song = PerformSong.model_validate(perform_song)
     session.add(db_perform_song)
     session.commit()
@@ -813,6 +815,8 @@ def update_perform_song(
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
     perform_song_data = perform_song.model_dump(exclude_unset=True)
+    if perform_song_data.get('spotify_id'):
+        perform_song_data['spotify_id'] = normalize_spotify_id(perform_song_data['spotify_id'])
     db_perform_song.sqlmodel_update(perform_song_data)
     session.add(db_perform_song)
     session.commit()
