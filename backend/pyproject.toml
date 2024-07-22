@@ -23,14 +23,14 @@ alembic = "^1.13.1"
 fastapi = "^0.110.3"
 uvicorn = {extras = ["standard"], version = "^0.27.1"}
 lxml = "^5.2.2"
-pylint = "^3.2.5"
+pylint = "^3.2.6"
 
 [tool.poetry.dev-dependencies]
 humanfriendly = "^10.0"
 pytest-cov = "^4.1.0"
 
 [tool.poetry.group.dev.dependencies]
-pylint = "^3.2.2"
+pylint = "^3.2.6"
 jupyter = "^1.0.0"
 black = "^24.4.2"
 pytest = "8.2.0"
