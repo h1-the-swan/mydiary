@@ -11,7 +11,7 @@
     "@types/node": "^20.3.1",
     "@types/react": "^17.0.20",
     "@types/react-dom": "^17.0.9",
-    "antd": "^4.19.2",
+    "antd": "^5.20.0",
     "axios": "^1.4.0",
     "loader-utils": "^3.2.1",
     "orval": "^6.16.0",
