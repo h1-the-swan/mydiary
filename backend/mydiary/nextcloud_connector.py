@@ -25,9 +25,9 @@ logger = root_logger.getChild(__name__)
 
 # load_dotenv(find_dotenv())
 
-NEXTCLOUD_URL = os.environ["NEXTCLOUD_URL"]
+NEXTCLOUD_URL = os.environ.get("NEXTCLOUD_URL")
 NEXTCLOUD_USERNAME = os.environ.get("NEXTCLOUD_USERNAME") or "admin"
-NEXTCLOUD_PASSWORD = os.environ["NEXTCLOUD_PASSWORD"]
+NEXTCLOUD_PASSWORD = os.environ.get("NEXTCLOUD_PASSWORD")
 
 
 class MyDiaryNextcloud:
