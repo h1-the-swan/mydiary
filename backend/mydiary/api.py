@@ -8,6 +8,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import pydantic
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
@@ -43,7 +45,7 @@ import uvicorn
 
 import logging
 
-root_logger = logging.getLogger()
+root_logger = logging.getLogger('uvicorn')
 logger = root_logger.getChild(__name__)
 
 
@@ -183,12 +185,32 @@ def get_session():
 # logger.error("error")
 # print('print')
 
-# app = FastAPI()
+
+def scheduled_spotify_save_recent_tracks():
+    from mydiary.spotify_connector import MyDiarySpotify
+
+    mydiary_spotify = MyDiarySpotify()
+    num_saved = mydiary_spotify.save_recent_tracks_to_database()
+    logger.info(f"{num_saved} recent spotify tracks saved")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # logger.info('lifespan startup!')
+    # print('lifespan startup!')
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(scheduled_spotify_save_recent_tracks, "interval", minutes=60)
+    # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
+    scheduler.start()
+    yield
+
+
 app = FastAPI(
-    title="mydiary", root_path="/api", openapi_url="/api/openapi.json", debug=True
+    lifespan=lifespan,
+    title="mydiary",
+    root_path="/api",
+    openapi_url="/api/openapi.json",
+    debug=True,
 )
-# app = FastAPI(title="mydiary", openapi_url="/api")
-# app = FastAPI(title="mydiary", root_path="/api")
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
@@ -717,10 +739,10 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         md_note = MarkdownDoc(note.body, parent=note)
 
         sec_images = md_note.get_section_by_title("images")
-        if not md_note.get_image_resource_ids():
-            # currently, an error is raised if there are already any images present.
-            # TODO: handle the case where there are already images present
-            raise RuntimeError()
+        # if not md_note.get_image_resource_ids():
+        #     # currently, an error is raised if there are already any images present.
+        #     # TODO: handle the case where there are already images present
+        #     raise RuntimeError()
         resource_ids = []
         for photo in photos:
             image_bytes = mydiary_nextcloud.get_image(photo)
@@ -815,8 +837,10 @@ def update_perform_song(
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
     perform_song_data = perform_song.model_dump(exclude_unset=True)
-    if perform_song_data.get('spotify_id'):
-        perform_song_data['spotify_id'] = normalize_spotify_id(perform_song_data['spotify_id'])
+    if perform_song_data.get("spotify_id"):
+        perform_song_data["spotify_id"] = normalize_spotify_id(
+            perform_song_data["spotify_id"]
+        )
     db_perform_song.sqlmodel_update(perform_song_data)
     session.add(db_perform_song)
     session.commit()
@@ -920,6 +944,34 @@ def read_recipes(
 @app.get("/generate_openapi_json")
 def send_api_json():
     return app.openapi()
+
+
+### Experimental
+
+@app.get("/experimental/get_spotify_playlist")
+def experimental_get_spotify_playlist(playlist_id: str):
+    from mydiary.spotify_connector import MyDiarySpotify, normalize_spotify_id
+
+    mydiary_spotify = MyDiarySpotify()
+    playlist_id = normalize_spotify_id(playlist_id)
+    playlist = mydiary_spotify.sp.playlist(playlist_id)
+    tracks = playlist['tracks']
+    tracks_items = tracks['items']
+    while tracks['next']:
+        tracks = mydiary_spotify.sp.next(tracks)
+        tracks_items = tracks['items']
+        playlist['tracks']['items'] += tracks_items
+    return playlist
+
+
+@app.get("/experimental/get_spotify_audio_features")
+def experimental_get_spotify_audio_features(track_id: str):
+    from mydiary.spotify_connector import MyDiarySpotify, normalize_spotify_id
+
+    mydiary_spotify = MyDiarySpotify()
+    track_id = normalize_spotify_id(track_id)
+    return mydiary_spotify.sp.audio_features(track_id)
+
 
 
 if __name__ == "__main__":

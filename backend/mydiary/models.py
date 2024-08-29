@@ -312,7 +312,7 @@ class GoogleCalendarEvent(SQLModel, table=True):
     def from_gcal_api_event(cls, event: Dict) -> "GoogleCalendarEvent":
         # Parse a Google calendar event from the API
         id = event["id"]
-        summary = event["summary"]
+        summary = event.get("summary", None)
         location = event.get("location", None)
         description = event.get("description", None)
         start = cls.get_datetime_or_date(event["start"])
@@ -435,7 +435,7 @@ class MyDiaryImage(MyDiaryImageBase, table=True):
 
 class MyDiaryDay(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
-    dt: datetime = now().start_of("day")
+    dt: datetime = now(tz="America/New_York").start_of("day")
     tags: List[Tag] = []
     diary_txt: str = ""  # Markdown text
     joplin_connector: Any = Field(None, exclude=True)
