@@ -230,21 +230,9 @@ class MyDiaryJoplin:
     def get_note_id_by_title(
         self, title, parent_notebook_id: Optional[str] = None
     ) -> str:
-        params = {
-            "token": self.token,
-            "query": f'notebook:"{self.parent_notebook.title}" title:"{title}"',
-        }
-        r = requests.get(f"{self.base_url}/search", params=params)
-        items = r.json().get("items", [])
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
-
-        # search results can be a little wonky, so make sure that what we have match our query:
-        items = [
-            item
-            for item in items
-            if item["parent_id"] == parent_notebook_id and item["title"] == title
-        ]
+        items = [item for item in self.yield_notes_by_subfolder_id(parent_notebook_id) if item["title"]==title]
 
         if not items:
             logger.debug(
@@ -449,6 +437,14 @@ class MyDiaryJoplin:
 
         return r
 
+    def get_resource_file(self, resource_id: str) -> bytes:
+        r = requests.get(
+            f"{self.base_url}/resources/{resource_id}/file",
+            params={"token": self.token},
+        )
+        r.raise_for_status()
+        return r.content
+
     def get_info_all_days(
         self, min_dt=pendulum.parse("2022-01-01"), max_dt=pendulum.today()
     ) -> List[Dict]:
@@ -470,3 +466,26 @@ class MyDiaryJoplin:
                 )
             dt = dt.add(days=1)
         return data
+
+    def yield_notes_by_subfolder_id(
+        self,
+        subfolder_id: str,
+        fields: List[str] = "id,parent_id,title,created_time,updated_time",
+    ):
+        has_more = True
+        url = f"{self.base_url}/folders/{subfolder_id}/notes"
+        params = {
+            "token": self.token,
+            "fields": fields,
+            "limit": 100,
+            "page": 1,
+            "order_by": "updated_time",
+            "order_dir": 'DESC',
+        }
+        while has_more:
+            r = requests.get(url, params=params)
+            resp = r.json()
+            for note in resp['items']:
+                yield note
+            has_more = resp['has_more']
+            params['page'] += 1

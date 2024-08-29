@@ -73,8 +73,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--timezone",
         "--tz",
-        default="local",
-        help='Specify which timezone to use (e.g. "America/Los_Angeles"). Default: "local"',
+        default="America/New_York",
+        help='Specify which timezone to use. Default: "America/New_York"',
     )
     parser.add_argument("--nextcloud-path", help="path for nextcloud syncing. e.g., http://192.168.0.111:48916/remote.php/webdav/Joplin")
     parser.add_argument("--debug", action="store_true", help="output debugging info")

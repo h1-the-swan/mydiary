@@ -28,6 +28,7 @@ import {
     nextcloudPhotosThumbnailUrls,
     joplinNoteImages,
     MyDiaryImageRead,
+    nextcloudPhotosAddToJoplin,
 } from '@/api'
 import { ref, watch, watchEffect } from 'vue'
 const props = defineProps<{
@@ -76,9 +77,8 @@ watchEffect(() => {
 })
 
 function onSubmit() {
-    const numSelected = nextCloudThumbs.value.filter((t) => t.selected).length
-    console.log(`submitted! ${numSelected} selected!`)
-    // TODO: implement add thumbnail to joplin
+    const selected = nextCloudThumbs.value.filter((t) => t.selected)
+    nextcloudPhotosAddToJoplin(props.joplinNoteId, selected.map((t) => t.url))
 }
 </script>
 

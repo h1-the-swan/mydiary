@@ -108,11 +108,16 @@ onMounted(async () => {
 async function fetchInitMarkdown() {
     initMarkdown.value = ''
     initMarkdown.value = (
-        await axios.get(`/day_init_markdown/${getDateStr.value}`)
+        await axios.get(
+            `/day_init_markdown/${getDateStr.value}?tz=${
+                Intl.DateTimeFormat().resolvedOptions().timeZone // TODO: get the timezone of the diary day
+            }`
+        )
     ).data
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''
+    console.log("fetchJoplinNoteId()")
     joplinNoteId.value = (await joplinGetNoteId(getDateStr.value)).data
 }
 async function fetchJoplinNote() {
@@ -155,6 +160,7 @@ const attributes = computed<AttributeConfig[]>(() => [
 watch(getDate, fetchInitMarkdown, { immediate: true })
 watch(getDate, fetchJoplinNoteId, { immediate: true })
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
+watch(joplinNoteId, () => console.log(joplinNoteId.value))
 watch(joplinNoteId, fetchJoplinNoteImages, { immediate: true })
 watchEffect(() => console.log(diaryNote.value))
 watchEffect(() => console.log(diaryNoteImages.value))

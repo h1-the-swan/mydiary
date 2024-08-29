@@ -9,6 +9,14 @@ import type {
   AxiosRequestConfig,
   AxiosResponse
 } from 'axios'
+export type ExperimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGetParams = {
+track_id: string;
+};
+
+export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetParams = {
+playlist_id: string;
+};
+
 export type ReadRecipesListParams = {
 offset?: number;
 limit?: number;
@@ -914,6 +922,32 @@ export const sendApiJsonGenerateOpenapiJsonGet = <TData = AxiosResponse<unknown>
     );
   }
 
+/**
+ * @summary Experimental Get Spotify Playlist
+ */
+export const experimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGet = <TData = AxiosResponse<unknown>>(
+    params: ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetParams, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/experimental/get_spotify_playlist`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Experimental Get Spotify Audio Features
+ */
+export const experimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGet = <TData = AxiosResponse<unknown>>(
+    params: ExperimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGetParams, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/experimental/get_spotify_audio_features`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
 export type GetGCalAuthUrlResult = AxiosResponse<string>
 export type RefreshGCalTokenResult = AxiosResponse<unknown>
 export type CheckGCalAuthResult = AxiosResponse<unknown>
@@ -953,3 +987,5 @@ export type DeleteDogResult = AxiosResponse<unknown>
 export type CreateRecipeResult = AxiosResponse<RecipeRead>
 export type ReadRecipesListResult = AxiosResponse<RecipeRead>
 export type SendApiJsonGenerateOpenapiJsonGetResult = AxiosResponse<unknown>
+export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetResult = AxiosResponse<unknown>
+export type ExperimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGetResult = AxiosResponse<unknown>
