@@ -13,8 +13,8 @@ services:
       # - /etc/localtime:/etc/localtime:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro 
-    env_file:
-      - ./backend/.env
+    # env_file:
+    #   - ./backend/.env
     environment:
       - HOSTNAME=${NAME}
       # This ensures that errors are printed as they occur, which
