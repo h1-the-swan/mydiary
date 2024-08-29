@@ -42,3 +42,5 @@ cov*.xml
 habitica_backups/
 
 .pytest_cache
+
+git-filter-repo

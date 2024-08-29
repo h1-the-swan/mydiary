@@ -27,7 +27,7 @@ logger = root_logger.getChild(__name__)
 # load_dotenv(find_dotenv())
 
 JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
-JOPLIN_AUTH_TOKEN = os.environ["JOPLIN_AUTH_TOKEN"]
+JOPLIN_AUTH_TOKEN = os.environ.get("JOPLIN_AUTH_TOKEN")
 JOPLIN_NOTEBOOK_ID = os.environ.get("JOPLIN_NOTEBOOK_ID", None)
 
 # for testing purposes. we'll probably want to get this from an environment variable.
