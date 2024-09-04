@@ -51,7 +51,7 @@ class MyDiaryJoplin:
         token: Optional[str] = None,
         server_process: Optional[subprocess.Popen] = None,
         notebook_id: Optional[str] = None,
-        init_config: bool = True,
+        init_config: bool = False,
         # quiet: bool = True,
         last_sync: Optional[pendulum.DateTime] = None,
     ) -> None:
@@ -149,6 +149,7 @@ class MyDiaryJoplin:
         )
 
     def config(self, conf: Dict[str, str] = JOPLIN_CONFIG, timeout: int = 20) -> None:
+        # ! DEPRECATED
         for k, v in conf.items():
             p = subprocess.run(
                 ["npx", "joplin", "config", k, v],
@@ -164,6 +165,7 @@ class MyDiaryJoplin:
         return r.ok
 
     def _start_server(self) -> None:
+        # ! DEPRECATED
         _stdout = subprocess.PIPE
         self.server_process = subprocess.Popen(
             ["npx", "joplin", "server", "start"],
@@ -172,6 +174,7 @@ class MyDiaryJoplin:
         )
 
     def start_server(self) -> None:
+        # ! DEPRECATED
         self._start_server()
         # wait until server process writes to stdout, which it does when it has started
         line = self.server_process.stdout.readline()
@@ -179,10 +182,12 @@ class MyDiaryJoplin:
         sleep(0.5)
 
     def teardown(self) -> None:
+        # ! DEPRECATED
         if self.server_process is not None:
             self.server_process.terminate()
 
     def sync(self, timeout: int = 200) -> bool:
+        # ! DEPRECATED
         # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
         pattern = re.compile(r"Completed: (\d.*)\(")
         p = subprocess.run(

@@ -19,20 +19,6 @@ RUN python -m poetry config virtualenvs.create false \
 
 # EXPOSE 8888
 
-# # https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
-# # ENV NODE_VERSION=17.7.1
-# ENV NODE_VERSION=18.17.0
-# # RUN apt install -y curl
-# RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-# ENV NVM_DIR=/root/.nvm
-# RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
-# RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
-# RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
-# ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
-# RUN node --version
-# RUN npm --version
-# RUN npm -g install joplin
-
 # Copy over the source code
 COPY . .
 
