@@ -139,15 +139,15 @@ class TestMyDiaryImage:
     JOPLIN_TEST_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 
     def test_add_thumbnail(self, rootdir: str, db_session: Session):
-        fp = Path(rootdir).joinpath("images/22-04-28 17-20-37 4351.jpg")
+        fp = Path(rootdir).joinpath("images/24-05-18 13-50-28 9143.jpg")
         image_name = fp.stem
         image_bytes = fp.read_bytes()
         image_bytes = reduce_size_recurse(image_bytes, (512, 512), 60000)
         fmt = "YY-MM-DD HH-mm-ss SSSS"
-        image_dt = pendulum.from_format(image_name, fmt, tz="America/Los_Angeles")
+        image_dt = pendulum.from_format(image_name, fmt, tz="America/New_York")
         image_hash = hashlib.md5()
         image_hash.update(image_bytes)
-        nextcloud_path = 'H1phone_sync/2022/04/22-04-19%2017-25-08%204306.jpg'
+        nextcloud_path = 'H1phone_sync/2024/05/24-05-18%2013-50-28%209143.jpg'
         mydiary_image = MyDiaryImage(
             hash=image_hash.hexdigest(),
             name=image_name,

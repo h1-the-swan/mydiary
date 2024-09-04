@@ -38,7 +38,7 @@ def resource(joplin_client: MyDiaryJoplin):
 
 @pytest.fixture
 def image_bytes(rootdir):
-    fp = Path(rootdir).joinpath("images/22-04-28 17-20-37 4351.jpg")
+    fp = Path(rootdir).joinpath("images/24-05-18 13-50-28 9143.jpg")
     image_bytes = fp.read_bytes()
     yield image_bytes
 

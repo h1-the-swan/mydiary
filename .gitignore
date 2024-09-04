@@ -30,8 +30,6 @@ dist/
 
 data/
 
-**/tests/images
-
 database.db
 *backup*.db
 *Copy*.db
