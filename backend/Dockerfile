@@ -19,19 +19,19 @@ RUN python -m poetry config virtualenvs.create false \
 
 # EXPOSE 8888
 
-# https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
-# ENV NODE_VERSION=17.7.1
-ENV NODE_VERSION=18.17.0
-# RUN apt install -y curl
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-ENV NVM_DIR=/root/.nvm
-RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
-RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
-ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
-RUN node --version
-RUN npm --version
-RUN npm -g install joplin
+# # https://stackoverflow.com/questions/36399848/install-node-in-dockerfile
+# # ENV NODE_VERSION=17.7.1
+# ENV NODE_VERSION=18.17.0
+# # RUN apt install -y curl
+# RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+# ENV NVM_DIR=/root/.nvm
+# RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
+# RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
+# RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
+# ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+# RUN node --version
+# RUN npm --version
+# RUN npm -g install joplin
 
 # Copy over the source code
 COPY . .
@@ -39,12 +39,12 @@ COPY . .
 # Run poetry install again, this time to install the root package
 RUN python -m poetry install --no-interaction --no-ansi
 
-# Configure Joplin-Nextcloud sync
-RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
-RUN npx joplin config sync.5.username ${NEXTCLOUD_USERNAME}
-RUN npx joplin config sync.5.password ${NEXTCLOUD_PASSWORD}
-RUN npx joplin config sync.target 5
-RUN npx joplin config api.token $JOPLIN_AUTH_TOKEN
+# # Configure Joplin-Nextcloud sync
+# RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
+# RUN npx joplin config sync.5.username ${NEXTCLOUD_USERNAME}
+# RUN npx joplin config sync.5.password ${NEXTCLOUD_PASSWORD}
+# RUN npx joplin config sync.target 5
+# RUN npx joplin config api.token $JOPLIN_AUTH_TOKEN
 
 # Kick things off
 # ENTRYPOINT [ "poetry" ]

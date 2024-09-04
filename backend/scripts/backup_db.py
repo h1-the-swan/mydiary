@@ -71,7 +71,7 @@ if __name__ == "__main__":
     total_start = timer()
     handler = logging.StreamHandler()
     handler.setFormatter(
-        logging.Formatter(
+       logging.Formatter(
             fmt="%(asctime)s %(name)s.%(lineno)d %(levelname)s : %(message)s",
             datefmt="%H:%M:%S",
         )

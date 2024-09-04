@@ -13,8 +13,8 @@ services:
       # - /etc/localtime:/etc/localtime:ro
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro 
-    # env_file:
-    #   - ./backend/.env
+    env_file:
+      - ./backend/.env
     environment:
       - HOSTNAME=${NAME}
       # This ensures that errors are printed as they occur, which
@@ -27,8 +27,10 @@ services:
       - GOOGLECALENDAR_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlecalendar_token.json
       - GOOGLECALENDAR_CREDENTIALS_FILE=/usr/local/src/app/backend/token_cache/googlecalendar_credentials.json
       - GOOGLEPHOTOS_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlephotos_token.json
+      - JOPLIN_BASE_URL=http://host.docker.internal:41185
     # command: ["main:app", "--host", "0.0.0.0", "--reload"]
-    # ports:
+    ports:
+      - 41184:41184
     #     - 8888:8888
   mydiary-vuetify:
     build: ./mydiary-vuetify
