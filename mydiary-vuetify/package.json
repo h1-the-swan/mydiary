@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "vite --port 3001 --host 0.0.0.0",
-    "generateAndStart": "node ./scripts/generateAPI.mjs && orval --config ./orval.config.js && npm run dev",
+    "generateClientAPI": "node ./scripts/generateAPI.mjs && orval --config ./orval.config.js",
+    "generateAndStart": "npm run generateClientAPI && npm run dev",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "eslint . --fix --ignore-path .gitignore"

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import requests
 import io
@@ -217,6 +218,18 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 # @app.get("/api/app")
 # def read_main(request: Request):
 #     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
+
+
+@app.get("/testhealthcheck", operation_id="testHealthCheck2")
+async def testhealthcheck():
+    return 'hello all good'
+
+@app.get("/db_status", operation_id="dbStatus")
+async def db_status():
+    from .db import sqlite_file_name
+    return {
+        'sqlite_file_exists': os.path.exists(sqlite_file_name),
+    }
 
 
 @app.get("/gcal/get_auth_url", operation_id="getGCalAuthUrl", response_model=str)

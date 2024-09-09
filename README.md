@@ -38,3 +38,7 @@ alembic upgrade head
 ## Code coverage
 
 `pytest --cov=mydiary tests/ --cov-report xml:cov.xml`
+
+## API codegen
+
+If you change anything in the API (`api.py`), you can update the client (`api.ts`) by running `npm run generateClientAPI`.
