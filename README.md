@@ -22,6 +22,10 @@ Each daily dairy entry has a few different sections, which are connected to othe
 
 This is the text part of the diary entry, which I write after the rest as been generated (if I'm not being lazy or otherwise neglecting it). I use [Joplin](https://joplinapp.org/) to write and maintain the full entries. Joplin is a Markdown-based note-taking app—sort of an open-source version of Evernote. I sync all of my Joplin notes using the open-source [Nextcloud](https://nextcloud.com/) software.
 
+### Images
+
+Every day I choose a few images (usually between 1 and 5) and add them to this section. I sync my images to Nextcloud, use a custom system in mydiary to select them and reduce the image sizes in order to keep the full diary more trim.
+
 ### Google Calendar events
 
 Mydiary connects to my personal Google Calendar and fills in all the events for a day. I often use my calendar as a lightweight journaling solution, even backfilling things I did in the last few days when I have a few minutes to do so.
