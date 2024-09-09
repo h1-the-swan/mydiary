@@ -36,7 +36,7 @@ I use [Pocket](https://getpocket.com) as my read-it-later app for internet artic
 
 ### Spotify tracks
 
-I mainly use [Spotify]https://www.spotify.com) to listen to music. Mydiary uses the [Spotipy](https://pypi.org/project/spotipy/) Python library to get my listening history and collect all of the songs I listened to in a day.
+I mainly use [Spotify](https://www.spotify.com) to listen to music. Mydiary uses the [Spotipy](https://pypi.org/project/spotipy/) Python library to get my listening history and collect all of the songs I listened to in a day.
 
 ## Development
 

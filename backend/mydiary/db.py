@@ -23,22 +23,3 @@ class MydiaryDatabaseBackup(SQLModel, table=True):
     alembic_rev: str = Field(index=True)
     hostname: str
     size: int
-
-# fp = Path(backup_dir).joinpath('database_backup20230930T131940_alembice943e3d13add.db')
-# fp.exists()
-# url = f"{ncld.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/mydiary/db/{fp.name}"
-# with fp.open('rb') as f:
-# 	r = requests.put(url=url, data=f, auth=ncld.auth)
-# r.status_code
-
-# backup_files = Path(rootdir).joinpath('db_backup').glob('*.db')
-# backup_files = list(backup_files)
-
-# %%time
-# # download from nextcloud and save
-# fp_save = Path('.').joinpath(fp.name)
-# r = requests.get(url, auth=ncld.auth)
-# print(r.status_code)
-# fp_save.write_bytes(r.content)
-
-# os.getenv('HOSTNAME')
