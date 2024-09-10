@@ -60,7 +60,6 @@ class TestPocketArticle:
         # assert data[0]["time_favorited"] == article.time_favorited
         assert data[0]["listen_duration_estimate"] == article.listen_duration_estimate
         assert data[0]["word_count"] == article.word_count
-        assert data[0]["excerpt"] == article.excerpt
         assert data[0]["top_image_url"] == article.top_image_url
         assert len(data[0]["tags"]) == 3
         tags = data[0]["tags"]

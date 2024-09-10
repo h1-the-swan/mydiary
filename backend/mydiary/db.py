@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 from sqlmodel import create_engine, SQLModel, Session, select, func, Field
+from sqlalchemy import text
 from . import models
 
 rootdir = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +16,11 @@ engine = create_engine(sqlite_url, echo=False, connect_args=connect_args)
 
 def create_db_and_tables(engine=engine):
     SQLModel.metadata.create_all(engine)
+
+
+def vacuum_db(engine=engine):
+    with Session(engine) as session:
+        session.exec(text("VACUUM"))
 
 
 class MydiaryDatabaseBackup(SQLModel, table=True):

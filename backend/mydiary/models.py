@@ -190,7 +190,6 @@ class PocketArticleBase(SQLModel):
     time_favorited: Optional[datetime] = Field(default=None, index=True)
     listen_duration_estimate: Optional[int] = Field(default=None, index=True)
     word_count: Optional[int] = Field(default=None, index=True)
-    excerpt: Optional[str] = Field(default=None)
     top_image_url: Optional[str] = Field(default=None)
 
     # private attribute -- will not be included in the database table
@@ -260,7 +259,6 @@ class PocketArticle(PocketArticleBase, table=True):
             else None
         )
         word_count = int(item["word_count"]) if "word_count" in item else None
-        excerpt = item.get("excerpt", None)
         top_image_url = item.get("top_image_url", None)
         _pocket_tags = []
         for t in item.get("tags", {}).values():
@@ -279,7 +277,6 @@ class PocketArticle(PocketArticleBase, table=True):
             time_favorited=time_favorited,
             listen_duration_estimate=listen_duration_estimate,
             word_count=word_count,
-            excerpt=excerpt,
             top_image_url=top_image_url,
             tags = _pocket_tags,
         )

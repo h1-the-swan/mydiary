@@ -75,7 +75,6 @@ class PocketArticleUpdate(SQLModel):
     time_favorited: Optional[datetime] = None
     listen_duration_estimate: Optional[int] = None
     word_count: Optional[int] = None
-    excerpt: Optional[str] = None
     top_image_url: Optional[str] = None
     pocket_tags: Optional[List[str]] = None
 
