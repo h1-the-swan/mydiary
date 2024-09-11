@@ -32,6 +32,8 @@ offset?: number;
 limit?: number;
 };
 
+export type NextcloudPhotosAddToJoplin200 = { [key: string]: unknown };
+
 export type GetNextcloudImageNextcloudThumbnailImgGetParams = {
 url: string;
 };
@@ -46,7 +48,6 @@ tz?: string;
 
 export type JoplinInitNoteParams = {
 tz?: string;
-post_sync?: unknown;
 };
 
 export type ReadSpotifyHistoryParams = {
@@ -180,10 +181,7 @@ export type PocketArticleUpdateGivenTitle = string | null;
 
 export type PocketArticleUpdateFavorite = boolean | null;
 
-export type PocketArticleUpdateExcerpt = string | null;
-
 export interface PocketArticleUpdate {
-  excerpt?: PocketArticleUpdateExcerpt;
   favorite?: PocketArticleUpdateFavorite;
   given_title?: PocketArticleUpdateGivenTitle;
   listen_duration_estimate?: PocketArticleUpdateListenDurationEstimate;
@@ -213,10 +211,7 @@ export type PocketArticleReadTimeAdded = string | null;
 
 export type PocketArticleReadListenDurationEstimate = number | null;
 
-export type PocketArticleReadExcerpt = string | null;
-
 export interface PocketArticleRead {
-  excerpt?: PocketArticleReadExcerpt;
   favorite: boolean;
   given_title: string;
   listen_duration_estimate?: PocketArticleReadListenDurationEstimate;
@@ -620,17 +615,6 @@ export const spotifySaveRecentTracksToDatabase = <TData = AxiosResponse<number>>
   }
 
 /**
- * @summary Joplin Sync
- */
-export const joplinSync = <TData = AxiosResponse<unknown>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
-    return axios.post(
-      `/joplin/sync`,undefined,options
-    );
-  }
-
-/**
  * @summary Joplin Get Note Id
  */
 export const joplinGetNoteId = <TData = AxiosResponse<string>>(
@@ -708,7 +692,7 @@ export const joplinUpdateNote = <TData = AxiosResponse<unknown>>(
 /**
  * @summary Joplin Get Info All Days
  */
-export const joplinGetInfoAllDays = <TData = AxiosResponse<unknown>>(
+export const joplinGetInfoAllDays = <TData = AxiosResponse<unknown[]>>(
      options?: AxiosRequestConfig
  ): Promise<TData> => {
     return axios.get(
@@ -767,7 +751,7 @@ export const getNextcloudImageNextcloudThumbnailImgGet = <TData = AxiosResponse<
 /**
  * @summary Nextcloud Photos Add To Joplin
  */
-export const nextcloudPhotosAddToJoplin = <TData = AxiosResponse<unknown>>(
+export const nextcloudPhotosAddToJoplin = <TData = AxiosResponse<NextcloudPhotosAddToJoplin200>>(
     noteId: string,
     nextcloudPhotosAddToJoplinBody: string[], options?: AxiosRequestConfig
  ): Promise<TData> => {
@@ -984,19 +968,18 @@ export type ReadSpotifyHistoryResult = AxiosResponse<SpotifyTrackHistoryRead[]>
 export type SpotifyHistoryCountResult = AxiosResponse<number>
 export type GetSpotifyImageUrlResult = AxiosResponse<string>
 export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
-export type JoplinSyncResult = AxiosResponse<unknown>
 export type JoplinGetNoteIdResult = AxiosResponse<string>
 export type JoplinInitNoteResult = AxiosResponse<unknown>
 export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>
-export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown>
+export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown[]>
 export type GooglePhotosThumbnailUrlsResult = AxiosResponse<GooglePhotosThumbnail[]>
 export type GooglePhotosAddToJoplinResult = AxiosResponse<unknown>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>
 export type GetNextcloudImageNextcloudThumbnailImgGetResult = AxiosResponse<unknown>
-export type NextcloudPhotosAddToJoplinResult = AxiosResponse<unknown>
+export type NextcloudPhotosAddToJoplinResult = AxiosResponse<NextcloudPhotosAddToJoplin200>
 export type CreatePerformSongResult = AxiosResponse<PerformSongRead>
 export type ReadPerformSongsListResult = AxiosResponse<PerformSongRead[]>
 export type PerformSongCountResult = AxiosResponse<number>

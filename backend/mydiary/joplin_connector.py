@@ -53,7 +53,6 @@ class MyDiaryJoplin:
         notebook_id: Optional[str] = None,
         init_config: bool = False,
         # quiet: bool = True,
-        last_sync: Optional[pendulum.DateTime] = None,
     ) -> None:
         # ! Don't use more than one level of subnotebooks (i.e., don't use subsubnotebooks). it's hard to work with.
         # subnotebooks are by year (so each will contain 365-366 diary entries)
@@ -66,7 +65,6 @@ class MyDiaryJoplin:
         if not self.notebook_id:
             self.notebook_id = JOPLIN_NOTEBOOK_ID
         # self.quiet = quiet
-        self.last_sync = last_sync
 
         if init_config is True:
             self.config()
@@ -82,7 +80,7 @@ class MyDiaryJoplin:
         ```
         """
         if not self.server_is_running():
-            self.start_server()
+            raise RuntimeError("failed to connect to Joplin server")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -185,31 +183,6 @@ class MyDiaryJoplin:
         # ! DEPRECATED
         if self.server_process is not None:
             self.server_process.terminate()
-
-    def sync(self, timeout: int = 200) -> bool:
-        # ! DEPRECATED
-        # TODO better handling of failure (e.g., if nextcloud is not running, or if the ip is misconfigured)
-        pattern = re.compile(r"Completed: (\d.*)\(")
-        p = subprocess.run(
-            ["npx", "joplin", "sync"],
-            capture_output=True,
-            encoding="utf8",
-            timeout=timeout,
-        )
-        success = False
-        for line in p.stdout.splitlines():
-            m = pattern.search(line)
-            if m:
-                success = True
-                dt_str = m.group(1).strip()
-                try:
-                    dt = pendulum.parse(dt_str, tz="local")
-                    self.last_sync = dt
-                except pendulum.parsing.ParserError:
-                    pass
-        if not success:
-            raise RuntimeError("Joplin sync was unsuccessful")
-        return success
 
     def post_note(
         self,

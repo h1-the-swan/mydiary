@@ -555,7 +555,7 @@ class MyDiaryDay(SQLModel):
                 lines[-1] += "\n"
         return "\n".join(lines)
 
-    def update_joplin_note(self, joplin_connector=None, post_sync=True):
+    def update_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
         from .markdown_edits import MarkdownDoc
 
@@ -591,15 +591,10 @@ class MyDiaryDay(SQLModel):
             r_put_note = self.joplin_connector.update_note_body(note.id, md_note.txt)
             logger.info(f"done. status code: {r_put_note.status_code}")
 
-            if post_sync is True:
-                logger.info("starting Joplin sync")
-                self.joplin_connector.sync()
-                logger.info("sync complete")
-
         else:
             logger.info("no updates made")
 
-    def init_joplin_note(self, joplin_connector=None, post_sync=True):
+    def init_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
         from .markdown_edits import MarkdownDoc
 
@@ -633,15 +628,10 @@ class MyDiaryDay(SQLModel):
         )
         logger.info(f"done. status code: {r_post_note.status_code}")
 
-        if post_sync is True:
-            logger.info("starting Joplin sync")
-            self.joplin_connector.sync()
-            logger.info("sync complete")
+        # fill in the note id
+        self.get_joplin_note_id()
 
-            # fill in the note id
-            self.get_joplin_note_id()
-
-    def init_or_update_joplin_note(self, joplin_connector=None, post_sync=True):
+    def init_or_update_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
         from .markdown_edits import MarkdownDoc
 
@@ -653,9 +643,9 @@ class MyDiaryDay(SQLModel):
             self.get_joplin_note_id()
 
         if self.joplin_note_id == "does_not_exist":
-            self.init_joplin_note(post_sync=post_sync)
+            self.init_joplin_note()
         elif self.joplin_note_id:
-            self.update_joplin_note(post_sync=post_sync)
+            self.update_joplin_note()
         else:
             # this should not happen
             raise RuntimeError(

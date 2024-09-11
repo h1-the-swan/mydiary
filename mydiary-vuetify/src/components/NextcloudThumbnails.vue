@@ -16,7 +16,7 @@
                     ></v-img>
                 </v-col>
             </v-row>
-            <v-btn class="mt-2" type="submit" block>Submit</v-btn>
+            <v-btn :loading="loading" class="mt-2" type="submit" block>Submit</v-btn>
         </v-form>
     </div>
 </template>
@@ -42,6 +42,7 @@ interface INextCloudThumb {
 }
 const nextCloudThumbs = ref<INextCloudThumb[]>([])
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
+const loading = ref(false)
 async function fetchImageUrls() {
     const imgUrls = (await nextcloudPhotosThumbnailUrls(props.dt)).data
     nextCloudThumbs.value = imgUrls.map((url) => {
@@ -76,9 +77,12 @@ watchEffect(() => {
     console.log(nextCloudThumbs.value)
 })
 
-function onSubmit() {
+async function onSubmit() {
     const selected = nextCloudThumbs.value.filter((t) => t.selected)
-    nextcloudPhotosAddToJoplin(props.joplinNoteId, selected.map((t) => t.url))
+    loading.value = true
+    const response = (await nextcloudPhotosAddToJoplin(props.joplinNoteId, selected.map((t) => t.url))).data
+    console.log(response.value)
+    loading.value = false
 }
 </script>
 

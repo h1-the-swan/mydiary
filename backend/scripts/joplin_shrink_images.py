@@ -37,9 +37,6 @@ def main(args):
         dt = pendulum.parse(args.date, tz=args.timezone)
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        logger.info("starting Joplin sync")
-        mydiary_joplin.sync()
-        logger.info("sync complete")
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
 
         existing_id = day.get_joplin_note_id()
@@ -83,9 +80,6 @@ def main(args):
                 r.raise_for_status()
                 logger.debug(f"deleted resource {resource_id}")
 
-            logger.info("starting Joplin sync")
-            mydiary_joplin.sync()
-            logger.info("sync complete")
         else:
             logger.info("no images found. no updates made")
 

@@ -33,7 +33,7 @@ export const useAppStore = defineStore('app', () => {
         )[0]
     }
 
-    const joplinInfoAllDays = ref<any>()
+    const joplinInfoAllDays = ref<any[]>([])
     async function loadJoplinInfoAllDays() {
         joplinInfoAllDays.value = (await joplinGetInfoAllDays()).data
     }

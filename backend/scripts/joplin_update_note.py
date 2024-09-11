@@ -36,12 +36,8 @@ def main(args):
         dt = pendulum.parse(args.date, tz=args.timezone)
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        logger.info("starting Joplin sync")
-        mydiary_joplin.sync()
-        logger.info("sync complete")
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
-
-        day.update_joplin_note(post_sync=True)
+        day.update_joplin_note()
 
 
 if __name__ == "__main__":

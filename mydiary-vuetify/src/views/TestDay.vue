@@ -46,7 +46,6 @@
             </v-expansion-panel-text>
         </v-expansion-panel>
     </v-expansion-panels>
-    <joplin-sync-button />
     <nextcloud-thumbnails :dt="getDateStr" :joplin-note-id="joplinNoteId" />
 </template>
 
@@ -65,7 +64,7 @@ import {
     MyDiaryImageRead,
 } from '@/api'
 import GCalAuth from '@/components/GCalAuth.vue'
-import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
+// import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
 import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue'
 import { useAppStore } from '@/store/app'
 import { AttributeConfig } from 'v-calendar/dist/types/src/utils/attribute'
@@ -73,7 +72,7 @@ axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
-const joplinInfoAllDays = ref<any>([])
+const joplinInfoAllDays = ref<any[]>([])
 const initMarkdown = ref('')
 const md = markdownit()
 const joplinNoteId = ref('')
@@ -102,8 +101,10 @@ function updateDate(val: any) {
     router.push({ query: { dt: newQD } })
 }
 onMounted(async () => {
-    await app.loadJoplinInfoAllDays()
-    joplinInfoAllDays.value = app.joplinInfoAllDays
+    console.log('dd')
+    app.loadJoplinInfoAllDays()
+    console.log('ddd')
+    // joplinInfoAllDays.value = app.joplinInfoAllDays
 })
 async function fetchInitMarkdown() {
     initMarkdown.value = ''
@@ -162,6 +163,8 @@ watch(getDate, fetchJoplinNoteId, { immediate: true })
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
 watch(joplinNoteId, () => console.log(joplinNoteId.value))
 watch(joplinNoteId, fetchJoplinNoteImages, { immediate: true })
+watchEffect(() => joplinInfoAllDays.value = app.joplinInfoAllDays)
+watchEffect(() => console.log(joplinInfoAllDays))
 watchEffect(() => console.log(diaryNote.value))
 watchEffect(() => console.log(diaryNoteImages.value))
 </script>

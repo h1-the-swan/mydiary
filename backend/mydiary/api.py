@@ -445,20 +445,6 @@ async def spotify_save_recent_tracks_to_database():
     return num_saved
 
 
-@app.post("/joplin/sync", operation_id="joplinSync")
-async def joplin_sync():
-    from mydiary.joplin_connector import MyDiaryJoplin
-
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        logger.info("starting Joplin sync")
-        try:
-            mydiary_joplin.sync()
-        except RuntimeError:
-            raise HTTPException(status_code=500, detail="sync failed")
-        logger.info("sync complete")
-    return "sync complete"
-
-
 @app.get("/joplin/get_note_id/{dt}", operation_id="joplinGetNoteId", response_model=str)
 def joplin_get_note_id(dt: str) -> str:
     from mydiary import MyDiaryDay
@@ -483,7 +469,7 @@ def joplin_get_note_id(dt: str) -> str:
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
 )
-async def joplin_init_note(dt: str, tz: str = "local", post_sync=True):
+async def joplin_init_note(dt: str, tz: str = "local"):
     from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
 
@@ -495,12 +481,9 @@ async def joplin_init_note(dt: str, tz: str = "local", post_sync=True):
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         try:
-            logger.debug("starting sync")
-            mydiary_joplin.sync()
-            logger.debug("sync complete")
             day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
             logger.debug("created MyDiaryDay instance")
-            day.init_joplin_note(joplin_connector=mydiary_joplin, post_sync=post_sync)
+            day.init_joplin_note(joplin_connector=mydiary_joplin)
             logger.debug("initialized note")
         except Exception as e:
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
@@ -574,12 +557,9 @@ async def joplin_update_note(dt: str, tz: str = "local"):
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         try:
-            logger.debug("starting sync")
-            mydiary_joplin.sync()
-            logger.debug("sync complete")
             day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
             logger.debug("created MyDiaryDay instance")
-            day.update_joplin_note(joplin_connector=mydiary_joplin, post_sync=True)
+            day.update_joplin_note(joplin_connector=mydiary_joplin)
             logger.debug("initialized note")
         except Exception as e:
             # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
@@ -590,6 +570,7 @@ async def joplin_update_note(dt: str, tz: str = "local"):
 @app.get(
     "/joplin/get_info_all_days",
     operation_id="joplinGetInfoAllDays",
+    response_model=list,
 )
 async def joplin_get_info_all_days():
     from mydiary.joplin_connector import MyDiaryJoplin
@@ -671,8 +652,6 @@ async def google_photos_add_to_joplin(
         r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
         r_put_note.raise_for_status()
 
-        await joplin_sync()
-
 
 # def _modify_filepath(filepath):
 #     filepath = filepath.split("/")[-4:]
@@ -736,6 +715,7 @@ def get_nextcloud_image(url: str):
 @app.post(
     "/nextcloud/add_to_joplin/{note_id}",
     operation_id="nextcloudPhotosAddToJoplin",
+    response_model=dict,
 )
 async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
     # TODO: refactor
@@ -779,8 +759,10 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         logger.info(f"updating note: {note.title}")
         r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
         r_put_note.raise_for_status()
-
-        await joplin_sync()
+        return {
+            'note_id': note.id,
+            'resource_ids': resource_ids,
+        }
 
 
 @app.post(
