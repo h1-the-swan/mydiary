@@ -46,7 +46,7 @@ import uvicorn
 
 import logging
 
-root_logger = logging.getLogger('uvicorn')
+root_logger = logging.getLogger("uvicorn")
 logger = root_logger.getChild(__name__)
 
 
@@ -193,6 +193,7 @@ def scheduled_spotify_save_recent_tracks():
     num_saved = mydiary_spotify.save_recent_tracks_to_database()
     logger.info(f"{num_saved} recent spotify tracks saved")
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
@@ -221,13 +222,15 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
 @app.get("/testhealthcheck", operation_id="testHealthCheck2")
 async def testhealthcheck():
-    return 'hello all good'
+    return "hello all good"
+
 
 @app.get("/db_status", operation_id="dbStatus")
 async def db_status():
     from .db import sqlite_file_name
+
     return {
-        'sqlite_file_exists': os.path.exists(sqlite_file_name),
+        "sqlite_file_exists": os.path.exists(sqlite_file_name),
     }
 
 
@@ -572,11 +575,13 @@ async def joplin_update_note(dt: str, tz: str = "local"):
     operation_id="joplinGetInfoAllDays",
     response_model=list,
 )
-async def joplin_get_info_all_days():
+async def joplin_get_info_all_days(min_dt: str, max_dt: str):
     from mydiary.joplin_connector import MyDiaryJoplin
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        return mydiary_joplin.get_info_all_days()
+        return mydiary_joplin.get_info_all_days(
+            min_dt=pendulum.parse(min_dt), max_dt=pendulum.parse(max_dt)
+        )
 
 
 @app.get(
@@ -760,8 +765,8 @@ async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
         r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
         r_put_note.raise_for_status()
         return {
-            'note_id': note.id,
-            'resource_ids': resource_ids,
+            "note_id": note.id,
+            "resource_ids": resource_ids,
         }
 
 
@@ -942,6 +947,7 @@ def send_api_json():
 
 ### Experimental
 
+
 @app.get("/experimental/get_spotify_playlist")
 def experimental_get_spotify_playlist(playlist_id: str):
     from mydiary.spotify_connector import MyDiarySpotify, normalize_spotify_id
@@ -949,12 +955,12 @@ def experimental_get_spotify_playlist(playlist_id: str):
     mydiary_spotify = MyDiarySpotify()
     playlist_id = normalize_spotify_id(playlist_id)
     playlist = mydiary_spotify.sp.playlist(playlist_id)
-    tracks = playlist['tracks']
-    tracks_items = tracks['items']
-    while tracks['next']:
+    tracks = playlist["tracks"]
+    tracks_items = tracks["items"]
+    while tracks["next"]:
         tracks = mydiary_spotify.sp.next(tracks)
-        tracks_items = tracks['items']
-        playlist['tracks']['items'] += tracks_items
+        tracks_items = tracks["items"]
+        playlist["tracks"]["items"] += tracks_items
     return playlist
 
 
@@ -965,7 +971,6 @@ def experimental_get_spotify_audio_features(track_id: str):
     mydiary_spotify = MyDiarySpotify()
     track_id = normalize_spotify_id(track_id)
     return mydiary_spotify.sp.audio_features(track_id)
-
 
 
 if __name__ == "__main__":

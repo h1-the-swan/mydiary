@@ -2,6 +2,7 @@
     <h1>Test Day</h1>
     <div class="w-75" style="width: auto">
         <DatePicker
+            ref="calendar"
             :model-value="getDate"
             @update:model-value="updateDate"
             :attributes="attributes"
@@ -54,7 +55,7 @@ import { onMounted, computed, ref, watch, watchEffect } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
-import { Calendar, DatePicker } from 'v-calendar'
+import { DatePicker } from 'v-calendar'
 import 'v-calendar/style.css'
 import {
     joplinGetNote,
@@ -72,6 +73,13 @@ axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
+const calendar = ref<any>(null)
+const calendarVisibleDates = computed<Date[]>(() => {
+    if (calendar.value == null) {
+        return []
+    }
+    return calendar.value.calendarRef.days.map((d: any) => d.date)
+})
 const joplinInfoAllDays = ref<any[]>([])
 const initMarkdown = ref('')
 const md = markdownit()
@@ -100,12 +108,6 @@ function updateDate(val: any) {
     const newQD = val.toISOString().split('T')[0]
     router.push({ query: { dt: newQD } })
 }
-onMounted(async () => {
-    console.log('dd')
-    app.loadJoplinInfoAllDays()
-    console.log('ddd')
-    // joplinInfoAllDays.value = app.joplinInfoAllDays
-})
 async function fetchInitMarkdown() {
     initMarkdown.value = ''
     initMarkdown.value = (
@@ -118,7 +120,7 @@ async function fetchInitMarkdown() {
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''
-    console.log("fetchJoplinNoteId()")
+    console.log('fetchJoplinNoteId()')
     joplinNoteId.value = (await joplinGetNoteId(getDateStr.value)).data
 }
 async function fetchJoplinNote() {
@@ -163,7 +165,16 @@ watch(getDate, fetchJoplinNoteId, { immediate: true })
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
 watch(joplinNoteId, () => console.log(joplinNoteId.value))
 watch(joplinNoteId, fetchJoplinNoteImages, { immediate: true })
-watchEffect(() => joplinInfoAllDays.value = app.joplinInfoAllDays)
+watchEffect(() => {
+    if (!calendarVisibleDates.value.length) return
+    const sortedDates = calendarVisibleDates.value.sort((a: any, b: any) => a - b)
+    const minDt = sortedDates[0].toISOString().split('T')[0]
+    const maxDt = sortedDates[sortedDates.length - 1]
+        .toISOString()
+        .split('T')[0]
+    app.loadJoplinInfoAllDays(minDt, maxDt)
+})
+watchEffect(() => (joplinInfoAllDays.value = app.joplinInfoAllDays))
 watchEffect(() => console.log(joplinInfoAllDays))
 watchEffect(() => console.log(diaryNote.value))
 watchEffect(() => console.log(diaryNoteImages.value))

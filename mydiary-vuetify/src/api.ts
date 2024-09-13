@@ -38,6 +38,11 @@ export type GetNextcloudImageNextcloudThumbnailImgGetParams = {
 url: string;
 };
 
+export type JoplinGetInfoAllDaysParams = {
+min_dt: string;
+max_dt: string;
+};
+
 export type JoplinUpdateNoteParams = {
 tz?: string;
 };
@@ -693,10 +698,12 @@ export const joplinUpdateNote = <TData = AxiosResponse<unknown>>(
  * @summary Joplin Get Info All Days
  */
 export const joplinGetInfoAllDays = <TData = AxiosResponse<unknown[]>>(
-     options?: AxiosRequestConfig
+    params: JoplinGetInfoAllDaysParams, options?: AxiosRequestConfig
  ): Promise<TData> => {
     return axios.get(
-      `/joplin/get_info_all_days`,options
+      `/joplin/get_info_all_days`,{
+    ...options,
+        params: {...params, ...options?.params},}
     );
   }
 

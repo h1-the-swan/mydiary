@@ -34,8 +34,10 @@ export const useAppStore = defineStore('app', () => {
     }
 
     const joplinInfoAllDays = ref<any[]>([])
-    async function loadJoplinInfoAllDays() {
-        joplinInfoAllDays.value = (await joplinGetInfoAllDays()).data
+    async function loadJoplinInfoAllDays(min_dt: string, max_dt: string) {
+        joplinInfoAllDays.value = (
+            await joplinGetInfoAllDays({ min_dt: min_dt, max_dt: max_dt })
+        ).data
     }
 
     return {
