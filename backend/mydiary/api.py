@@ -15,7 +15,7 @@ from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
-from .db import Session, engine, select, func
+from .db import Session, engine, select, func, get_db_status
 from .models import (
     Recipe,
     RecipeBase,
@@ -227,11 +227,7 @@ async def testhealthcheck():
 
 @app.get("/db_status", operation_id="dbStatus")
 async def db_status():
-    from .db import sqlite_file_name
-
-    return {
-        "sqlite_file_exists": os.path.exists(sqlite_file_name),
-    }
+    return get_db_status()
 
 
 @app.get("/gcal/get_auth_url", operation_id="getGCalAuthUrl", response_model=str)

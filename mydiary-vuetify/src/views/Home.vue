@@ -9,6 +9,6 @@ axios.defaults.baseURL = '/api'
 async function getDBStatus() {
   const x = (await axios.get('/db_status')).data
   console.log(x)
-  return x.sqlite_file_exists
+  return x.db_is_initialized
 }
 </script>

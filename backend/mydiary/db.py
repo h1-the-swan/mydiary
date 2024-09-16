@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from sqlmodel import create_engine, SQLModel, Session, select, func, Field
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from . import models
 
 rootdir = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +21,14 @@ def create_db_and_tables(engine=engine):
 def vacuum_db(engine=engine):
     with Session(engine) as session:
         session.exec(text("VACUUM"))
+
+
+def get_db_status():
+    table_names = inspect(engine).get_table_names()
+
+    return {
+        "db_is_initialized": len(table_names) > 0,
+    }
 
 
 class MydiaryDatabaseBackup(SQLModel, table=True):
