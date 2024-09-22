@@ -415,6 +415,12 @@ class Tag(TagBase, table=True):
     )
 
 
+class TimeZoneChange(SQLModel, table=True):
+    changed_at: datetime = Field(primary_key=True)  # in UTC
+    tz_before: str
+    tz_after: str
+
+
 class MyDiaryImageBase(SQLModel):
     hash: str = Field(index=True)
     name: Optional[str] = None
@@ -459,7 +465,7 @@ class MyDiaryDay(SQLModel):
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
-        from .habitica_connector import MyDiaryHabitica
+        # from .habitica_connector import MyDiaryHabitica
 
         mydiary_pocket = MyDiaryPocket()
         pocket_articles = mydiary_pocket.get_articles_for_day(dt)

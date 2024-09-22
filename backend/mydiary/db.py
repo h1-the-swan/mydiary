@@ -23,12 +23,17 @@ def vacuum_db(engine=engine):
         session.exec(text("VACUUM"))
 
 
-def get_db_status():
+def get_db_status(more=False):
     table_names = inspect(engine).get_table_names()
 
-    return {
+    ret = {
         "db_is_initialized": len(table_names) > 0,
     }
+    if more is True:
+        ret.update({
+            "db_table_names": table_names,
+        })
+    return ret
 
 
 class MydiaryDatabaseBackup(SQLModel, table=True):

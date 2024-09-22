@@ -16,7 +16,9 @@
                     ></v-img>
                 </v-col>
             </v-row>
-            <v-btn :loading="loading" class="mt-2" type="submit" block>Submit</v-btn>
+            <v-btn :loading="loading" class="mt-2" type="submit" block
+                >Submit</v-btn
+            >
         </v-form>
     </div>
 </template>
@@ -70,6 +72,7 @@ watchEffect(() => {
     nextCloudThumbs.value.forEach(
         (item) => (item.selected = existingUrls.includes(item.url))
     )
+    console.log(diaryNoteImages)
 })
 watchEffect(() => {
     const numSelected = nextCloudThumbs.value.filter((t) => t.selected).length
@@ -78,9 +81,15 @@ watchEffect(() => {
 })
 
 async function onSubmit() {
+    if (!props.joplinNoteId) return
     const selected = nextCloudThumbs.value.filter((t) => t.selected)
     loading.value = true
-    const response = (await nextcloudPhotosAddToJoplin(props.joplinNoteId, selected.map((t) => t.url))).data
+    const response = (
+        await nextcloudPhotosAddToJoplin(
+            props.joplinNoteId,
+            selected.map((t) => t.url)
+        )
+    ).data
     console.log(response.value)
     loading.value = false
 }

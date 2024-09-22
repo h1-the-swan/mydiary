@@ -46,6 +46,11 @@ const routes = [
         component: () => import(/* webpackChunkName: "pocket" */ '@/views/Pocket.vue'),
         props: true,
       },
+      {
+        path: '/tz-change',
+        name: 'timeZoneChange',
+        component: () => import(/* webpackChunkName: "pocket" */ '@/views/TimeZoneChange.vue'),
+      },
     ],
   },
 ]

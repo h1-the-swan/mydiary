@@ -3,7 +3,7 @@ from datetime import datetime
 import requests
 import io
 import pendulum
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +38,7 @@ from .models import (
     JoplinNote,
     MyDiaryImageBase,
     MyDiaryImage,
+    TimeZoneChange,
 )
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
@@ -226,8 +227,8 @@ async def testhealthcheck():
 
 
 @app.get("/db_status", operation_id="dbStatus")
-async def db_status():
-    return get_db_status()
+async def db_status(more: bool = False) -> Dict[str, Any]:
+    return get_db_status(more=more)
 
 
 @app.get("/gcal/get_auth_url", operation_id="getGCalAuthUrl", response_model=str)
@@ -934,6 +935,25 @@ def read_recipes(
 ):
     recipes = session.exec(select(Recipe).offset(offset).limit(limit)).all()
     return recipes
+
+
+@app.post(
+    "/tzchange/", operation_id="createTimeZoneChange", response_model=TimeZoneChange
+)
+def create_timezonechange(
+    *, session: Session = Depends(get_session), dt: str, tz_before: str, tz_after: str
+):
+    dt_str = dt.split('Z')[0]
+    dt_resolved = pendulum.parse(dt_str, tz=tz_after)
+    tz_change = TimeZoneChange.model_validate({
+        'changed_at': dt_resolved.in_timezone('UTC'),
+        'tz_before': tz_before,
+        'tz_after': tz_after,
+    })
+    session.add(tz_change)
+    session.commit()
+    session.refresh(tz_change)
+    return tz_change
 
 
 @app.get("/generate_openapi_json")
