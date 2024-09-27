@@ -7,6 +7,8 @@ import {
     PerformSongRead,
     spotifyHistoryCount,
     joplinGetInfoAllDays,
+    TimeZoneChange,
+    readTimeZoneChangeList,
 } from '@/api'
 
 // export const useAppStore = defineStore('app', {
@@ -40,11 +42,22 @@ export const useAppStore = defineStore('app', () => {
         ).data
     }
 
+    const timeZoneChanges = ref<TimeZoneChange[]>()
+    async function loadTimeZoneChanges() {
+        timeZoneChanges.value = await readTimeZoneChangeList({ limit: 5000 }).then(
+            (res) => {
+                return res.data
+            }
+        )
+    }
+
     return {
         performSongs,
         loadPerformSongs,
         getPerformSongById,
         joplinInfoAllDays,
         loadJoplinInfoAllDays,
+        timeZoneChanges,
+        loadTimeZoneChanges,
     }
 })

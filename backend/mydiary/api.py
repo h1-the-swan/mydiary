@@ -937,6 +937,17 @@ def read_recipes(
     return recipes
 
 
+@app.get("/tzchange/", operation_id="readTimeZoneChangeList", response_model=List[TimeZoneChange])
+def read_timezonechange(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=100, lte=1000),
+):
+    tz_changes = session.exec(select(TimeZoneChange).offset(offset).limit(limit)).all()
+    return sorted(tz_changes, key=lambda x: x.changed_at)
+
+
 @app.post(
     "/tzchange/", operation_id="createTimeZoneChange", response_model=TimeZoneChange
 )

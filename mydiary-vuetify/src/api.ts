@@ -23,6 +23,11 @@ tz_before: string;
 tz_after: string;
 };
 
+export type ReadTimeZoneChangeListParams = {
+offset?: number;
+limit?: number;
+};
+
 export type ReadRecipesListParams = {
 offset?: number;
 limit?: number;
@@ -945,6 +950,19 @@ export const readRecipesList = <TData = AxiosResponse<RecipeRead>>(
   }
 
 /**
+ * @summary Read Timezonechange
+ */
+export const readTimeZoneChangeList = <TData = AxiosResponse<TimeZoneChange[]>>(
+    params?: ReadTimeZoneChangeListParams, options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/tzchange/`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
  * @summary Create Timezonechange
  */
 export const createTimeZoneChange = <TData = AxiosResponse<TimeZoneChange>>(
@@ -1033,6 +1051,7 @@ export type UpdateDogResult = AxiosResponse<DogRead>
 export type DeleteDogResult = AxiosResponse<unknown>
 export type CreateRecipeResult = AxiosResponse<RecipeRead>
 export type ReadRecipesListResult = AxiosResponse<RecipeRead>
+export type ReadTimeZoneChangeListResult = AxiosResponse<TimeZoneChange[]>
 export type CreateTimeZoneChangeResult = AxiosResponse<TimeZoneChange>
 export type SendApiJsonGenerateOpenapiJsonGetResult = AxiosResponse<unknown>
 export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetResult = AxiosResponse<unknown>
