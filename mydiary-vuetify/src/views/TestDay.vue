@@ -111,10 +111,13 @@ function updateDate(val: any) {
 async function fetchInitMarkdown() {
     initMarkdown.value = ''
     initMarkdown.value = (
+        // await axios.get(
+        //     `/day_init_markdown/${getDateStr.value}?tz=${
+        //         Intl.DateTimeFormat().resolvedOptions().timeZone // TODO: get the timezone of the diary day
+        //     }`
+        // )
         await axios.get(
-            `/day_init_markdown/${getDateStr.value}?tz=${
-                Intl.DateTimeFormat().resolvedOptions().timeZone // TODO: get the timezone of the diary day
-            }`
+            `/day_init_markdown/${getDateStr.value}?tz=infer`
         )
     ).data
 }

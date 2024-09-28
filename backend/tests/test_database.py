@@ -11,18 +11,16 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, GoogleCalendarEvent, PocketArticle, PocketStatusEnum, Tag, SpotifyTrackHistory, MyDiaryImage
+from mydiary.models import (
+    Dog,
+    GoogleCalendarEvent,
+    PocketArticle,
+    PocketStatusEnum,
+    Tag,
+    SpotifyTrackHistory,
+    MyDiaryImage,
+)
 from mydiary.core import reduce_size_recurse
-
-
-@pytest.fixture(name="db_session")
-def session_fixture():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
 
 
 def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session):
@@ -31,7 +29,9 @@ def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session
     spotify_track_history = SpotifyTrackHistory.from_spotify_track(track_json)
     # db_track_history = SpotifyTrackHistory.from_orm(spotify_track_history)
     db_session.add(spotify_track_history)
-    MyDiarySpotify().add_or_update_track_in_database(track_json, session=db_session, commit=False)
+    MyDiarySpotify().add_or_update_track_in_database(
+        track_json, session=db_session, commit=False
+    )
     db_session.commit()
     db_session.refresh(spotify_track_history)
 
@@ -91,6 +91,7 @@ def test_add_pocket_article_to_database(rootdir: str, db_session: Session):
     assert "news" in tag_names
     assert "quickbites" in tag_names
 
+
 def test_add_pocket_article_existing_tag(rootdir: str, db_session: Session):
     fp = Path(rootdir).joinpath("pocketitem.json")
 
@@ -123,6 +124,7 @@ def test_add_pocket_article_existing_tag(rootdir: str, db_session: Session):
         assert len(tag_select) == 1
         assert tag_select[0].name == t.name
 
+
 def test_add_tags(caplog, db_session: Session):
     caplog.set_level(logging.DEBUG)
     n = 10
@@ -147,7 +149,7 @@ class TestMyDiaryImage:
         image_dt = pendulum.from_format(image_name, fmt, tz="America/New_York")
         image_hash = hashlib.md5()
         image_hash.update(image_bytes)
-        nextcloud_path = 'H1phone_sync/2024/05/24-05-18%2013-50-28%209143.jpg'
+        nextcloud_path = "H1phone_sync/2024/05/24-05-18%2013-50-28%209143.jpg"
         mydiary_image = MyDiaryImage(
             hash=image_hash.hexdigest(),
             name=image_name,
@@ -161,7 +163,9 @@ class TestMyDiaryImage:
         db_session.add(mydiary_image)
         db_session.commit()
 
-        db_image = db_session.exec(select(MyDiaryImage).where(MyDiaryImage.hash == image_hash.hexdigest())).one()
+        db_image = db_session.exec(
+            select(MyDiaryImage).where(MyDiaryImage.hash == image_hash.hexdigest())
+        ).one()
         assert db_image.id == 1
         assert db_image.hash == image_hash.hexdigest()
         assert db_image.nextcloud_path == nextcloud_path

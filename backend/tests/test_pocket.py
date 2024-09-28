@@ -46,6 +46,8 @@ def test_pocket_article(rootdir, caplog, db_session: Session):
     assert article.word_count == 398
     assert article.listen_duration_estimate == 154
     assert article.time_added.year == 2021
+    assert article.pocket_url == "https://getpocket.com/read/3496035100"
+    assert article.to_markdown() == "[A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale](https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902) ([Pocket link](https://getpocket.com/read/3496035100))"
 
     # for t in article._pocket_item["tags"].values():
     #     tag = Tag(name=t["tag"], pocket_tag_id=t["item_id"])

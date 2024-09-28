@@ -10,6 +10,8 @@ import hashlib
 from pathlib import Path
 from PIL import Image, ImageOps
 from io import BytesIO
+import pendulum
+from sqlmodel import Session, desc, select
 
 import logging
 
@@ -52,3 +54,22 @@ def reduce_size_recurse(data, size: Tuple[int, int], bytes_threshold: int = 6000
     else:
         logger.debug(f"reduced image to {len(new_data)} bytes")
         return new_data
+
+
+def get_last_timezone(dt_str: str, session: Session) -> str:
+    from .models import TimeZoneChange
+
+    dt_obj = pendulum.parse(dt_str)
+    z = session.exec(
+        select(TimeZoneChange)
+        .where(TimeZoneChange.changed_at < dt_obj.end_of("day"))
+        .order_by(desc(TimeZoneChange.changed_at))
+    ).first()
+    if z is None:
+        # take the earliest one instead
+        z = session.exec(
+            select(TimeZoneChange).order_by(TimeZoneChange.changed_at)
+        ).first()
+        return z.tz_before
+    else:
+        return z.tz_after

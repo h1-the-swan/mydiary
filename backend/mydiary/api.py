@@ -43,6 +43,7 @@ from .models import (
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
 from .spotify_connector import normalize_spotify_id
+from .core import get_last_timezone
 import uvicorn
 
 import logging
@@ -492,16 +493,23 @@ async def joplin_init_note(dt: str, tz: str = "local"):
 
 
 @app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
-async def day_init_markdown(dt: str, tz: str = "local"):
+async def day_init_markdown(
+    dt: str, tz: str = "local", session: Session = Depends(get_session)
+):
     from mydiary import MyDiaryDay
 
+    if tz == "infer":
+        tz = get_last_timezone(dt, session=session)
+        logger.info(f"inferred tz: {tz}")
+
     if dt == "today":
-        dt = pendulum.today(tz=tz)
+        dt_obj = pendulum.today(tz=tz)
     elif dt == "yesterday":
-        dt = pendulum.yesterday(tz=tz)
+        dt_obj = pendulum.yesterday(tz=tz)
     else:
-        dt = pendulum.parse(dt, tz=tz)
-    day = MyDiaryDay.from_dt(dt)
+        dt_obj = pendulum.parse(dt, tz=tz)
+    logger.info(f"dt_obj tz: {dt_obj.tz}")
+    day = MyDiaryDay.from_dt(dt_obj)
     return day.init_markdown()
 
 
@@ -937,7 +945,11 @@ def read_recipes(
     return recipes
 
 
-@app.get("/tzchange/", operation_id="readTimeZoneChangeList", response_model=List[TimeZoneChange])
+@app.get(
+    "/tzchange/",
+    operation_id="readTimeZoneChangeList",
+    response_model=List[TimeZoneChange],
+)
 def read_timezonechange(
     *,
     session: Session = Depends(get_session),
@@ -954,13 +966,15 @@ def read_timezonechange(
 def create_timezonechange(
     *, session: Session = Depends(get_session), dt: str, tz_before: str, tz_after: str
 ):
-    dt_str = dt.split('Z')[0]
+    dt_str = dt.split("Z")[0]
     dt_resolved = pendulum.parse(dt_str, tz=tz_after)
-    tz_change = TimeZoneChange.model_validate({
-        'changed_at': dt_resolved.in_timezone('UTC'),
-        'tz_before': tz_before,
-        'tz_after': tz_after,
-    })
+    tz_change = TimeZoneChange.model_validate(
+        {
+            "changed_at": dt_resolved.in_timezone("UTC"),
+            "tz_before": tz_before,
+            "tz_after": tz_after,
+        }
+    )
     session.add(tz_change)
     session.commit()
     session.refresh(tz_change)
