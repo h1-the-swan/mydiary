@@ -193,6 +193,8 @@ export type PocketArticleUpdateTimeUpdated = string | null;
 
 export type PocketArticleUpdateTimeRead = string | null;
 
+export type PocketArticleUpdateTimePocketRaindropSync = string | null;
+
 export type PocketArticleUpdateTimeFavorited = string | null;
 
 export type PocketArticleUpdateTimeAdded = string | null;
@@ -200,6 +202,8 @@ export type PocketArticleUpdateTimeAdded = string | null;
 export type PocketArticleUpdateStatus = PocketStatusEnum | null;
 
 export type PocketArticleUpdateResolvedTitle = string | null;
+
+export type PocketArticleUpdateRaindropId = number | null;
 
 export type PocketArticleUpdatePocketTags = string[] | null;
 
@@ -214,10 +218,12 @@ export interface PocketArticleUpdate {
   given_title?: PocketArticleUpdateGivenTitle;
   listen_duration_estimate?: PocketArticleUpdateListenDurationEstimate;
   pocket_tags?: PocketArticleUpdatePocketTags;
+  raindrop_id?: PocketArticleUpdateRaindropId;
   resolved_title?: PocketArticleUpdateResolvedTitle;
   status?: PocketArticleUpdateStatus;
   time_added?: PocketArticleUpdateTimeAdded;
   time_favorited?: PocketArticleUpdateTimeFavorited;
+  time_pocket_raindrop_sync?: PocketArticleUpdateTimePocketRaindropSync;
   time_read?: PocketArticleUpdateTimeRead;
   time_updated?: PocketArticleUpdateTimeUpdated;
   top_image_url?: PocketArticleUpdateTopImageUrl;
@@ -233,9 +239,13 @@ export type PocketArticleReadTimeUpdated = string | null;
 
 export type PocketArticleReadTimeRead = string | null;
 
+export type PocketArticleReadTimePocketRaindropSync = string | null;
+
 export type PocketArticleReadTimeFavorited = string | null;
 
 export type PocketArticleReadTimeAdded = string | null;
+
+export type PocketArticleReadRaindropId = number | null;
 
 export type PocketArticleReadListenDurationEstimate = number | null;
 
@@ -243,11 +253,13 @@ export interface PocketArticleRead {
   favorite: boolean;
   given_title: string;
   listen_duration_estimate?: PocketArticleReadListenDurationEstimate;
+  raindrop_id?: PocketArticleReadRaindropId;
   resolved_title: string;
   status: PocketStatusEnum;
   tags?: TagRead[];
   time_added?: PocketArticleReadTimeAdded;
   time_favorited?: PocketArticleReadTimeFavorited;
+  time_pocket_raindrop_sync?: PocketArticleReadTimePocketRaindropSync;
   time_read?: PocketArticleReadTimeRead;
   time_updated?: PocketArticleReadTimeUpdated;
   top_image_url?: PocketArticleReadTopImageUrl;

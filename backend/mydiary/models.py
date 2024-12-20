@@ -191,6 +191,8 @@ class PocketArticleBase(SQLModel):
     listen_duration_estimate: Optional[int] = Field(default=None, index=True)
     word_count: Optional[int] = Field(default=None, index=True)
     top_image_url: Optional[str] = Field(default=None)
+    raindrop_id: Optional[int] = Field(default=None, index=True)
+    time_pocket_raindrop_sync: Optional[datetime] = Field(default=None, index=True)
 
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()

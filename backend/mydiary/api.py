@@ -79,6 +79,8 @@ class PocketArticleUpdate(SQLModel):
     word_count: Optional[int] = None
     top_image_url: Optional[str] = None
     pocket_tags: Optional[List[str]] = None
+    raindrop_id: Optional[int] = None
+    time_pocket_raindrop_sync: Optional[datetime] = None
 
 
 class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):
