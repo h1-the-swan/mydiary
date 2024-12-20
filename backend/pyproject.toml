@@ -26,6 +26,7 @@ lxml = "^5.3.0"
 pylint = "^3.3.0"
 lyricsgenius = "^3.0.1"
 apscheduler = "^3.10.4"
+backoff = "^2.2.1"
 
 [tool.poetry.dev-dependencies]
 humanfriendly = "^10.0"
