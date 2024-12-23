@@ -1836,13 +1836,13 @@ source = ["Cython (>=3.0.11)"]
 
 [[package]]
 name = "lyricsgenius"
-version = "3.1.2"
+version = "3.2.0"
 description = "Download lyrics and metadata from Genius.com"
 optional = false
 python-versions = "*"
 files = [
-    {file = "lyricsgenius-3.1.2-py3-none-any.whl", hash = "sha256:8bf35468feccad6198adc5e8b878b2029449791936089738ec0299d9fc0bc2ac"},
-    {file = "lyricsgenius-3.1.2.tar.gz", hash = "sha256:bf650eece4e2c13bc552dfea4fa6d7ddb123373e76a4b13b6eb54cd6895bdb14"},
+    {file = "lyricsgenius-3.2.0-py3-none-any.whl", hash = "sha256:84fe8dff973ec85182d023bc3b86fb1b8432c2ed8c2bb99dbb64ced7d14c389b"},
+    {file = "lyricsgenius-3.2.0.tar.gz", hash = "sha256:5ab7f117259fdb75563138fd423a2905a512f1381b384f063558d41908b2a12e"},
 ]
 
 [package.dependencies]
@@ -4089,4 +4089,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "443410f821b3f1a3ba1bb12da3a004db7156f4f3cdbe8312f7c906f5c24a1692"
+content-hash = "5a872f0c6a93092e153c57e781b9aaf95c15e26dea0a898502e78dd1a62695e1"
