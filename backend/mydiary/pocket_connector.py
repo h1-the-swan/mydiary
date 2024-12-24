@@ -44,7 +44,9 @@ class MyDiaryPocket:
         with Session(engine) as session:
             return session
 
-    def get_articles_for_day(self, dt: datetime, session: Optional[Session] = None) -> Dict[str, List[PocketArticle]]:
+    def get_articles_for_day(
+        self, dt: datetime, session: Optional[Session] = None
+    ) -> Dict[str, List[PocketArticle]]:
         if session is None:
             session = self.new_session()
         dt = pendulum.instance(dt)
@@ -55,7 +57,7 @@ class MyDiaryPocket:
             attr = getattr(PocketArticle, f"time_{k}")
             stmt = (
                 select(PocketArticle)
-                .where(PocketArticle.status!=2)
+                .where(PocketArticle.status != 2)
                 .where(attr >= start)
                 .where(attr <= end)
                 .order_by(attr)
