@@ -66,13 +66,13 @@ class MyDiaryPocket:
             articles[k] = r
         return articles
 
-    def yield_all_articles_from_api(
+    def yield_all_articles_from_api_json(
         self,
         state: str = "all",
         detailType: str = "complete",
         since: Optional[int] = None,
         offset: int = 0,
-        count: int = 5000,
+        count: int = 30,
     ) -> Iterable[PocketArticle]:
         while True:
             r = self.pocket_instance.get(
@@ -84,11 +84,31 @@ class MyDiaryPocket:
             )
             if r[0]["status"] != 1:
                 break
+            this_total = r.get("total")
+            if this_total:
+                this_total = int(this_total)
+                if count + offset > this_total:
+                    break
             items_dict: Dict = r[0]["list"]
+            if len(items_dict) == 0:
+                break
             for item in items_dict.values():
-                yield PocketArticle.from_pocket_item(item)
+                yield item
 
             offset += count
+
+    def yield_all_articles_from_api(
+        self,
+        state: str = "all",
+        detailType: str = "complete",
+        since: Optional[int] = None,
+        offset: int = 0,
+        count: int = 30,
+    ) -> Iterable[PocketArticle]:
+        for item in self.yield_all_articles_from_api_json(
+            state=state, detailType=detailType, since=since, offset=offset, count=count
+        ):
+            yield PocketArticle.from_pocket_item(item)
 
     def get_all_articles_from_api(
         self,

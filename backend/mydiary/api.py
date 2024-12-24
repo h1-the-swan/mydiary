@@ -199,12 +199,47 @@ def scheduled_spotify_save_recent_tracks():
     logger.info(f"{num_saved} recent spotify tracks saved")
 
 
+def scheduled_pocket_sync_new():
+    from mydiary.pocket_connector import MyDiaryPocket
+
+    mydiary_pocket = MyDiaryPocket()
+    with Session(engine) as session:
+        stmt = select(PocketArticle).order_by(desc(PocketArticle.time_last_api_sync))
+        r = session.exec(stmt).first()
+        since = int(r.time_last_api_sync.timestamp())
+        now = pendulum.now().in_timezone("UTC")
+        for article_json in mydiary_pocket.yield_all_articles_from_api_json(
+            since=since
+        ):
+            article_id = int(article_json["item_id"])
+            db_article = session.get(PocketArticle, article_id)
+            if db_article is None:
+                # new article
+                article_new = PocketArticle.from_pocket_item(article_json)
+                article_new.time_last_api_sync = now.int_timestamp
+                session.merge(article_new)
+            else:
+                # update article
+                if article_json["status"] == "2":
+                    article_update = PocketArticleUpdate.model_validate(
+                        {"status": 2, "time_last_api_sync": now.int_timestamp}
+                    )
+                else:
+                    article_json["time_last_api_sync"] = now.int_timestamp
+                    article_update = PocketArticleUpdate.model_validate(article_json)
+                update_pocket_article(
+                    session=session, article_id=article_id, article=article_update
+                )
+        session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
     scheduler = BackgroundScheduler()
     scheduler.add_job(scheduled_spotify_save_recent_tracks, "interval", minutes=60)
+    scheduler.add_job(scheduled_pocket_sync_new, "interval", minutes=60 * 12)
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
