@@ -480,7 +480,7 @@ class MyDiaryDay(SQLModel):
 
         mydiary_pocket = MyDiaryPocket()
         pocket_articles = mydiary_pocket.get_articles_for_day(dt)
-        mydiary_pocket.save_articles_to_database(pocket_articles)
+        # mydiary_pocket.save_articles_to_database(pocket_articles)
 
         mydiary_spotify = MyDiarySpotify()
         if spotify_sync is True:

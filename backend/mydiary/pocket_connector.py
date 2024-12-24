@@ -44,30 +44,24 @@ class MyDiaryPocket:
         with Session(engine) as session:
             return session
 
-    def get_articles_for_day(self, dt: datetime) -> Dict[str, List[PocketArticle]]:
-        dt = pendulum.instance(dt).set(hour=0, minute=0, second=0, microsecond=0)
-        timestamp = dt.int_timestamp
-        articles = {
-            "added": [],
-            # 'updated': [],
-            "read": [],
-            "favorited": [],
-        }
-        r = self.pocket_instance.get(
-            state="all", since=timestamp, detailType="complete", sort="oldest"
-        )
-        items_dict = r[0]["list"]
-        if items_dict:
-            for item in items_dict.values():
-                a = PocketArticle.from_pocket_item(item)
-                if a.status == "SHOULD_BE_DELETED":
-                    continue
-                for k in articles.keys():
-                    article_dt = getattr(a, f"time_{k}", None)
-                    if article_dt:
-                        article_dt = pendulum.instance(article_dt)
-                        if article_dt.in_timezone(dt.timezone).date() == dt.date():
-                            articles[k].append(a)
+    def get_articles_for_day(self, dt: datetime, session: Optional[Session] = None) -> Dict[str, List[PocketArticle]]:
+        if session is None:
+            session = self.new_session()
+        dt = pendulum.instance(dt)
+        start = dt.start_of("day").in_timezone("UTC")
+        end = dt.end_of("day").in_timezone("UTC")
+        articles = {}
+        for k in ["added", "read", "favorited"]:
+            attr = getattr(PocketArticle, f"time_{k}")
+            stmt = (
+                select(PocketArticle)
+                .where(PocketArticle.status!=2)
+                .where(attr >= start)
+                .where(attr <= end)
+                .order_by(attr)
+            )
+            r = session.exec(stmt).all()
+            articles[k] = r
         return articles
 
     def yield_all_articles_from_api(
@@ -159,6 +153,7 @@ class MyDiaryPocket:
         for article in articles_list:
             existing_row = session.get(PocketArticle, article.id)
             if existing_row:
+                # TODO: merge instead of delete
                 session.delete(existing_row)
                 session.commit()
                 num_updated += 1
