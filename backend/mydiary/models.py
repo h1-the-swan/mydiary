@@ -153,7 +153,9 @@ class PerformSongBase(SQLModel):
     name: str = Field(index=True)
     artist_name: Optional[str] = Field(default=None, index=True)
     learned: bool = Field(default=True, index=True)
-    spotify_id: Optional[str] = Field(foreign_key="spotifytrack.spotify_id", default=None, index=True)
+    spotify_id: Optional[str] = Field(
+        foreign_key="spotifytrack.spotify_id", default=None, index=True
+    )
     notes: Optional[str] = Field(default=None)
     perform_url: Optional[str] = Field(default=None)
     created_at: Optional[datetime] = Field(default=None, index=True)
@@ -193,6 +195,7 @@ class PocketArticleBase(SQLModel):
     top_image_url: Optional[str] = Field(default=None)
     raindrop_id: Optional[int] = Field(default=None, index=True)
     time_pocket_raindrop_sync: Optional[datetime] = Field(default=None, index=True)
+    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
 
     # private attribute -- will not be included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
@@ -206,7 +209,9 @@ class PocketArticleBase(SQLModel):
         # TODO: This doesn't work. Fix it.
         from .pocket_connector import MyDiaryPocket
 
-        return MyDiaryPocket().collect_tags(self, self._pocket_tags, session=session, commit=commit)
+        return MyDiaryPocket().collect_tags(
+            self, self._pocket_tags, session=session, commit=commit
+        )
 
     def to_markdown(self) -> str:
         if self.resolved_title:
@@ -223,7 +228,9 @@ class PocketArticle(PocketArticleBase, table=True):
     id: int = Field(primary_key=True)
 
     tags: List["Tag"] = Relationship(
-        back_populates="pocket_articles", link_model=PocketArticleTagLink, sa_relationship_kwargs={'cascade': 'save-update,merge'}
+        back_populates="pocket_articles",
+        link_model=PocketArticleTagLink,
+        sa_relationship_kwargs={"cascade": "save-update,merge"},
     )
 
     @classmethod
@@ -280,7 +287,7 @@ class PocketArticle(PocketArticleBase, table=True):
             listen_duration_estimate=listen_duration_estimate,
             word_count=word_count,
             top_image_url=top_image_url,
-            tags = _pocket_tags,
+            tags=_pocket_tags,
         )
         ret._pocket_item = item
         # ret._pocket_tags = _pocket_tags
@@ -296,7 +303,7 @@ class GoogleCalendarEvent(SQLModel, table=True):
     end: datetime = Field(index=True)
     start_timezone: str
     end_timezone: str
-    # new_test_col: Optional[str] = Field(default=None)
+    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
     # what else? canceled/deleted?
 
     @reconstructor
@@ -403,6 +410,7 @@ class JoplinNote(SQLModel):
     @property
     def md_note(self):
         from .markdown_edits import MarkdownDoc
+
         return MarkdownDoc(self.body, parent=self)
 
 
@@ -447,14 +455,14 @@ class MyDiaryDay(SQLModel):
     joplin_note_id: str = None
     thumbnail: MyDiaryImage = None
     images: List[MyDiaryImage] = []
-    spotify_tracks: List[
-        SpotifyTrackHistoryFrozen
-    ] = []  # Spotify songs played on this day
-    pocket_articles: Dict[
-        str, List[PocketArticle]
-    ] = {}  # interactions with Pocket articles on this day
+    spotify_tracks: List[SpotifyTrackHistoryFrozen] = (
+        []
+    )  # Spotify songs played on this day
+    pocket_articles: Dict[str, List[PocketArticle]] = (
+        {}
+    )  # interactions with Pocket articles on this day
     google_calendar_events: List[GoogleCalendarEvent] = []
-    rating: Optional[int] = Field(default=None) 
+    rating: Optional[int] = Field(default=None)
     # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
     flagged: bool = (
         False  # flagged for inspection, in the case of some potential problem
@@ -467,6 +475,7 @@ class MyDiaryDay(SQLModel):
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
+
         # from .habitica_connector import MyDiaryHabitica
 
         mydiary_pocket = MyDiaryPocket()
@@ -507,6 +516,7 @@ class MyDiaryDay(SQLModel):
 
     def get_joplin_note_id(self) -> Union[str, None]:
         from .joplin_connector import MyDiaryJoplin
+
         logger.debug("starting get_joplin_note_id")
 
         if isinstance(self.joplin_connector, MyDiaryJoplin):

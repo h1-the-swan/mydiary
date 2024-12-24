@@ -81,6 +81,7 @@ class PocketArticleUpdate(SQLModel):
     pocket_tags: Optional[List[str]] = None
     raindrop_id: Optional[int] = None
     time_pocket_raindrop_sync: Optional[datetime] = None
+    time_last_api_sync: Optional[datetime] = None
 
 
 class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):

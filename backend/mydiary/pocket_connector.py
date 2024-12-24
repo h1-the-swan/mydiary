@@ -54,7 +54,7 @@ class MyDiaryPocket:
             "favorited": [],
         }
         r = self.pocket_instance.get(
-            state="all", since=timestamp, detailType="complete"
+            state="all", since=timestamp, detailType="complete", sort="oldest"
         )
         items_dict = r[0]["list"]
         if items_dict:

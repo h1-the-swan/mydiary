@@ -71,70 +71,97 @@ def test_add_gcal_event_to_database(rootdir: str, db_session: Session):
     assert db_event.end == event.end
 
 
-def test_add_pocket_article_to_database(rootdir: str, db_session: Session):
-    fp = Path(rootdir).joinpath("pocketitem.json")
-    article_json = json.loads(fp.read_text())
-    article = PocketArticle.from_pocket_item(article_json)
-    # article.collect_tags(db_session)
-    db_session.add(article)
-    db_session.commit()
-
-    db_article = db_session.get(PocketArticle, article.id)
-    assert db_article.status == PocketStatusEnum.UNREAD
-    assert db_article.favorite is False
-    assert db_article.word_count == 398
-    assert db_article.listen_duration_estimate == 154
-    assert db_article.time_added.year == 2021
-
-    tag_names = [tag.name for tag in db_article.tags]
-    assert "internet" in tag_names
-    assert "news" in tag_names
-    assert "quickbites" in tag_names
-
-
-def test_add_pocket_article_existing_tag(rootdir: str, db_session: Session):
-    fp = Path(rootdir).joinpath("pocketitem.json")
-
-    tag_1 = Tag(name="internet")
-    tag_2 = Tag(name="news")
-    db_session.add(tag_1)
-    db_session.add(tag_2)
-    db_session.commit()
-
-    db_tags = db_session.exec(select(Tag)).all()
-    assert len(db_tags) == 2
-
-    article_json = json.loads(fp.read_text())
-    article = PocketArticle.from_pocket_item(article_json)
-    # article.collect_tags(db_session)
-    db_session.merge(article)
-    db_session.commit()
-
-    db_tags = db_session.exec(select(Tag)).all()
-    assert len(db_tags) == 3
-
-    db_article = db_session.get(PocketArticle, article.id)
-
-    assert len(db_article.tags) == 3
-    for tag in db_article.tags:
-        assert tag.is_pocket_tag
-
-    for t in [tag_1, tag_2]:
-        tag_select = [tag for tag in db_article.tags if tag.name == t.name]
-        assert len(tag_select) == 1
-        assert tag_select[0].name == t.name
-
-
-def test_add_tags(caplog, db_session: Session):
-    caplog.set_level(logging.DEBUG)
-    n = 10
-    for i in range(n):
-        tag = Tag(name=f"test tag {i}")
-        db_session.add(tag)
+class TestPocketArticleDatabase:
+    def test_add_pocket_article_to_database(self, rootdir: str, db_session: Session):
+        fp = Path(rootdir).joinpath("pocketitem.json")
+        article_json = json.loads(fp.read_text())
+        article = PocketArticle.from_pocket_item(article_json)
+        now = pendulum.now(tz='UTC')
+        article.time_last_api_sync = now
+        db_session.add(article)
         db_session.commit()
 
-    db_tags = db_session.exec(select(Tag)).all()
-    assert len(db_tags) == n
+        db_article = db_session.get(PocketArticle, article.id)
+        assert db_article.status == PocketStatusEnum.UNREAD
+        assert db_article.favorite is False
+        assert db_article.word_count == 398
+        assert db_article.listen_duration_estimate == 154
+        assert db_article.time_added.year == 2021
+        assert db_article.time_last_api_sync.timestamp() == now.timestamp()
+
+        tag_names = [tag.name for tag in db_article.tags]
+        assert "internet" in tag_names
+        assert "news" in tag_names
+        assert "quickbites" in tag_names
+
+    def test_add_pocket_article_existing_tag(self, rootdir: str, db_session: Session):
+        tag_1 = Tag(name="internet")
+        tag_2 = Tag(name="news")
+        db_session.add(tag_1)
+        db_session.add(tag_2)
+        db_session.commit()
+
+        db_tags = db_session.exec(select(Tag)).all()
+        assert len(db_tags) == 2
+
+        fp = Path(rootdir).joinpath("pocketitem.json")
+        article_json = json.loads(fp.read_text())
+        article = PocketArticle.from_pocket_item(article_json)
+        db_session.merge(article)
+        db_session.commit()
+
+        db_tags = db_session.exec(select(Tag)).all()
+        assert len(db_tags) == 3
+
+        db_article = db_session.get(PocketArticle, article.id)
+
+        assert len(db_article.tags) == 3
+        for tag in db_article.tags:
+            assert tag.is_pocket_tag
+
+        for t in [tag_1, tag_2]:
+            tag_select = [tag for tag in db_article.tags if tag.name == t.name]
+            assert len(tag_select) == 1
+            assert tag_select[0].name == t.name
+
+    def test_add_tags(self, caplog: pytest.LogCaptureFixture, db_session: Session):
+        caplog.set_level(logging.DEBUG)
+        n = 10
+        for i in range(n):
+            tag = Tag(name=f"test tag {i}")
+            db_session.add(tag)
+            db_session.commit()
+
+        db_tags = db_session.exec(select(Tag)).all()
+        assert len(db_tags) == n
+
+    # def test_update_article(self, rootdir: str, db_session: Session):
+    #     raindrop_id = 917478042
+    #     fp = Path(rootdir).joinpath("pocketitem.json")
+    #     article_json = json.loads(fp.read_text())
+    #     article = PocketArticle.from_pocket_item(article_json)
+    #     article.raindrop_id = raindrop_id
+    #     db_session.add(article)
+    #     db_session.commit()
+
+    #     fp2 = Path(rootdir).joinpath("pocketitemupdate.json")
+    #     article_json = json.loads(fp2.read_text())
+    #     article_update = PocketArticle.from_pocket_item(article_json)
+    #     db_session.merge(article_update)
+    #     # db_session.delete(article)
+    #     # db_session.commit()
+    #     # db_session.add(article_update)
+    #     db_session.commit()
+
+    #     db_article = db_session.get(PocketArticle, article.id)
+    #     assert db_article.status == PocketStatusEnum.ARCHIVED
+    #     assert db_article.favorite is False
+    #     assert db_article.word_count == 398
+    #     assert db_article.listen_duration_estimate == 154
+    #     assert db_article.time_added.year == 2021
+    #     assert db_article.time_added.day == 4
+    #     assert db_article.time_read.day == 8
+    #     assert db_article.raindrop_id == raindrop_id
 
 
 class TestMyDiaryImage:

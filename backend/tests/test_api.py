@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, PerformSong, PocketArticle
+from mydiary.models import Dog, PerformSong, PocketArticle, PocketStatusEnum
 from mydiary.api import app, get_session
 
 
@@ -39,6 +39,8 @@ class TestPocketArticle:
         fp = Path(rootdir).joinpath("pocketitem.json")
         article_json = json.loads(fp.read_text())
         article = PocketArticle.from_pocket_item(article_json)
+        now = pendulum.now(tz='UTC')
+        article.time_last_api_sync = now
         # session.add(article)
         # session.commit()
         mydiary_pocket.save_articles_to_database([article], session)
@@ -54,10 +56,13 @@ class TestPocketArticle:
         assert data[0]["url"] == article.url
         assert data[0]["favorite"] == article.favorite
         assert data[0]["status"] == article.status
-        # assert data[0]["time_added"] == article.time_added
-        # assert data[0]["time_updated"] == article.time_updated
-        # assert data[0]["time_read"] == article.time_read
-        # assert data[0]["time_favorited"] == article.time_favorited
+        assert pendulum.parse(data[0]["time_added"]).timestamp() == article.time_added.timestamp()
+        assert pendulum.parse(data[0]["time_updated"]).timestamp() == article.time_updated.timestamp()
+        # assert pendulum.parse(data[0]["time_read"]).timestamp() == article.time_read.timestamp()
+        # assert pendulum.parse(data[0]["time_favorited"]).timestamp() == article.time_favorited.timestamp()
+        assert data[0]["time_read"] is None
+        assert data[0]["time_favorited"] is None
+        assert pendulum.parse(data[0]["time_last_api_sync"]).timestamp() == article.time_last_api_sync.timestamp()
         assert data[0]["listen_duration_estimate"] == article.listen_duration_estimate
         assert data[0]["word_count"] == article.word_count
         assert data[0]["top_image_url"] == article.top_image_url
@@ -101,6 +106,56 @@ class TestPocketArticle:
         assert tags[1]["is_pocket_tag"] is True
         assert tags[2]["name"] == "quickbites"
         assert tags[2]["is_pocket_tag"] is True
+
+    def test_update_pocket_article_from_json(
+        self, rootdir, session: Session, client: TestClient
+    ):
+        from mydiary.pocket_connector import MyDiaryPocket
+
+        mydiary_pocket = MyDiaryPocket()
+        fp = Path(rootdir).joinpath("pocketitem.json")
+        article_json = json.loads(fp.read_text())
+        article = PocketArticle.from_pocket_item(article_json)
+        raindrop_id = 917478042
+        article.raindrop_id = raindrop_id
+        # article._pocket_tags = []
+        # session.add(article)
+        # session.commit()
+        mydiary_pocket.save_articles_to_database([article], session)
+
+        fp2 = Path(rootdir).joinpath("pocketitemupdate.json")
+        article_update_json = json.loads(fp2.read_text())
+
+        response = client.patch(
+            f"/pocket/articles/{article_json['item_id']}",
+            json=article_update_json,
+        )
+        d = response.json()
+
+        assert response.status_code == 200
+        assert (
+            d["resolved_title"]
+            == "A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale"
+        )
+        assert d["url"] == article.url
+        tags = d["tags"]
+        assert tags[0]["name"] == "internet"
+        assert tags[0]["is_pocket_tag"] is True
+        assert tags[1]["name"] == "news"
+        assert tags[1]["is_pocket_tag"] is True
+        assert tags[2]["name"] == "quickbites"
+        assert tags[2]["is_pocket_tag"] is True
+        assert d["raindrop_id"] == raindrop_id
+
+        db_article = session.get(PocketArticle, article.id)
+        assert db_article.status == PocketStatusEnum.ARCHIVED
+        assert db_article.favorite is False
+        assert db_article.word_count == 398
+        assert db_article.listen_duration_estimate == 154
+        assert db_article.time_added.year == 2021
+        assert db_article.time_added.day == 4
+        assert db_article.time_read.day == 8
+        assert db_article.raindrop_id == raindrop_id
 
     # def test_read_perform_song_missing(self, session: Session, client: TestClient):
     #     perform_song_id = 11
@@ -248,7 +303,7 @@ class TestDog:
 
     def test_create_dog(self, client: TestClient):
         body = self.dog_data[0].copy()
-        body['when_met'] = body['when_met'].to_iso8601_string()
+        body["when_met"] = body["when_met"].to_iso8601_string()
         response = client.post("/dogs/", json=body)
         d = response.json()
 
