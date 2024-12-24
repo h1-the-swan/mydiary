@@ -1,9 +1,11 @@
 <template>
-    <h1>Test Day</h1>
+    <h1>MyDiaryDay</h1>
     <div class="w-75" style="width: auto">
         <my-diary-day-date-picker />
     </div>
-    <g-cal-auth />
+    <div>
+        <g-cal-auth />
+    </div>
     <v-btn @click="fetchInitMarkdown">get init markdown</v-btn>
     <v-expansion-panels style="max-width: 800px">
         <v-expansion-panel>

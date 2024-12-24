@@ -17,6 +17,26 @@
         </v-list>
         <PerformSongCard :perform-song="performSong" :image-url="imageUrl" />
         <PerformSongEdit :perform-song="performSong" />
+        <v-card title="performSongs" flat>
+            <template v-slot:text>
+                <v-text-field
+                    v-model="search"
+                    label="Search"
+                    prepend-inner-icon="mdi-magnify"
+                    variant="outlined"
+                    hide-details
+                    single-line
+                ></v-text-field>
+            </template>
+
+            <v-data-table
+                v-if="performSongsList"
+                :items="performSongsList"
+                :headers="displayCols"
+                items-per-page="100"
+                :search="search"
+            ></v-data-table>
+        </v-card>
     </v-container>
 </template>
 
@@ -43,6 +63,14 @@ const props = defineProps<{
 const performSong = ref<PerformSongRead>()
 const imageUrl = ref('')
 const performSongsList = ref<PerformSongRead[]>()
+const displayCols = ref(
+    ['id', 'name', 'artist_name', 'created_at', 'learned', 'learned_dt'].map(
+        (x) => {
+            return { key: x, title: x }
+        }
+    )
+)
+const search = ref<string>('')
 onMounted(async () => {
     await app.loadPerformSongs()
     performSongsList.value = app.performSongs

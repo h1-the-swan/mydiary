@@ -13,12 +13,12 @@
                         :src="nImage.src"
                         aspect-ratio="1"
                         @click="nImage.selected = !nImage.selected"
-                    ></v-img>
+                    />
                 </v-col>
             </v-row>
-            <v-btn :loading="loading" class="mt-2" type="submit" block
-                >Submit</v-btn
-            >
+            <v-btn :loading="loading" class="mt-2" type="submit" block>
+                Submit
+            </v-btn>
         </v-form>
     </div>
 </template>
