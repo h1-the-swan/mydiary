@@ -6,24 +6,27 @@
     <div>
         <g-cal-auth />
     </div>
-    <v-btn @click="fetchInitMarkdown">get init markdown</v-btn>
-    <v-expansion-panels style="max-width: 800px">
-        <v-expansion-panel>
-            <v-expansion-panel-title>
-                <span v-if="initMarkdown">initMarkdown</span>
-                <span v-else>
-                    initMarkdown Loading...
-                    <v-progress-linear indeterminate v-if="!initMarkdown" />
-                </span>
-            </v-expansion-panel-title>
-            <v-expansion-panel-text>
+    <v-btn v-if="!diaryNoteExists" @click="fetchInitMarkdown">
+        get init markdown
+    </v-btn>
+    <v-dialog v-model="dialog" max-width="900">
+        <v-card title="Initialize New Joplin Note">
+            <v-card-text>
                 <div
+                    v-if="initMarkdown"
                     style="white-space: pre"
                     v-html="md.render(initMarkdown)"
                 ></div>
-            </v-expansion-panel-text>
-        </v-expansion-panel>
-    </v-expansion-panels>
+                <div v-else>
+                    initMarkdown Loading...
+                    <v-progress-linear indeterminate v-if="!initMarkdown" />
+                </div>
+            </v-card-text>
+            <v-card-actions>
+                <v-btn text="Close" @click="dialog = false"></v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
     <p>Joplin note ID: {{ joplinNoteId }}</p>
     <v-expansion-panels v-if="diaryNoteExists" style="max-width: 800px">
         <v-expansion-panel>
@@ -72,6 +75,7 @@ const md = markdownit()
 const joplinNoteId = ref('')
 const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
+const dialog = ref(false)
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
@@ -95,6 +99,7 @@ function updateDate(val: any) {
     router.push({ query: { dt: newQD } })
 }
 async function fetchInitMarkdown() {
+    dialog.value = true
     initMarkdown.value = ''
     initMarkdown.value = // await axios.get(
         //     `/day_init_markdown/${getDateStr.value}?tz=${
@@ -113,7 +118,9 @@ async function fetchJoplinNoteId() {
 async function fetchJoplinNote() {
     diaryNote.value = undefined
     if (diaryNoteExists.value) {
-        diaryNote.value = (await joplinGetNote(joplinNoteId.value)).data
+        diaryNote.value = (
+            await joplinGetNote(joplinNoteId.value, { remove_image_refs: true })
+        ).data
     }
 }
 async function fetchJoplinNoteImages() {
@@ -124,7 +131,7 @@ async function fetchJoplinNoteImages() {
         ).data
     }
 }
-watch(getDate, fetchInitMarkdown, { immediate: true })
+// watch(getDate, fetchInitMarkdown, { immediate: true })
 watch(getDate, fetchJoplinNoteId, { immediate: true })
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
 watch(joplinNoteId, () => console.log(joplinNoteId.value))

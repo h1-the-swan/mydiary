@@ -58,6 +58,10 @@ export type JoplinUpdateNoteParams = {
 tz?: string;
 };
 
+export type JoplinGetNoteParams = {
+remove_image_refs?: boolean;
+};
+
 export type DayInitMarkdownParams = {
 tz?: string;
 };
@@ -195,6 +199,8 @@ export type PocketArticleUpdateTimeRead = string | null;
 
 export type PocketArticleUpdateTimePocketRaindropSync = string | null;
 
+export type PocketArticleUpdateTimeLastApiSync = string | null;
+
 export type PocketArticleUpdateTimeFavorited = string | null;
 
 export type PocketArticleUpdateTimeAdded = string | null;
@@ -223,6 +229,7 @@ export interface PocketArticleUpdate {
   status?: PocketArticleUpdateStatus;
   time_added?: PocketArticleUpdateTimeAdded;
   time_favorited?: PocketArticleUpdateTimeFavorited;
+  time_last_api_sync?: PocketArticleUpdateTimeLastApiSync;
   time_pocket_raindrop_sync?: PocketArticleUpdateTimePocketRaindropSync;
   time_read?: PocketArticleUpdateTimeRead;
   time_updated?: PocketArticleUpdateTimeUpdated;
@@ -240,6 +247,8 @@ export type PocketArticleReadTimeUpdated = string | null;
 export type PocketArticleReadTimeRead = string | null;
 
 export type PocketArticleReadTimePocketRaindropSync = string | null;
+
+export type PocketArticleReadTimeLastApiSync = string | null;
 
 export type PocketArticleReadTimeFavorited = string | null;
 
@@ -259,6 +268,7 @@ export interface PocketArticleRead {
   tags?: TagRead[];
   time_added?: PocketArticleReadTimeAdded;
   time_favorited?: PocketArticleReadTimeFavorited;
+  time_last_api_sync?: PocketArticleReadTimeLastApiSync;
   time_pocket_raindrop_sync?: PocketArticleReadTimePocketRaindropSync;
   time_read?: PocketArticleReadTimeRead;
   time_updated?: PocketArticleReadTimeUpdated;
@@ -409,6 +419,8 @@ export interface GooglePhotosThumbnail {
   width: number;
 }
 
+export type GoogleCalendarEventReadTimeLastApiSync = string | null;
+
 export type GoogleCalendarEventReadLocation = string | null;
 
 export type GoogleCalendarEventReadDescription = string | null;
@@ -422,6 +434,7 @@ export interface GoogleCalendarEventRead {
   start?: string;
   start_timezone?: string;
   summary?: string;
+  time_last_api_sync?: GoogleCalendarEventReadTimeLastApiSync;
 }
 
 export type DogUpdateWhenMet = string | null;
@@ -699,10 +712,13 @@ export const dayInitMarkdown = <TData = AxiosResponse<unknown>>(
  * @summary Joplin Get Note
  */
 export const joplinGetNote = <TData = AxiosResponse<JoplinNote>>(
-    noteId: string, options?: AxiosRequestConfig
+    noteId: string,
+    params?: JoplinGetNoteParams, options?: AxiosRequestConfig
  ): Promise<TData> => {
     return axios.get(
-      `/joplin/get_note/${noteId}`,options
+      `/joplin/get_note/${noteId}`,{
+    ...options,
+        params: {...params, ...options?.params},}
     );
   }
 

@@ -84,7 +84,7 @@ class MyDiaryPocket:
             )
             if r[0]["status"] != 1:
                 break
-            this_total = r.get("total")
+            this_total = r[0].get("total")
             if this_total:
                 this_total = int(this_total)
                 if count + offset > this_total:

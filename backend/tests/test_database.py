@@ -19,6 +19,7 @@ from mydiary.models import (
     Tag,
     SpotifyTrackHistory,
     MyDiaryImage,
+    MyDiaryWords,
 )
 from mydiary.core import reduce_size_recurse
 
@@ -76,7 +77,7 @@ class TestPocketArticleDatabase:
         fp = Path(rootdir).joinpath("pocketitem.json")
         article_json = json.loads(fp.read_text())
         article = PocketArticle.from_pocket_item(article_json)
-        now = pendulum.now(tz='UTC')
+        now = pendulum.now(tz="UTC")
         article.time_last_api_sync = now
         db_session.add(article)
         db_session.commit()
@@ -200,3 +201,36 @@ class TestMyDiaryImage:
         assert db_image.thumbnail_size < 60000
         db_image_dt = pendulum.instance(db_image.created_at, tz="UTC")
         assert db_image_dt == image_dt
+
+
+class TestMyDiaryWords:
+    def test_add_words(self, db_session: Session):
+        note_id = "d1f21d74ccc243388735a2c6779cd428"
+        note_title = "2022-01-14"
+        txt = (
+            """Today I tested the "mydiarywords" table in the database.\n\nIt worked."""
+        )
+        hash = hashlib.md5()
+        hash.update(txt.encode("utf-8"))
+        now = pendulum.now().in_timezone("UTC")
+        mydiary_words = MyDiaryWords(
+            joplin_note_id=note_id,
+            joplin_note_title=note_title,
+            txt=txt,
+            created_at=now,
+            updated_at=now,
+            hash=hash.hexdigest(),
+        )
+        db_session.add(mydiary_words)
+        db_session.commit()
+
+        db_words = db_session.exec(
+            select(MyDiaryWords).where(MyDiaryWords.joplin_note_id == note_id)
+        ).one()
+        assert db_words.id == 1
+        assert db_words.hash == hash.hexdigest()
+        assert db_words.joplin_note_id == note_id
+        assert db_words.joplin_note_title == note_title
+        assert db_words.txt == txt
+        assert db_words.created_at.timestamp() == now.timestamp()
+        assert db_words.updated_at.timestamp() == now.timestamp()

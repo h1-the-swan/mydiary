@@ -14,10 +14,3 @@ export const getDate = computed(() => {
         return new Date(`${route.query.dt as string}T00:00`)
     }
 })
-
-export function updateDate(val: any) {
-    const router = useRouter()
-    if (router == undefined) return
-    const newQD = val.toISOString().split('T')[0]
-    router.push({ query: { dt: newQD } })
-}

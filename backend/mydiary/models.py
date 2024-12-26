@@ -446,10 +446,25 @@ class MyDiaryImage(MyDiaryImageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
+class MyDiaryWordsBase(SQLModel):
+    # the "Words" section of a diary day entry
+    joplin_note_id: Optional[str] = Field(default=None, index=True)
+    joplin_note_title: Optional[str] = Field(default=None, index=True)
+    txt: str = ""  # in markdown
+    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    hash: str = Field(index=True)
+
+
+class MyDiaryWords(MyDiaryWordsBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
 class MyDiaryDay(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
     dt: datetime = now(tz="America/New_York").start_of("day")
     tags: List[Tag] = []
+    words: Optional[MyDiaryWords] = None
     diary_txt: str = ""  # Markdown text
     joplin_connector: Any = Field(None, exclude=True)
     joplin_note_id: str = None
@@ -478,7 +493,10 @@ class MyDiaryDay(SQLModel):
 
         # from .habitica_connector import MyDiaryHabitica
 
+        # TODO: get MyDiaryWords
+        
         mydiary_pocket = MyDiaryPocket()
+        # TODO: implement pocket sync
         pocket_articles = mydiary_pocket.get_articles_for_day(dt)
         # mydiary_pocket.save_articles_to_database(pocket_articles)
 

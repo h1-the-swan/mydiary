@@ -1,7 +1,9 @@
 import os
 from datetime import datetime
+import re
 import requests
 import io
+import json
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
@@ -208,6 +210,8 @@ def scheduled_pocket_sync_new():
         r = session.exec(stmt).first()
         since = int(r.time_last_api_sync.timestamp())
         now = pendulum.now().in_timezone("UTC")
+        added = 0
+        updated = 0
         for article_json in mydiary_pocket.yield_all_articles_from_api_json(
             since=since
         ):
@@ -216,28 +220,33 @@ def scheduled_pocket_sync_new():
             if db_article is None:
                 # new article
                 article_new = PocketArticle.from_pocket_item(article_json)
-                article_new.time_last_api_sync = now.int_timestamp
+                article_new.time_last_api_sync = now
                 session.merge(article_new)
+                added += 1
             else:
                 # update article
                 if article_json["status"] == "2":
                     article_update = PocketArticleUpdate.model_validate(
-                        {"status": 2, "time_last_api_sync": now.int_timestamp}
+                        {"status": 2, "time_last_api_sync": now}
                     )
                 else:
-                    article_json["time_last_api_sync"] = now.int_timestamp
+                    article_json["time_last_api_sync"] = now
                     article_update = PocketArticleUpdate.model_validate(article_json)
                 update_pocket_article(
                     session=session, article_id=article_id, article=article_update
                 )
+                updated += 1
         session.commit()
+        logger.info(
+            f"{added} pocket articles added to database. {updated} pocket articles updated."
+        )
 
 
+scheduler = BackgroundScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
-    scheduler = BackgroundScheduler()
     scheduler.add_job(scheduled_spotify_save_recent_tracks, "interval", minutes=60)
     scheduler.add_job(scheduled_pocket_sync_new, "interval", minutes=60 * 12)
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
@@ -556,11 +565,15 @@ async def day_init_markdown(
     operation_id="joplinGetNote",
     response_model=JoplinNote,
 )
-def joplin_get_note(note_id: str):
+def joplin_get_note(note_id: str, remove_image_refs: bool = False):
     from mydiary.joplin_connector import MyDiaryJoplin
 
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         note = mydiary_joplin.get_note(note_id)
+        if remove_image_refs is True:
+            note.body = re.sub(
+                r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", r"[Joplin resource_id: \1]", note.body
+            )
         return note
 
 
@@ -1050,6 +1063,53 @@ def experimental_get_spotify_audio_features(track_id: str):
     mydiary_spotify = MyDiarySpotify()
     track_id = normalize_spotify_id(track_id)
     return mydiary_spotify.sp.audio_features(track_id)
+
+    
+@app.get("/experimental/lifespan")
+def experimental_lifespan():
+    # f = io.StringIO()
+    # scheduler.export_jobs(f)
+    # f.seek(0)
+    # txt = f.read()
+    # logger.info(txt)
+    # return json.loads(txt)
+    scheduler.print_jobs()
+
+
+@app.get("/experimental/joplinevents")
+def joplinevents():
+    from mydiary.joplin_connector import MyDiaryJoplin
+
+    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        # params = {
+        #     "token": mydiary_joplin.token,
+        #     "cursor": pendulum.now().subtract(days=100).int_timestamp,
+        # }
+        # r = requests.get(f"{mydiary_joplin.base_url}/events", params=params)
+        # return r.json()
+        fields = [
+            "id",
+            "parent_id",
+            "title",
+            "body",
+            "created_time",
+            "updated_time",
+        ]
+        params = {
+            "token": mydiary_joplin.token,
+            "fields": fields,
+            "limit": 25,
+            "order_by": "updated_time",
+            "order_dir": "DESC",
+        }
+        r = requests.get(f"{mydiary_joplin.base_url}/notes", params=params)
+        items = r.json()["items"]
+        dt = pendulum.now().subtract(days=10)
+        return {
+            "items": [item for item in items if int(item["updated_time"])//1000>dt.int_timestamp],
+            "dt": dt.int_timestamp,
+            "has_more": r.json().get("has_more", False)
+        }
 
 
 if __name__ == "__main__":
