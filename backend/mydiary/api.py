@@ -36,6 +36,7 @@ from .models import (
     TagBase,
     PocketArticle,
     PocketArticleBase,
+    PocketArticleUpdate,
     GooglePhotosThumbnail,
     JoplinNote,
     MyDiaryImageBase,
@@ -45,6 +46,7 @@ from .models import (
 from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
 from .spotify_connector import normalize_spotify_id
+from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
 import uvicorn
 
@@ -65,25 +67,6 @@ class TagRead(TagBase):
 class PocketArticleRead(PocketArticleBase):
     # tags_: List[TagRead] = Field(alias="tags")
     tags: List[TagRead] = []
-
-
-class PocketArticleUpdate(SQLModel):
-    given_title: Optional[str] = None
-    resolved_title: Optional[str] = None
-    url: Optional[str] = None
-    favorite: Optional[bool] = None
-    status: Optional[PocketStatusEnum] = None
-    time_added: Optional[datetime] = None
-    time_updated: Optional[datetime] = None
-    time_read: Optional[datetime] = None
-    time_favorited: Optional[datetime] = None
-    listen_duration_estimate: Optional[int] = None
-    word_count: Optional[int] = None
-    top_image_url: Optional[str] = None
-    pocket_tags: Optional[List[str]] = None
-    raindrop_id: Optional[int] = None
-    time_pocket_raindrop_sync: Optional[datetime] = None
-    time_last_api_sync: Optional[datetime] = None
 
 
 class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):
@@ -202,47 +185,13 @@ def scheduled_spotify_save_recent_tracks():
 
 
 def scheduled_pocket_sync_new():
-    from mydiary.pocket_connector import MyDiaryPocket
-
     mydiary_pocket = MyDiaryPocket()
-    with Session(engine) as session:
-        stmt = select(PocketArticle).order_by(desc(PocketArticle.time_last_api_sync))
-        r = session.exec(stmt).first()
-        since = int(r.time_last_api_sync.timestamp())
-        now = pendulum.now().in_timezone("UTC")
-        added = 0
-        updated = 0
-        for article_json in mydiary_pocket.yield_all_articles_from_api_json(
-            since=since
-        ):
-            article_id = int(article_json["item_id"])
-            db_article = session.get(PocketArticle, article_id)
-            if db_article is None:
-                # new article
-                article_new = PocketArticle.from_pocket_item(article_json)
-                article_new.time_last_api_sync = now
-                session.merge(article_new)
-                added += 1
-            else:
-                # update article
-                if article_json["status"] == "2":
-                    article_update = PocketArticleUpdate.model_validate(
-                        {"status": 2, "time_last_api_sync": now}
-                    )
-                else:
-                    article_json["time_last_api_sync"] = now
-                    article_update = PocketArticleUpdate.model_validate(article_json)
-                update_pocket_article(
-                    session=session, article_id=article_id, article=article_update
-                )
-                updated += 1
-        session.commit()
-        logger.info(
-            f"{added} pocket articles added to database. {updated} pocket articles updated."
-        )
+    mydiary_pocket.pocket_sync_new(post_commit=True)
 
 
 scheduler = BackgroundScheduler()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
@@ -411,26 +360,16 @@ def update_pocket_article(
     article_id: int,
     article: PocketArticleUpdate,
 ):
+    mydiary_pocket = MyDiaryPocket()
     db_article = session.get(PocketArticle, article_id)
     if not db_article:
         raise HTTPException(status_code=404, detail="PocketArticle not found")
-    article_data = article.model_dump(exclude_unset=True)
-    for k, v in article_data.items():
-        try:
-            setattr(db_article, k, v)
-        except ValueError:
-            pass
-    if article_data.get("pocket_tags"):
-        new_tags = []
-        # sqlalchemy is weird. I couldn't get the merge to work right, so instead I avoid creating new Tag objects if they already exist
-        existing_tags_map = {t.name: t for t in db_article.tags}
-        for tag_name in article_data["pocket_tags"]:
-            if tag_name in existing_tags_map:
-                new_tags.append(existing_tags_map[tag_name])
-            else:
-                new_tags.append(Tag(name=tag_name, is_pocket_tag=True))
-        db_article.tags = new_tags
-    session.merge(db_article)
+    db_article = mydiary_pocket.update_article(
+        db_article=db_article,
+        article_update=article,
+        session=session,
+        post_commit=False,
+    )
     session.commit()
     # session.refresh(db_article)
     return db_article
@@ -1064,7 +1003,7 @@ def experimental_get_spotify_audio_features(track_id: str):
     track_id = normalize_spotify_id(track_id)
     return mydiary_spotify.sp.audio_features(track_id)
 
-    
+
 @app.get("/experimental/lifespan")
 def experimental_lifespan():
     # f = io.StringIO()
@@ -1094,22 +1033,27 @@ def joplinevents():
             "body",
             "created_time",
             "updated_time",
+            "source",
         ]
         params = {
             "token": mydiary_joplin.token,
             "fields": fields,
+            "query": "updated:20241220",
             "limit": 25,
             "order_by": "updated_time",
             "order_dir": "DESC",
         }
-        r = requests.get(f"{mydiary_joplin.base_url}/notes", params=params)
-        items = r.json()["items"]
-        dt = pendulum.now().subtract(days=10)
-        return {
-            "items": [item for item in items if int(item["updated_time"])//1000>dt.int_timestamp],
-            "dt": dt.int_timestamp,
-            "has_more": r.json().get("has_more", False)
-        }
+        # r = requests.get(f"{mydiary_joplin.base_url}/notes", params=params)
+        r = requests.get(f"{mydiary_joplin.base_url}/search", params=params)
+        return r.json()
+        # items = r.json()["items"]
+        # dt = pendulum.now().subtract(days=10)
+        # return {
+        #     # "items": [item for item in items if int(item["updated_time"])//1000>dt.int_timestamp],
+        #     "items": items,
+        #     "dt": dt.int_timestamp,
+        #     "has_more": r.json().get("has_more", False)
+        # }
 
 
 if __name__ == "__main__":

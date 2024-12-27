@@ -23,9 +23,10 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from pocket import Pocket
+from sqlalchemy import desc
 
 from .db import engine, Session, select
-from .models import PocketArticle, Tag
+from .models import PocketArticle, PocketArticleUpdate, Tag
 
 # from dotenv import load_dotenv, find_dotenv
 
@@ -188,3 +189,71 @@ class MyDiaryPocket:
             logger.debug(
                 f"{num_updated} articles were already in the database and were updated"
             )
+
+    def update_article(
+        self,
+        db_article: PocketArticle,
+        article_update: PocketArticleUpdate,
+        session: Optional[Session] = None,
+        post_commit: bool = True,
+    ) -> PocketArticle:
+        if session is None:
+            session = self.new_session()
+        article_data = article_update.model_dump(exclude_unset=True)
+        db_article.sqlmodel_update(article_data)
+        if article_data.get("pocket_tags"):
+            new_tags = []
+            # sqlalchemy is weird. I couldn't get the merge to work right, so instead I avoid creating new Tag objects if they already exist
+            existing_tags_map = {t.name: t for t in db_article.tags}
+            for tag_name in article_data["pocket_tags"]:
+                if tag_name in existing_tags_map:
+                    new_tags.append(existing_tags_map[tag_name])
+                else:
+                    new_tags.append(Tag(name=tag_name, is_pocket_tag=True))
+            db_article.tags = new_tags
+        session.merge(db_article)
+        if post_commit is True:
+            session.commit()
+        return db_article
+
+    def pocket_sync_new(
+        self, session: Optional[Session] = None, post_commit: bool = True
+    ):
+        if session is None:
+            session = self.new_session()
+        stmt = select(PocketArticle).order_by(desc(PocketArticle.time_last_api_sync))
+        r = session.exec(stmt).first()
+        since = int(r.time_last_api_sync.timestamp())
+        now = pendulum.now().in_timezone("UTC")
+        added = 0
+        updated = 0
+        for article_json in self.yield_all_articles_from_api_json(since=since):
+            article_id = int(article_json["item_id"])
+            db_article = session.get(PocketArticle, article_id)
+            if db_article is None:
+                # new article
+                article_new = PocketArticle.from_pocket_item(article_json)
+                article_new.time_last_api_sync = now
+                session.merge(article_new)
+                added += 1
+            else:
+                # update article
+                if article_json["status"] == "2":
+                    article_update = PocketArticleUpdate.model_validate(
+                        {"status": 2, "time_last_api_sync": now}
+                    )
+                else:
+                    article_json["time_last_api_sync"] = now
+                    article_update = PocketArticleUpdate.model_validate(article_json)
+                self.update_article(
+                    session=session,
+                    article_id=article_id,
+                    article=article_update,
+                    post_commit=False,
+                )
+                updated += 1
+        if post_commit is True:
+            session.commit()
+        logger.info(
+            f"{added} pocket articles added to database. {updated} pocket articles updated."
+        )

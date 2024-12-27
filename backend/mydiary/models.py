@@ -294,6 +294,25 @@ class PocketArticle(PocketArticleBase, table=True):
         return ret
 
 
+class PocketArticleUpdate(SQLModel):
+    given_title: Optional[str] = None
+    resolved_title: Optional[str] = None
+    url: Optional[str] = None
+    favorite: Optional[bool] = None
+    status: Optional[PocketStatusEnum] = None
+    time_added: Optional[datetime] = None
+    time_updated: Optional[datetime] = None
+    time_read: Optional[datetime] = None
+    time_favorited: Optional[datetime] = None
+    listen_duration_estimate: Optional[int] = None
+    word_count: Optional[int] = None
+    top_image_url: Optional[str] = None
+    pocket_tags: Optional[List[str]] = None
+    raindrop_id: Optional[int] = None
+    time_pocket_raindrop_sync: Optional[datetime] = None
+    time_last_api_sync: Optional[datetime] = None
+
+
 class GoogleCalendarEvent(SQLModel, table=True):
     id: str = Field(primary_key=True)
     summary: str = Field(index=True)
@@ -494,7 +513,7 @@ class MyDiaryDay(SQLModel):
         # from .habitica_connector import MyDiaryHabitica
 
         # TODO: get MyDiaryWords
-        
+
         mydiary_pocket = MyDiaryPocket()
         # TODO: implement pocket sync
         pocket_articles = mydiary_pocket.get_articles_for_day(dt)
