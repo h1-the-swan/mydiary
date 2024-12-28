@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
@@ -18,3 +19,8 @@ def session_fixture():
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture
+def note_body(rootdir: str):
+    yield Path(rootdir).joinpath("test_mydiaryday_20221102.md").read_text()

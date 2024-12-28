@@ -18,6 +18,7 @@ from mydiary.models import (
     PocketStatusEnum,
     Tag,
     SpotifyTrackHistory,
+    JoplinNote,
     MyDiaryImage,
     MyDiaryWords,
 )
@@ -234,3 +235,54 @@ class TestMyDiaryWords:
         assert db_words.txt == txt
         assert db_words.created_at.timestamp() == now.timestamp()
         assert db_words.updated_at.timestamp() == now.timestamp()
+
+
+class TestJoplinNoteDatabase:
+    JOPLIN_TEST_NOTEBOOK_ID = "08f4b0d7218148ae97b4c6003d85b16a"
+
+    def test_add_note(self, db_session: Session, note_body: str):
+        now = pendulum.now().in_timezone("UTC")
+        note_id = "8dde7cc9e9484721b713bdc8c1ae30c2"
+        joplin_note = JoplinNote(
+            id=note_id,
+            parent_id=self.JOPLIN_TEST_NOTEBOOK_ID,
+            title="2022-11-02",
+            body=note_body,
+            created_time=now,
+            updated_time=now,
+        )
+        # words_txt = joplin_note.md_note.get_section_by_title("words").get_content()
+        # hash = hashlib.md5()
+        # hash.update(words_txt.encode("utf-8"))
+        # words = MyDiaryWords(
+        #     joplin_note_id=note_id,
+        #     joplin_note_title="2022-11-02",
+        #     txt=words_txt,
+        #     created_at=now,
+        #     updated_at=now,
+        #     hash=hash.hexdigest(),
+        # )
+        words = MyDiaryWords.from_joplin_note(joplin_note)
+        db_session.add(joplin_note)
+        db_session.add(words)
+        db_session.commit()
+
+        db_note = db_session.exec(
+            select(JoplinNote).where(JoplinNote.id == note_id)
+        ).one()
+        assert db_note.id == note_id
+        assert db_note.parent_id == self.JOPLIN_TEST_NOTEBOOK_ID
+        assert db_note.title == "2022-11-02"
+        assert db_note.body == note_body
+        assert db_note.created_time.timestamp() == now.timestamp()
+        assert db_note.updated_time.timestamp() == now.timestamp()
+
+        assert db_note.words.joplin_note_id == note_id
+        assert db_note.words.joplin_note_title == "2022-11-02"
+        words_txt = joplin_note.md_note.get_section_by_title("words").get_content()
+        assert db_note.words.txt == words_txt
+        assert db_note.words.created_at.timestamp() == now.timestamp()
+        assert db_note.words.updated_at.timestamp() == now.timestamp()
+        hash = hashlib.md5()
+        hash.update(words_txt.encode("utf-8"))
+        assert db_note.words.hash == hash.hexdigest()

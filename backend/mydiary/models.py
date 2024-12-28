@@ -3,6 +3,7 @@ from typing import Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
 import json
+import hashlib
 from google.auth.transport import requests
 import pendulum
 from sqlmodel import Field, Relationship, SQLModel
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from sqlalchemy import event, UniqueConstraint
 from sqlalchemy.orm import reconstructor
+
+from .markdown_edits import MarkdownDoc
 
 import logging
 
@@ -405,10 +408,10 @@ class JoplinFolder(SQLModel):
         )
 
 
-class JoplinNote(SQLModel):
-    id: str
+class JoplinNoteBase(SQLModel):
+    id: str = Field(primary_key=True)
     parent_id: str  # notebook id
-    title: str
+    title: str = Field(unique=True)
     body: str  # in markdown
     created_time: datetime
     updated_time: datetime
@@ -428,9 +431,13 @@ class JoplinNote(SQLModel):
 
     @property
     def md_note(self):
-        from .markdown_edits import MarkdownDoc
-
         return MarkdownDoc(self.body, parent=self)
+
+
+class JoplinNote(JoplinNoteBase, table=True):
+    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
+
+    words: Optional["MyDiaryWords"] = Relationship(back_populates="joplin_note")
 
 
 class TagBase(SQLModel):
@@ -467,7 +474,9 @@ class MyDiaryImage(MyDiaryImageBase, table=True):
 
 class MyDiaryWordsBase(SQLModel):
     # the "Words" section of a diary day entry
-    joplin_note_id: Optional[str] = Field(default=None, index=True)
+    joplin_note_id: Optional[str] = Field(
+        default=None, index=True, foreign_key="joplinnote.id"
+    )
     joplin_note_title: Optional[str] = Field(default=None, index=True)
     txt: str = ""  # in markdown
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
@@ -477,6 +486,22 @@ class MyDiaryWordsBase(SQLModel):
 
 class MyDiaryWords(MyDiaryWordsBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    joplin_note: Optional[JoplinNote] = Relationship(back_populates="words")
+
+    @classmethod
+    def from_joplin_note(cls, note: JoplinNote) -> "MyDiaryWords":
+        txt = note.md_note.get_section_by_title("words").get_content()
+        hash = hashlib.md5()
+        hash.update(txt.encode("utf-8"))
+        return cls(
+            joplin_note_id=note.id,
+            joplin_note_title=note.title,
+            txt=txt,
+            created_at=note.created_time,
+            updated_at=note.updated_time,
+            hash=hash.hexdigest(),
+        )
 
 
 class MyDiaryDay(SQLModel):
@@ -612,7 +637,6 @@ class MyDiaryDay(SQLModel):
 
     def update_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
-        from .markdown_edits import MarkdownDoc
 
         if joplin_connector is not None:
             self.joplin_connector = joplin_connector
@@ -651,7 +675,6 @@ class MyDiaryDay(SQLModel):
 
     def init_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
-        from .markdown_edits import MarkdownDoc
 
         logger.debug("starting init_joplin_note")
         if joplin_connector is not None:
@@ -688,7 +711,6 @@ class MyDiaryDay(SQLModel):
 
     def init_or_update_joplin_note(self, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
-        from .markdown_edits import MarkdownDoc
 
         if joplin_connector is not None:
             self.joplin_connector = joplin_connector

@@ -13,21 +13,12 @@ from mydiary.models import PocketArticle, PocketStatusEnum, Tag
 # load_dotenv(find_dotenv())
 
 
-@pytest.fixture(name="db_session")
-def session_fixture():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-
-
 def test_env_loaded():
     assert "POCKET_CONSUMER_KEY" in os.environ
     assert "POCKET_ACCESS_TOKEN" in os.environ
 
 
+@pytest.mark.external_api
 def test_pocket_api_call():
     from mydiary.pocket_connector import MyDiaryPocket
 
@@ -47,7 +38,10 @@ def test_pocket_article(rootdir, caplog, db_session: Session):
     assert article.listen_duration_estimate == 154
     assert article.time_added.year == 2021
     assert article.pocket_url == "https://getpocket.com/read/3496035100"
-    assert article.to_markdown() == "[A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale](https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902) ([Pocket link](https://getpocket.com/read/3496035100))"
+    assert (
+        article.to_markdown()
+        == "[A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale](https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902) ([Pocket link](https://getpocket.com/read/3496035100))"
+    )
 
     # for t in article._pocket_item["tags"].values():
     #     tag = Tag(name=t["tag"], pocket_tag_id=t["item_id"])
