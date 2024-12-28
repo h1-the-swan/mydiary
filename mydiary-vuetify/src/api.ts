@@ -400,11 +400,14 @@ export interface MyDiaryImageRead {
   thumbnail_size: number;
 }
 
+export type JoplinNoteTimeLastApiSync = string | null;
+
 export interface JoplinNote {
   body: string;
   created_time: string;
   id: string;
   parent_id: string;
+  time_last_api_sync?: JoplinNoteTimeLastApiSync;
   title: string;
   updated_time: string;
 }
@@ -1040,6 +1043,28 @@ export const experimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeatu
     );
   }
 
+/**
+ * @summary Experimental Lifespan
+ */
+export const experimentalLifespanExperimentalLifespanGet = <TData = AxiosResponse<unknown>>(
+     options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/experimental/lifespan`,options
+    );
+  }
+
+/**
+ * @summary Joplinevents
+ */
+export const joplineventsExperimentalJoplineventsGet = <TData = AxiosResponse<unknown>>(
+     options?: AxiosRequestConfig
+ ): Promise<TData> => {
+    return axios.get(
+      `/experimental/joplinevents`,options
+    );
+  }
+
 export type TestHealthCheck2Result = AxiosResponse<unknown>
 export type DbStatusResult = AxiosResponse<DbStatus200>
 export type GetGCalAuthUrlResult = AxiosResponse<string>
@@ -1084,3 +1109,5 @@ export type CreateTimeZoneChangeResult = AxiosResponse<TimeZoneChange>
 export type SendApiJsonGenerateOpenapiJsonGetResult = AxiosResponse<unknown>
 export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetResult = AxiosResponse<unknown>
 export type ExperimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGetResult = AxiosResponse<unknown>
+export type ExperimentalLifespanExperimentalLifespanGetResult = AxiosResponse<unknown>
+export type JoplineventsExperimentalJoplineventsGetResult = AxiosResponse<unknown>

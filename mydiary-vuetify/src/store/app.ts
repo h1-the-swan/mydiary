@@ -44,11 +44,11 @@ export const useAppStore = defineStore('app', () => {
 
     const timeZoneChanges = ref<TimeZoneChange[]>()
     async function loadTimeZoneChanges() {
-        timeZoneChanges.value = await readTimeZoneChangeList({ limit: 5000 }).then(
-            (res) => {
-                return res.data
-            }
-        )
+        timeZoneChanges.value = await readTimeZoneChangeList({
+            limit: 5000,
+        }).then((res) => {
+            return res.data
+        })
     }
 
     return {
