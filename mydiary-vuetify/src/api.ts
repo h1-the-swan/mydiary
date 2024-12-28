@@ -402,8 +402,10 @@ export interface MyDiaryImageRead {
 
 export type JoplinNoteTimeLastApiSync = string | null;
 
+export type JoplinNoteBody = string | null;
+
 export interface JoplinNote {
-  body: string;
+  body?: JoplinNoteBody;
   created_time: string;
   id: string;
   parent_id: string;
