@@ -11,7 +11,7 @@ from datetime import date, datetime
 from time import sleep
 import pendulum
 from timeit import default_timer as timer
-from typing import Any, Collection, Dict, List, Optional, Tuple, Union
+from typing import Any, Collection, Dict, List, Optional, Tuple, Union, Generator
 
 from .core import reduce_image_size, reduce_size_recurse
 from .models import JoplinNote, JoplinFolder, MyDiaryImage
@@ -210,7 +210,11 @@ class MyDiaryJoplin:
     ) -> str:
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
-        items = [item for item in self.yield_notes_by_subfolder_id(parent_notebook_id) if item["title"]==title]
+        items = [
+            item
+            for item in self.yield_notes_by_subfolder_id(parent_notebook_id)
+            if item["title"] == title
+        ]
 
         if not items:
             logger.debug(
@@ -448,22 +452,30 @@ class MyDiaryJoplin:
     def yield_notes_by_subfolder_id(
         self,
         subfolder_id: str,
-        fields: List[str] = "id,parent_id,title,created_time,updated_time",
-    ):
+        fields: Optional[List[str]] = None,
+    ) -> Generator[Dict, None, None]:
         has_more = True
         url = f"{self.base_url}/folders/{subfolder_id}/notes"
+        if fields is None:
+            fields = [
+                "id",
+                "parent_id",
+                "title",
+                "created_time",
+                "updated_time",
+            ]
         params = {
             "token": self.token,
             "fields": fields,
             "limit": 100,
             "page": 1,
             "order_by": "updated_time",
-            "order_dir": 'DESC',
+            "order_dir": "DESC",
         }
         while has_more:
             r = requests.get(url, params=params)
             resp = r.json()
-            for note in resp['items']:
+            for note in resp["items"]:
                 yield note
-            has_more = resp['has_more']
-            params['page'] += 1
+            has_more = resp["has_more"]
+            params["page"] += 1

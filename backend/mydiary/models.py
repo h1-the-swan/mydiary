@@ -412,7 +412,7 @@ class JoplinNoteBase(SQLModel):
     id: str = Field(primary_key=True)
     parent_id: str  # notebook id
     title: str = Field(unique=True)
-    body: str  # in markdown
+    body: Optional[str] = None  # in markdown
     created_time: datetime
     updated_time: datetime
 
@@ -424,7 +424,7 @@ class JoplinNoteBase(SQLModel):
             id=r["id"],
             parent_id=r["parent_id"],
             title=r["title"],
-            body=r["body"],
+            body=r.get("body", None),
             created_time=datetime.fromtimestamp(r["created_time"] / 1000),
             updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
         )
@@ -491,6 +491,8 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
 
     @classmethod
     def from_joplin_note(cls, note: JoplinNote) -> "MyDiaryWords":
+        if note.body is None:
+            raise ValueError("JoplinNote instance must have a 'body' value")
         txt = note.md_note.get_section_by_title("words").get_content()
         hash = hashlib.md5()
         hash.update(txt.encode("utf-8"))
