@@ -73,3 +73,8 @@ def get_last_timezone(dt_str: str, session: Session) -> str:
         return z.tz_before
     else:
         return z.tz_after
+
+def get_hash_from_txt(txt: str) -> str:
+    hash = hashlib.md5()
+    hash.update(txt.encode("utf-8"))
+    return hash.hexdigest()

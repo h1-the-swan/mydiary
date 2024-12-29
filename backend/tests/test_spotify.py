@@ -1,4 +1,5 @@
 import os, json
+import pytest
 from pathlib import Path
 import pendulum
 from mydiary.models import SpotifyTrack, SpotifyTrackHistory
@@ -15,15 +16,17 @@ def test_env_loaded():
     assert "SPOTIPY_CLIENT_SECRET" in os.environ
 
 
+@pytest.mark.external_api
 def test_spotify_api_call():
     from mydiary.spotify_connector import MyDiarySpotify
+
     mydiary_spotify = MyDiarySpotify()
     assert isinstance(mydiary_spotify.sp, spotipy.Spotify)
     assert mydiary_spotify.sp.auth_manager is not None
     cached_token = mydiary_spotify.sp.auth_manager.cache_handler.get_cached_token()
     assert cached_token is not None
     r = mydiary_spotify.sp.current_user_recently_played()
-    assert 'items' in r
+    assert "items" in r
 
 
 def test_spotify_track(rootdir):

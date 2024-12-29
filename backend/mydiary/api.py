@@ -48,6 +48,7 @@ from .nextcloud_connector import MyDiaryNextcloud
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
+from .mydiary_day import MyDiaryDay
 import uvicorn
 
 import logging
@@ -197,7 +198,7 @@ async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
     scheduler.add_job(scheduled_spotify_save_recent_tracks, "interval", minutes=60)
-    scheduler.add_job(scheduled_pocket_sync_new, "interval", minutes=60 * 12)
+    scheduler.add_job(scheduled_pocket_sync_new, "cron", hour="1,10,16,21", minute=3)
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
@@ -434,7 +435,6 @@ async def spotify_save_recent_tracks_to_database():
 
 @app.get("/joplin/get_note_id/{dt}", operation_id="joplinGetNoteId", response_model=str)
 def joplin_get_note_id(dt: str) -> str:
-    from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
 
     if dt == "today":
@@ -457,7 +457,6 @@ def joplin_get_note_id(dt: str) -> str:
     operation_id="joplinInitNote",
 )
 async def joplin_init_note(dt: str, tz: str = "local"):
-    from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
 
     if dt == "today":
@@ -482,8 +481,6 @@ async def joplin_init_note(dt: str, tz: str = "local"):
 async def day_init_markdown(
     dt: str, tz: str = "local", session: Session = Depends(get_session)
 ):
-    from mydiary import MyDiaryDay
-
     if tz == "infer":
         tz = get_last_timezone(dt, session=session)
         logger.info(f"inferred tz: {tz}")
@@ -544,7 +541,6 @@ def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)
     operation_id="joplinUpdateNote",
 )
 async def joplin_update_note(dt: str, tz: str = "local"):
-    from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
 
     if dt == "today":
@@ -615,7 +611,6 @@ def google_photos_thumbnails_url(dt: str):
 async def google_photos_add_to_joplin(
     note_id: str, photos: List[GooglePhotosThumbnail]
 ):
-    from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse
@@ -703,7 +698,6 @@ def nextcloud_photos_thumbnails_url(dt: str):
 )
 def get_nextcloud_image(url: str):
     mydiary_nextcloud = MyDiaryNextcloud()
-    print(url)
     # r = requests.get(url, auth=mydiary_nextcloud.auth)
     # r.raise_for_status()
     # image_bytes = r.content
@@ -719,7 +713,6 @@ def get_nextcloud_image(url: str):
 )
 async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
     # TODO: refactor
-    from mydiary import MyDiaryDay
     from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse

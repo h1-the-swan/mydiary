@@ -1,0 +1,278 @@
+from re import S
+from typing import Any, List, Dict, Tuple, Union, Optional
+from enum import Enum, IntEnum
+from requests import Response
+import json
+import hashlib
+import pendulum
+from sqlmodel import Field, Relationship, SQLModel
+from datetime import datetime, date
+from pendulum import now
+from pathlib import Path
+
+from .models import (
+    SpotifyTrackHistoryFrozen,
+    MyDiaryImage,
+    MyDiaryWords,
+    PocketArticle,
+    GoogleCalendarEvent,
+    Tag,
+)
+from .markdown_edits import MarkdownDoc
+
+import logging
+
+root_logger = logging.getLogger()
+logger = root_logger.getChild(__name__)
+
+
+def make_markdown_table_header(columns: List[str]) -> str:
+    sep = " | "
+    header = sep.join(columns)
+    header_sep = sep.join(["---"] * len(columns))
+    return "\n".join([header, header_sep])
+
+
+class MyDiaryDay:
+    def __init__(
+        self,
+        dt: datetime = now(tz="America/New_York").start_of("day"),
+        tags: List[Tag] = [],
+        words: Optional[MyDiaryWords] = None,
+        diary_txt: str = "",  # Markdown text
+        joplin_connector: Optional[Any] = None,
+        joplin_note_id: str = None,
+        thumbnail: MyDiaryImage = None,
+        images: List[MyDiaryImage] = [],
+        spotify_tracks: List[
+            SpotifyTrackHistoryFrozen
+        ] = [],  # Spotify songs played on this day
+        pocket_articles: Dict[
+            str, List[PocketArticle]
+        ] = {},  # interactions with Pocket articles on this day
+        google_calendar_events: List[GoogleCalendarEvent] = [],
+        rating: Optional[
+            int
+        ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
+        flagged: bool = False,  # flagged for inspection, in the case of some potential problem
+    ):
+        self.dt = dt
+        self.tags = tags
+        self.words = words
+        self.diary_txt = diary_txt
+        self.joplin_connector = joplin_connector
+        self.joplin_note_id = joplin_note_id
+        self.thumbnail = thumbnail
+        self.images = images
+        self.spotify_tracks = spotify_tracks
+        self.pocket_articles = pocket_articles
+        self.google_calendar_events = google_calendar_events
+        self.rating = rating
+        self.flagged = flagged
+
+    @classmethod
+    def from_dt(
+        cls,
+        dt: datetime = now().start_of("day"),
+        spotify_sync: bool = True,
+        gcal_save: bool = True,
+        **kwargs,
+    ) -> "MyDiaryDay":
+        from .pocket_connector import MyDiaryPocket
+        from .spotify_connector import MyDiarySpotify
+        from .googlecalendar_connector import MyDiaryGCal
+
+        # from .habitica_connector import MyDiaryHabitica
+
+        # TODO: get MyDiaryWords
+
+        mydiary_pocket = MyDiaryPocket()
+        # TODO: implement pocket sync
+        pocket_articles = mydiary_pocket.get_articles_for_day(dt)
+        # mydiary_pocket.save_articles_to_database(pocket_articles)
+
+        mydiary_spotify = MyDiarySpotify()
+        if spotify_sync is True:
+            mydiary_spotify.save_recent_tracks_to_database()
+        spotify_tracks = mydiary_spotify.get_tracks_for_day(dt)
+
+        mydiary_gcal = MyDiaryGCal()
+        google_calendar_events = mydiary_gcal.get_events_for_day(dt)
+        if gcal_save is True:
+            mydiary_gcal.save_events_to_database(google_calendar_events)
+
+        # DEPRECATED: I stopped using Habitica
+        # # TODO: figure out how to actually use the Habitica data instead of just saving it
+        # mydiary_habitica = MyDiaryHabitica()
+        # habitica_data = mydiary_habitica.get_user_data()
+        # # check if there is any new data
+        # habitica_files = list(Path("mydiary/habitica_backups").glob('habitica_userdata*.json'))
+        # habitica_files.sort(reverse=True)
+        # habitica_most_recent = json.loads(habitica_files[0].read_text())
+        # if not mydiary_habitica.iseq_user_data(habitica_most_recent, habitica_data):
+        #     outfile = Path("mydiary/habitica_backups").joinpath(
+        #         f"habitica_userdata_{pendulum.now():%Y%m%dT%H%M%S}.json"
+        #     )
+        #     logger.info(f"saving Habitica userdata to {outfile}")
+        #     outfile.write_text(json.dumps(habitica_data))
+
+        return cls(
+            dt=dt,
+            pocket_articles=pocket_articles,
+            spotify_tracks=spotify_tracks,
+            google_calendar_events=google_calendar_events,
+            **kwargs,
+        )
+
+    def get_joplin_note_id(self) -> Union[str, None]:
+        from .joplin_connector import MyDiaryJoplin
+
+        logger.debug("starting get_joplin_note_id")
+
+        if isinstance(self.joplin_connector, MyDiaryJoplin):
+            self.joplin_note_id = self.joplin_connector.get_note_id_by_date(self.dt)
+        else:
+            with MyDiaryJoplin() as mj:
+                self.joplin_note_id = mj.get_note_id_by_date(self.dt)
+        logger.debug(f"returning note_id: {self.joplin_note_id}")
+        return self.joplin_note_id
+
+    def init_markdown(self) -> str:
+        md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
+        google_calendar_events = self.google_calendar_events_markdown()
+        pocket_articles = self.pocket_articles_markdown()
+        spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
+        dt_string = self.dt.to_formatted_date_string()
+        return md_template.format(
+            dt=dt_string,
+            google_calendar_events=google_calendar_events,
+            pocket_articles=pocket_articles,
+            spotify_tracks=spotify_tracks,
+        )
+
+    def spotify_tracks_markdown(self, timezone=None) -> str:
+        if not self.spotify_tracks:
+            return "None"
+        columns = ["Name", "Artists", "Played At", "Context"]
+        header = make_markdown_table_header(columns)
+        lines = [header]
+        for t in self.spotify_tracks:
+            lines.append(t.to_markdown(timezone=timezone))
+        return "\n".join(lines)
+
+    def google_calendar_events_markdown(self) -> str:
+        if not self.google_calendar_events:
+            return "None"
+        columns = ["Start", "End", "Summary"]
+        header = make_markdown_table_header(columns)
+        lines = [header]
+        for e in self.google_calendar_events:
+            lines.append(e.to_markdown())
+        return "\n".join(lines)
+
+    def pocket_articles_markdown(self) -> str:
+        if not self.pocket_articles or not any(self.pocket_articles.values()):
+            return "None"
+        lines = []
+        for k, articles in self.pocket_articles.items():
+            if articles is not None and len(articles) > 0:
+                lines.append(f"{k.title()}:")  # heading
+                for a in articles:
+                    lines.append(a.to_markdown())
+                # add a newline onto the last one in this section
+                lines[-1] += "\n"
+        return "\n".join(lines)
+
+    def update_joplin_note(self, joplin_connector=None):
+        from .joplin_connector import MyDiaryJoplin
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+        if self.joplin_note_id == "does_not_exist":
+            raise RuntimeError(
+                f"Joplin note does not already exist for date {self.dt.to_date_string()}!"
+            )
+
+        note = self.joplin_connector.get_note(self.joplin_note_id)
+        md_note = MarkdownDoc(note.body, parent=note)
+        md_new = MarkdownDoc(self.init_markdown())
+
+        need_to_update = False
+        for sec in md_note.sections:
+            try:
+                update_txt = md_new.get_section_by_title(sec.title).txt
+            except KeyError:
+                logger.debug(f"section {sec.title} not found in new text. skipping")
+                continue
+            result = sec.update(update_txt)
+            if result == "updated":
+                need_to_update = True
+            logger.debug(f"section {sec.title}: {result}")
+
+        if need_to_update is True:
+            logger.info(f"updating note: {note.title}")
+            r_put_note = self.joplin_connector.update_note_body(note.id, md_note.txt)
+            logger.info(f"done. status code: {r_put_note.status_code}")
+
+        else:
+            logger.info("no updates made")
+
+    def init_joplin_note(self, joplin_connector=None):
+        from .joplin_connector import MyDiaryJoplin
+
+        logger.debug("starting init_joplin_note")
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+        if self.joplin_note_id != "does_not_exist":
+            raise RuntimeError(
+                f"Joplin note already exists for date {self.dt.to_date_string()} (note id: {self.joplin_note_id})!"
+            )
+
+        title = self.dt.strftime("%Y-%m-%d")
+        logger.debug("initializing markdown")
+        body = self.init_markdown()
+        subfolder_title = str(self.dt.year)
+        subfolder_id = self.joplin_connector.get_subfolder_id(subfolder_title)
+        if subfolder_id is None:
+            logger.info(f'"{subfolder_title}" subfolder (subnotebook) not found.')
+            logger.info(f'creating subfolder "{subfolder_title}"')
+            r_create_subfolder = self.joplin_connector.create_subfolder(subfolder_title)
+            r_create_subfolder.raise_for_status()
+            logger.debug(f"created subfolder. response: {r_create_subfolder.json()}")
+            subfolder_id = r_create_subfolder.json()["id"]
+        logger.info(f"creating note: {title}")
+        r_post_note = self.joplin_connector.post_note(
+            title=title, body=body, parent_id=subfolder_id
+        )
+        logger.info(f"done. status code: {r_post_note.status_code}")
+
+        # fill in the note id
+        self.get_joplin_note_id()
+
+    def init_or_update_joplin_note(self, joplin_connector=None):
+        from .joplin_connector import MyDiaryJoplin
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if not isinstance(self.joplin_connector, MyDiaryJoplin):
+            raise RuntimeError("need to supply a Joplin connector instance")
+        if self.joplin_note_id is None:
+            self.get_joplin_note_id()
+
+        if self.joplin_note_id == "does_not_exist":
+            self.init_joplin_note()
+        elif self.joplin_note_id:
+            self.update_joplin_note()
+        else:
+            # this should not happen
+            raise RuntimeError(
+                f"error when checking if Joplin note already exists (date: {self.dt}"
+            )
