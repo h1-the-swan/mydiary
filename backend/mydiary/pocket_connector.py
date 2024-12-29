@@ -247,8 +247,8 @@ class MyDiaryPocket:
                     article_update = PocketArticleUpdate.model_validate(article_json)
                 self.update_article(
                     session=session,
-                    article_id=article_id,
-                    article=article_update,
+                    db_article=db_article,
+                    article_update=article_update,
                     post_commit=False,
                 )
                 updated += 1
