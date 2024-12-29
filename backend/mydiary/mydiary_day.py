@@ -19,6 +19,7 @@ from .models import (
     Tag,
 )
 from .markdown_edits import MarkdownDoc
+from .db import Session, engine
 
 import logging
 
@@ -76,30 +77,34 @@ class MyDiaryDay:
         dt: datetime = now().start_of("day"),
         spotify_sync: bool = True,
         gcal_save: bool = True,
+        session: Optional[Session] = None,
         **kwargs,
     ) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
 
-        # from .habitica_connector import MyDiaryHabitica
+        if session is None:
+            session = Session(engine)
 
         # TODO: get MyDiaryWords
 
         mydiary_pocket = MyDiaryPocket()
         # TODO: implement pocket sync
-        pocket_articles = mydiary_pocket.get_articles_for_day(dt)
+        pocket_articles = mydiary_pocket.get_articles_for_day(dt, session=session)
         # mydiary_pocket.save_articles_to_database(pocket_articles)
 
         mydiary_spotify = MyDiarySpotify()
         if spotify_sync is True:
             mydiary_spotify.save_recent_tracks_to_database()
-        spotify_tracks = mydiary_spotify.get_tracks_for_day(dt)
+        spotify_tracks = mydiary_spotify.get_tracks_for_day(dt, session=session)
 
         mydiary_gcal = MyDiaryGCal()
         google_calendar_events = mydiary_gcal.get_events_for_day(dt)
         if gcal_save is True:
-            mydiary_gcal.save_events_to_database(google_calendar_events)
+            mydiary_gcal.save_events_to_database(
+                google_calendar_events, session=session
+            )
 
         # DEPRECATED: I stopped using Habitica
         # # TODO: figure out how to actually use the Habitica data instead of just saving it

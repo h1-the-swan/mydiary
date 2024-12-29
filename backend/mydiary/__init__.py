@@ -8,3 +8,4 @@ __version__ = '0.1.0'
 # Select.inherit_cache = True  # type: ignore
 
 from .core import *
+from .mydiary_day import MyDiaryDay

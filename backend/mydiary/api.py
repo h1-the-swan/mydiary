@@ -456,7 +456,9 @@ def joplin_get_note_id(dt: str) -> str:
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
 )
-async def joplin_init_note(dt: str, tz: str = "local"):
+async def joplin_init_note(
+    dt: str, tz: str = "local", session: Session = Depends(get_session)
+):
     from mydiary.joplin_connector import MyDiaryJoplin
 
     if dt == "today":
@@ -467,7 +469,9 @@ async def joplin_init_note(dt: str, tz: str = "local"):
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         try:
-            day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+            day = MyDiaryDay.from_dt(
+                dt, joplin_connector=mydiary_joplin, session=session
+            )
             logger.debug("created MyDiaryDay instance")
             day.init_joplin_note(joplin_connector=mydiary_joplin)
             logger.debug("initialized note")
@@ -492,7 +496,7 @@ async def day_init_markdown(
     else:
         dt_obj = pendulum.parse(dt, tz=tz)
     logger.info(f"dt_obj tz: {dt_obj.tz}")
-    day = MyDiaryDay.from_dt(dt_obj)
+    day = MyDiaryDay.from_dt(dt_obj, session=session)
     return day.init_markdown()
 
 
@@ -540,7 +544,9 @@ def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)
     "/joplin/update_note/{dt}",
     operation_id="joplinUpdateNote",
 )
-async def joplin_update_note(dt: str, tz: str = "local"):
+async def joplin_update_note(
+    dt: str, tz: str = "local", session: Session = Depends(get_session)
+):
     from mydiary.joplin_connector import MyDiaryJoplin
 
     if dt == "today":
@@ -551,7 +557,9 @@ async def joplin_update_note(dt: str, tz: str = "local"):
         dt = pendulum.parse(dt, tz=tz)
     with MyDiaryJoplin(init_config=False) as mydiary_joplin:
         try:
-            day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
+            day = MyDiaryDay.from_dt(
+                dt, joplin_connector=mydiary_joplin, session=session
+            )
             logger.debug("created MyDiaryDay instance")
             day.update_joplin_note(joplin_connector=mydiary_joplin)
             logger.debug("initialized note")

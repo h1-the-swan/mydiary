@@ -208,14 +208,6 @@ class PocketArticleBase(SQLModel):
     def pocket_url(self) -> str:
         return f"https://getpocket.com/read/{self.id}"
 
-    def collect_tags(self, session: Optional["Session"] = None, commit=True):
-        # TODO: This doesn't work. Fix it.
-        from .pocket_connector import MyDiaryPocket
-
-        return MyDiaryPocket().collect_tags(
-            self, self._pocket_tags, session=session, commit=commit
-        )
-
     def to_markdown(self) -> str:
         if self.resolved_title:
             title = self.resolved_title

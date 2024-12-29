@@ -1,0 +1,69 @@
+[
+	{
+		"kind": "calendar#event",
+  		"etag": "\"uuuuuuuuuuuuuuuu\"",
+  		"id": "uuuuuuuuuuuuuuuuuuuuuuuuuu",
+		"status": "confirmed",
+  		"htmlLink": "https://www.google.com/calendar/event?eid=uuuuuuuuuuuuuuuuuuuuuuuuuu",
+		"created": "2024-10-17T13:43:26.000Z",
+		"updated": "2024-10-17T13:43:56.591Z",
+		"summary": "tompkins square halloween dog parade",
+		"description": "avenue A between 14th and 7th",
+		"creator": {
+			"email": "uuuuuu@gmail.com",
+			"self": true
+		},
+		"organizer": {
+			"email": "uuuuuu@gmail.com",
+			"self": true
+		},
+		"start": {
+			"dateTime": "2024-10-19T13:00:00-04:00",
+			"timeZone": "America/New_York"
+		},
+		"end": {
+			"dateTime": "2024-10-19T15:00:00-04:00",
+			"timeZone": "America/New_York"
+		},
+		"iCalUID": "uuuuuuuuuuuu@google.com",
+		"sequence": 0,
+		"reminders": {
+			"useDefault": true
+		},
+		"eventType": "default"
+	},
+	{
+		"kind": "calendar#event",
+  		"etag": "\"uuuuuuuuuuuuuuuu\"",
+  		"id": "uuuuuuuuuuuuuuuuuuuuuuuuuu2",
+		"status": "confirmed",
+  		"htmlLink": "https://www.google.com/calendar/event?eid=uuuuuuuuuuuuuuuuuuuuuuuuuu",
+		"created": "2024-10-19T23:00:25.000Z",
+		"updated": "2024-10-19T23:00:33.619Z",
+		"summary": "food at veselka",
+		"description": "pierogi, soup, coffee",
+		"location": "Veselka, 144 2nd Ave, New York, NY 10003, USA",
+		"creator": {
+			"email": "uuuuuu@gmail.com",
+			"self": true
+		},
+		"organizer": {
+			"email": "uuuuuu@gmail.com",
+			"self": true
+		},
+		"start": {
+			"dateTime": "2024-10-19T16:00:00-04:00",
+			"timeZone": "America/New_York"
+		},
+		"end": {
+			"dateTime": "2024-10-19T17:00:00-04:00",
+			"timeZone": "America/New_York"
+		},
+		"iCalUID": "uuuuuuuuuuuu@google.com",
+		"sequence": 1,
+		"reminders": {
+			"useDefault": true
+		},
+		"eventType": "default"
+	}
+]

@@ -1,0 +1,392 @@
+[
+	{
+		"item_id": "4121486668",
+		"favorite": "0",
+		"status": "1",
+		"time_added": "1729380539",
+		"time_updated": "1729499336",
+		"time_read": "1729499336",
+		"time_favorited": "0",
+		"sort_id": 0,
+		"tags": {
+			"https://lifehacker.com/fe": {
+				"tag": "https://lifehacker.com/fe",
+				"item_id": "4121486668"
+			},
+			"techtips": {
+				"tag": "techtips",
+				"item_id": "4121486668"
+			}
+		},
+		"top_image_url": "https://lifehacker.com/imagery/articles/01JAFPBQ0ZX65T6MQSKFD8ZFTR/hero-image.fill.size_1200x675.jpg",
+		"resolved_id": "4121486668",
+		"given_url": "https://lifehacker.com/tech/apps-remotely-access-computer-from-phone",
+		"given_title": "These Three Apps Can Help You Remotely Access Your Computer | Lifehacker",
+		"resolved_title": "These Three Apps Can Help You Remotely Access Your Computer",
+		"resolved_url": "https://lifehacker.com/tech/apps-remotely-access-computer-from-phone",
+		"excerpt": "It wasn't too many years ago that accessing a computer remotely\u2014over the web, from another device\u2014was a hugely complicated exercise that was challenging even for IT professionals.",
+		"is_article": "1",
+		"is_index": "0",
+		"has_video": "0",
+		"has_image": "1",
+		"word_count": "715",
+		"lang": "en",
+		"time_to_read": 3,
+		"listen_duration_estimate": 277,
+		"authors": {
+			"1169632": {
+				"author_id": "1169632",
+				"name": "David Nield",
+				"url": "",
+				"item_id": "4121486668"
+			}
+		},
+		"domain_metadata": {
+			"name": "Lifehacker",
+			"logo": "https://logo.clearbit.com/lifehacker.com?size=800"
+		},
+		"images": {
+			"1": {
+				"item_id": "4121486668",
+				"image_id": "1",
+				"src": "https://lifehacker.com/imagery/articles/01JAFPBQ0ZX65T6MQSKFD8ZFTR/images-1.fill.size_2000x1125.v1729251105.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			},
+			"2": {
+				"item_id": "4121486668",
+				"image_id": "2",
+				"src": "https://lifehacker.com/imagery/articles/01JAFPBQ0ZX65T6MQSKFD8ZFTR/images-2.fill.size_2000x1125.v1729251105.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			},
+			"3": {
+				"item_id": "4121486668",
+				"image_id": "3",
+				"src": "https://lifehacker.com/imagery/articles/01JAFPBQ0ZX65T6MQSKFD8ZFTR/images-3.fill.size_2000x1125.v1729251105.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			}
+		},
+		"image": {
+			"item_id": "4121486668",
+			"src": "https://lifehacker.com/imagery/articles/01JAFPBQ0ZX65T6MQSKFD8ZFTR/images-1.fill.size_2000x1125.v1729251105.jpg",
+			"width": "2000",
+			"height": "1125"
+		}
+	},
+	{
+		"item_id": "4121535204",
+		"favorite": "0",
+		"status": "0",
+		"time_added": "1729380522",
+		"time_updated": "1729479891",
+		"time_read": "0",
+		"time_favorited": "0",
+		"sort_id": 1,
+		"tags": {
+			"https://lifehacker.com/fe": {
+				"tag": "https://lifehacker.com/fe",
+				"item_id": "4121535204"
+			},
+			"photos": {
+				"tag": "photos",
+				"item_id": "4121535204"
+			},
+			"techtips": {
+				"tag": "techtips",
+				"item_id": "4121535204"
+			}
+		},
+		"top_image_url": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/hero-image.fill.size_1200x675.png",
+		"resolved_id": "4121535204",
+		"given_url": "https://lifehacker.com/tech/how-to-customize-or-disable-the-camera-control-button-on-an-iphone-16",
+		"given_title": "How to Customize or Disable the Camera Control Button on an iPhone 16 | Lif",
+		"resolved_title": "How to Customize or Disable the Camera Control Button on an iPhone 16",
+		"resolved_url": "https://lifehacker.com/tech/how-to-customize-or-disable-the-camera-control-button-on-an-iphone-16",
+		"excerpt": "The Camera Control button is one of the most marketed new features on the iPhone 16 and the iPhone 16 Pro. You can do a lot more than just take photos with this button\u2014 you can also switch between different camera settings, launch third-party camera apps, or even disable the button altogether.",
+		"is_article": "1",
+		"is_index": "0",
+		"has_video": "0",
+		"has_image": "1",
+		"word_count": "701",
+		"lang": "en",
+		"time_to_read": 3,
+		"listen_duration_estimate": 271,
+		"authors": {
+			"1345839": {
+				"author_id": "1345839",
+				"name": "Pranay Parab",
+				"url": "",
+				"item_id": "4121535204"
+			}
+		},
+		"domain_metadata": {
+			"name": "Lifehacker",
+			"logo": "https://logo.clearbit.com/lifehacker.com?size=800"
+		},
+		"images": {
+			"1": {
+				"item_id": "4121535204",
+				"image_id": "1",
+				"src": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/images-1.fill.size_2000x1125.v1729266851.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			},
+			"2": {
+				"item_id": "4121535204",
+				"image_id": "2",
+				"src": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/images-4.fill.size_2000x1125.v1729266851.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			},
+			"3": {
+				"item_id": "4121535204",
+				"image_id": "3",
+				"src": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/images-3.fill.size_2000x1125.v1729266851.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			},
+			"4": {
+				"item_id": "4121535204",
+				"image_id": "4",
+				"src": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/images-2.fill.size_2000x1125.v1729266851.jpg",
+				"width": "2000",
+				"height": "1125",
+				"credit": "",
+				"caption": ""
+			}
+		},
+		"image": {
+			"item_id": "4121535204",
+			"src": "https://lifehacker.com/imagery/articles/01JAG3P61XJHYVMG9MDZTDY1RW/images-1.fill.size_2000x1125.v1729266851.jpg",
+			"width": "2000",
+			"height": "1125"
+		}
+	},
+	{
+		"item_id": "4121556594",
+		"favorite": "0",
+		"status": "1",
+		"time_added": "1729380521",
+		"time_updated": "1729826797",
+		"time_read": "1729826797",
+		"time_favorited": "0",
+		"sort_id": 2,
+		"tags": {
+			"https://lifehacker.com/fe": {
+				"tag": "https://lifehacker.com/fe",
+				"item_id": "4121556594"
+			},
+			"list": {
+				"tag": "list",
+				"item_id": "4121556594"
+			},
+			"movies": {
+				"tag": "movies",
+				"item_id": "4121556594"
+			},
+			"spooky": {
+				"tag": "spooky",
+				"item_id": "4121556594"
+			},
+			"streaming": {
+				"tag": "streaming",
+				"item_id": "4121556594"
+			}
+		},
+		"top_image_url": "https://lifehacker.com/imagery/articles/01JA632HY8RSFTHGTEFQYZN2DA/hero-image.fill.size_1200x675.jpg",
+		"resolved_id": "4121556594",
+		"given_url": "https://lifehacker.com/entertainment/goriest-movies",
+		"given_title": "The Goriest Horror Movies Streaming Right Now | Lifehacker",
+		"resolved_title": "The 20 Goriest Horror Movies Streaming Right Now",
+		"resolved_url": "https://lifehacker.com/entertainment/goriest-movies",
+		"excerpt": "Terrifier 3 is topping the box office, bringing its grisly delights to audiences that couldn't be bothered to see another goddamn Joker movie.",
+		"is_article": "1",
+		"is_index": "0",
+		"has_video": "0",
+		"has_image": "0",
+		"word_count": "2495",
+		"lang": "en",
+		"time_to_read": 11,
+		"listen_duration_estimate": 966,
+		"authors": {
+			"274492": {
+				"author_id": "274492",
+				"name": "Ross Johnson",
+				"url": "",
+				"item_id": "4121556594"
+			}
+		},
+		"domain_metadata": {
+			"name": "Lifehacker",
+			"logo": "https://logo.clearbit.com/lifehacker.com?size=800"
+		}
+	},
+	{
+		"item_id": "4121578889",
+		"favorite": "0",
+		"status": "0",
+		"time_added": "1729380476",
+		"time_updated": "1729479845",
+		"time_read": "0",
+		"time_favorited": "0",
+		"sort_id": 3,
+		"tags": {
+			"ai": {
+				"tag": "ai",
+				"item_id": "4121578889"
+			},
+			"https://lifehacker.com/fe": {
+				"tag": "https://lifehacker.com/fe",
+				"item_id": "4121578889"
+			},
+			"internet": {
+				"tag": "internet",
+				"item_id": "4121578889"
+			},
+			"privacy": {
+				"tag": "privacy",
+				"item_id": "4121578889"
+			},
+			"twitter": {
+				"tag": "twitter",
+				"item_id": "4121578889"
+			}
+		},
+		"top_image_url": "https://lifehacker.com/imagery/articles/01JAG4K78ZWNESB6NEV8853JJV/hero-image.fill.size_1200x675.jpg",
+		"resolved_id": "4121578889",
+		"given_url": "https://lifehacker.com/tech/x-is-selling-your-data-to-third-parties-for-ai-training",
+		"given_title": "How to Stop X From Giving Away Your Data to Train AIs | Lifehacker",
+		"resolved_title": "X Is Giving Away Your Data to Train Third-Party AIs",
+		"resolved_url": "https://lifehacker.com/tech/x-is-selling-your-data-to-third-parties-for-ai-training",
+		"excerpt": "Back when it was known as Twitter, the social media app had plenty of its own problems, but I'd wager the share of users who think X is a flourishing, functioning site in comparison is considerably small.",
+		"is_article": "1",
+		"is_index": "0",
+		"has_video": "0",
+		"has_image": "0",
+		"word_count": "810",
+		"lang": "en",
+		"time_to_read": 4,
+		"listen_duration_estimate": 314,
+		"authors": {
+			"397584": {
+				"author_id": "397584",
+				"name": "Jake Peterson",
+				"url": "",
+				"item_id": "4121578889"
+			}
+		},
+		"domain_metadata": {
+			"name": "Lifehacker",
+			"logo": "https://logo.clearbit.com/lifehacker.com?size=800"
+		}
+	},
+	{
+		"item_id": "4121597386",
+		"favorite": "0",
+		"status": "1",
+		"time_added": "1729380475",
+		"time_updated": "1730487485",
+		"time_read": "1730487485",
+		"time_favorited": "0",
+		"sort_id": 4,
+		"tags": {
+			"https://lifehacker.com/fe": {
+				"tag": "https://lifehacker.com/fe",
+				"item_id": "4121597386"
+			},
+			"kitchentips": {
+				"tag": "kitchentips",
+				"item_id": "4121597386"
+			},
+			"spooky": {
+				"tag": "spooky",
+				"item_id": "4121597386"
+			}
+		},
+		"top_image_url": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/hero-image.fill.size_1200x675.jpg",
+		"resolved_id": "4121597386",
+		"given_url": "https://lifehacker.com/food-drink/halloween-charcuterie-board-inspiration",
+		"given_title": "Your Halloween Party Needs a Scary Charcuterie Board | Lifehacker",
+		"resolved_title": "Your Halloween Party Needs a Scary Charcuterie Board",
+		"resolved_url": "https://lifehacker.com/food-drink/halloween-charcuterie-board-inspiration",
+		"excerpt": "Despite all the candy and colorfully packaged cake and cookies in the grocery store, Halloween isn\u2019t actually much of a food holiday\u2014especially when compared to the big hitters like Thanksgiving.",
+		"is_article": "1",
+		"is_index": "0",
+		"has_video": "0",
+		"has_image": "1",
+		"word_count": "856",
+		"lang": "en",
+		"time_to_read": 4,
+		"listen_duration_estimate": 331,
+		"authors": {
+			"161265350": {
+				"author_id": "161265350",
+				"name": "Allie Chanthorn Reinmann",
+				"url": "",
+				"item_id": "4121597386"
+			}
+		},
+		"domain_metadata": {
+			"name": "Lifehacker",
+			"logo": "https://logo.clearbit.com/lifehacker.com?size=800"
+		},
+		"images": {
+			"1": {
+				"item_id": "4121597386",
+				"image_id": "1",
+				"src": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/images-2.fill.size_2000x1124.v1729282380.jpg",
+				"width": "2000",
+				"height": "1124",
+				"credit": "",
+				"caption": ""
+			},
+			"2": {
+				"item_id": "4121597386",
+				"image_id": "2",
+				"src": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/images-3.fill.size_2000x1124.v1729282380.jpg",
+				"width": "2000",
+				"height": "1124",
+				"credit": "",
+				"caption": ""
+			},
+			"3": {
+				"item_id": "4121597386",
+				"image_id": "3",
+				"src": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/images-1.fill.size_2000x1124.v1729282380.jpg",
+				"width": "2000",
+				"height": "1124",
+				"credit": "",
+				"caption": ""
+			},
+			"4": {
+				"item_id": "4121597386",
+				"image_id": "4",
+				"src": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/images-4.fill.size_2000x1124.v1729282380.jpg",
+				"width": "2000",
+				"height": "1124",
+				"credit": "",
+				"caption": ""
+			}
+		},
+		"image": {
+			"item_id": "4121597386",
+			"src": "https://lifehacker.com/imagery/articles/01JAGM653VVCHY2Y3XXWAPM58B/images-2.fill.size_2000x1124.v1729282380.jpg",
+			"width": "2000",
+			"height": "1124"
+		}
+	}
+]

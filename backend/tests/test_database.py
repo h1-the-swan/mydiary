@@ -286,3 +286,14 @@ class TestJoplinNoteDatabase:
         hash = hashlib.md5()
         hash.update(words_txt.encode("utf-8"))
         assert db_note.words.hash == hash.hexdigest()
+
+
+def test_loaded_db(loaded_db: Session):
+    db_events = loaded_db.exec(select(GoogleCalendarEvent)).all()
+    assert len(db_events) == 2
+
+    db_pocket_articles = loaded_db.exec(select(PocketArticle)).all()
+    assert len(db_pocket_articles) == 5
+
+    db_spotify_tracks = loaded_db.exec(select(SpotifyTrackHistory)).all()
+    assert len(db_spotify_tracks) == 13
