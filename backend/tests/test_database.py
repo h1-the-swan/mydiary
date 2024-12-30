@@ -289,6 +289,10 @@ class TestJoplinNoteDatabase:
 
 
 def test_loaded_db(loaded_db: Session):
+    db_words = loaded_db.exec(select(MyDiaryWords)).all()
+    assert len(db_words) == 1
+    assert db_words[0].joplin_note_title == "2024-10-19"
+
     db_events = loaded_db.exec(select(GoogleCalendarEvent)).all()
     assert len(db_events) == 2
 

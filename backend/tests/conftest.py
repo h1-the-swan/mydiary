@@ -5,7 +5,7 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import GoogleCalendarEvent, PocketArticle
+from mydiary.models import GoogleCalendarEvent, PocketArticle, MyDiaryWords
 from mydiary.googlecalendar_connector import MyDiaryGCal
 from mydiary.pocket_connector import MyDiaryPocket
 from mydiary.spotify_connector import MyDiarySpotify
@@ -30,6 +30,10 @@ def session_fixture():
 @pytest.fixture
 def loaded_db(rootdir: str, db_session: Session):
     datadir = Path(rootdir).joinpath("mydiary_day_data")
+
+    words = MyDiaryWords.from_txt(txt="Test words.", title="2024-10-19")
+    db_session.add(words)
+    db_session.commit()
 
     gcal_events = json.loads(datadir.joinpath("gcal_events.json").read_text())
     for e in gcal_events:

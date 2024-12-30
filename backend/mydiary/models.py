@@ -495,6 +495,17 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
             hash=get_hash_from_txt(txt),
         )
 
+    @classmethod
+    def from_txt(cls, txt: str, title: Optional[str] = None) -> "MyDiaryWords":
+        now = pendulum.now().in_timezone("UTC")
+        return cls(
+            joplin_note_title=title,
+            txt=txt,
+            created_at=now,
+            updated_at=now,
+            hash=get_hash_from_txt(txt),
+        )
+
 
 class DogBase(SQLModel):
     name: str = Field(index=True)

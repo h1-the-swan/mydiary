@@ -19,7 +19,7 @@ from .models import (
     Tag,
 )
 from .markdown_edits import MarkdownDoc
-from .db import Session, engine
+from .db import Session, engine, select
 
 import logging
 
@@ -57,7 +57,7 @@ class MyDiaryDay:
         ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
         flagged: bool = False,  # flagged for inspection, in the case of some potential problem
     ):
-        self.dt = dt
+        self.dt = pendulum.instance(dt)
         self.tags = tags
         self.words = words
         self.diary_txt = diary_txt
@@ -87,7 +87,15 @@ class MyDiaryDay:
         if session is None:
             session = Session(engine)
 
-        # TODO: get MyDiaryWords
+        dt = pendulum.instance(dt)
+
+        words = session.exec(
+            select(MyDiaryWords).where(
+                MyDiaryWords.joplin_note_title == dt.strftime("%Y-%m-%d")
+            )
+        ).one_or_none()
+
+        # TODO: get MyDiaryImages
 
         mydiary_pocket = MyDiaryPocket()
         # TODO: implement pocket sync
@@ -123,6 +131,7 @@ class MyDiaryDay:
 
         return cls(
             dt=dt,
+            words=words,
             pocket_articles=pocket_articles,
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
@@ -143,17 +152,20 @@ class MyDiaryDay:
         return self.joplin_note_id
 
     def init_markdown(self) -> str:
-        md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
+        # md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
         google_calendar_events = self.google_calendar_events_markdown()
         pocket_articles = self.pocket_articles_markdown()
         spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
         dt_string = self.dt.to_formatted_date_string()
-        return md_template.format(
-            dt=dt_string,
-            google_calendar_events=google_calendar_events,
-            pocket_articles=pocket_articles,
-            spotify_tracks=spotify_tracks,
-        )
+        md = f"# {dt_string}\n\n"
+        md += f"## Words\n\n"
+        if self.words and self.words.txt:
+            md += f"{self.words.txt}\n\n"
+        md += f"## Images\n\n"
+        md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
+        md += f"## Pocket articles\n\n{pocket_articles}\n\n"
+        md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"
+        return md
 
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:
