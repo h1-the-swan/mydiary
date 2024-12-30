@@ -469,7 +469,7 @@ class MyDiaryWordsBase(SQLModel):
     joplin_note_id: Optional[str] = Field(
         default=None, index=True, foreign_key="joplinnote.id"
     )
-    joplin_note_title: Optional[str] = Field(default=None, index=True)
+    note_title: Optional[str] = Field(default=None, index=True)
     txt: str = ""  # in markdown
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
     updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
@@ -488,7 +488,7 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
         txt = note.md_note.get_section_by_title("words").get_content()
         return cls(
             joplin_note_id=note.id,
-            joplin_note_title=note.title,
+            note_title=note.title,
             txt=txt,
             created_at=note.created_time,
             updated_at=note.updated_time,
@@ -499,7 +499,7 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
     def from_txt(cls, txt: str, title: Optional[str] = None) -> "MyDiaryWords":
         now = pendulum.now().in_timezone("UTC")
         return cls(
-            joplin_note_title=title,
+            note_title=title,
             txt=txt,
             created_at=now,
             updated_at=now,

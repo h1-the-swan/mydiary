@@ -91,7 +91,7 @@ class MyDiaryDay:
 
         words = session.exec(
             select(MyDiaryWords).where(
-                MyDiaryWords.joplin_note_title == dt.strftime("%Y-%m-%d")
+                MyDiaryWords.note_title == dt.strftime("%Y-%m-%d")
             )
         ).one_or_none()
 

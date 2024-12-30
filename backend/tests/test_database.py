@@ -216,7 +216,7 @@ class TestMyDiaryWords:
         now = pendulum.now().in_timezone("UTC")
         mydiary_words = MyDiaryWords(
             joplin_note_id=note_id,
-            joplin_note_title=note_title,
+            note_title=note_title,
             txt=txt,
             created_at=now,
             updated_at=now,
@@ -231,7 +231,7 @@ class TestMyDiaryWords:
         assert db_words.id == 1
         assert db_words.hash == hash.hexdigest()
         assert db_words.joplin_note_id == note_id
-        assert db_words.joplin_note_title == note_title
+        assert db_words.note_title == note_title
         assert db_words.txt == txt
         assert db_words.created_at.timestamp() == now.timestamp()
         assert db_words.updated_at.timestamp() == now.timestamp()
@@ -278,7 +278,7 @@ class TestJoplinNoteDatabase:
         assert db_note.updated_time.timestamp() == now.timestamp()
 
         assert db_note.words.joplin_note_id == note_id
-        assert db_note.words.joplin_note_title == "2022-11-02"
+        assert db_note.words.note_title == "2022-11-02"
         words_txt = joplin_note.md_note.get_section_by_title("words").get_content()
         assert db_note.words.txt == words_txt
         assert db_note.words.created_at.timestamp() == now.timestamp()
@@ -291,7 +291,7 @@ class TestJoplinNoteDatabase:
 def test_loaded_db(loaded_db: Session):
     db_words = loaded_db.exec(select(MyDiaryWords)).all()
     assert len(db_words) == 1
-    assert db_words[0].joplin_note_title == "2024-10-19"
+    assert db_words[0].note_title == "2024-10-19"
 
     db_events = loaded_db.exec(select(GoogleCalendarEvent)).all()
     assert len(db_events) == 2
