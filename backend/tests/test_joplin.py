@@ -11,30 +11,6 @@ import pytest
 
 # load_dotenv(find_dotenv())
 
-JOPLIN_TEST_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
-
-
-@pytest.fixture(scope="session")
-def joplin_client():
-    # with scope="session": the instance is shared across tests (so only initialized once)
-    with MyDiaryJoplin(init_config=False, notebook_id=JOPLIN_TEST_NOTEBOOK_ID) as j:
-        yield j
-
-
-@pytest.fixture
-def resource(joplin_client: MyDiaryJoplin):
-    created_resources = []
-
-    def _create_resource(data: bytes):
-        r = joplin_client.create_resource(data=data)
-        resource_id = r.json()["id"]
-        created_resources.append(resource_id)
-        return r
-
-    yield _create_resource
-    for resource_id in created_resources:
-        joplin_client.delete_resource(resource_id, force=True)
-
 
 @pytest.fixture
 def image_bytes(rootdir):

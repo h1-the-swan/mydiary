@@ -218,7 +218,7 @@ class MyDiaryPocket:
 
     def pocket_sync_new(
         self, session: Optional[Session] = None, post_commit: bool = True
-    ):
+    ) -> Dict[str, int]:
         if session is None:
             session = self.new_session()
         stmt = select(PocketArticle).order_by(desc(PocketArticle.time_last_api_sync))
@@ -254,6 +254,10 @@ class MyDiaryPocket:
                 updated += 1
         if post_commit is True:
             session.commit()
-        logger.info(
+        logger.debug(
             f"{added} pocket articles added to database. {updated} pocket articles updated."
         )
+        return {
+            "added": added,
+            "updated": updated,
+        }
