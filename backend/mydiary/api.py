@@ -13,10 +13,13 @@ from fastapi.responses import Response
 import pydantic
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import desc, all_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
+
+from mydiary.joplin_connector import MyDiaryJoplin
 from .db import Session, engine, select, func, get_db_status
 from .models import (
     Recipe,
@@ -38,6 +41,7 @@ from .models import (
     PocketArticleBase,
     PocketArticleUpdate,
     GooglePhotosThumbnail,
+    JoplinNoteImageLink,
     JoplinNote,
     MyDiaryImageBase,
     MyDiaryImage,
@@ -157,6 +161,11 @@ def get_session():
         yield session
 
 
+def get_joplin_client():
+    with MyDiaryJoplin(init_config=False) as j:
+        yield j
+
+
 # handler = logging.StreamHandler()
 # handler.setFormatter(
 #     logging.Formatter(
@@ -187,7 +196,10 @@ def scheduled_spotify_save_recent_tracks():
 
 def scheduled_pocket_sync_new():
     mydiary_pocket = MyDiaryPocket()
-    mydiary_pocket.pocket_sync_new(post_commit=True)
+    result = mydiary_pocket.pocket_sync_new(post_commit=True)
+    logger.info(
+        f"""{result["added"]} pocket articles added to database. {result["updated"]} pocket articles updated."""
+    )
 
 
 scheduler = BackgroundScheduler()
@@ -197,8 +209,12 @@ scheduler = BackgroundScheduler()
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
-    scheduler.add_job(scheduled_spotify_save_recent_tracks, "interval", minutes=60)
-    scheduler.add_job(scheduled_pocket_sync_new, "cron", hour="1,10,16,21", minute=3)
+    scheduler.add_job(
+        scheduled_spotify_save_recent_tracks, CronTrigger.from_crontab("10 * * * *")
+    )  # At 10 minutes past the hour
+    scheduler.add_job(
+        scheduled_pocket_sync_new, CronTrigger.from_crontab("4 0,5,10,16,21 * * *")
+    )  # At 01:03 AM, 10:03 AM, 04:03 PM and 09:03 PM
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
@@ -434,22 +450,21 @@ async def spotify_save_recent_tracks_to_database():
 
 
 @app.get("/joplin/get_note_id/{dt}", operation_id="joplinGetNoteId", response_model=str)
-def joplin_get_note_id(dt: str) -> str:
-    from mydiary.joplin_connector import MyDiaryJoplin
-
+def joplin_get_note_id(
+    dt: str, mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client)
+) -> str:
     if dt == "today":
         dt = pendulum.today()
     elif dt == "yesterday":
         dt = pendulum.yesterday()
     else:
         dt = pendulum.parse(dt)
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        existing_id = mydiary_joplin.get_note_id_by_date(dt)
-        # if existing_id == "does_not_exist":
-        #     raise RuntimeError(
-        #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
-        #     )
-        return existing_id
+    existing_id = mydiary_joplin.get_note_id_by_date(dt)
+    # if existing_id == "does_not_exist":
+    #     raise RuntimeError(
+    #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
+    #     )
+    return existing_id
 
 
 @app.post(
@@ -457,28 +472,26 @@ def joplin_get_note_id(dt: str) -> str:
     operation_id="joplinInitNote",
 )
 async def joplin_init_note(
-    dt: str, tz: str = "local", session: Session = Depends(get_session)
+    dt: str,
+    tz: str = "local",
+    session: Session = Depends(get_session),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
 ):
-    from mydiary.joplin_connector import MyDiaryJoplin
-
     if dt == "today":
         dt = pendulum.today(tz=tz)
     elif dt == "yesterday":
         dt = pendulum.yesterday(tz=tz)
     else:
         dt = pendulum.parse(dt, tz=tz)
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        try:
-            day = MyDiaryDay.from_dt(
-                dt, joplin_connector=mydiary_joplin, session=session
-            )
-            logger.debug("created MyDiaryDay instance")
-            day.init_joplin_note(joplin_connector=mydiary_joplin)
-            logger.debug("initialized note")
-        except Exception as e:
-            # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
-            print(e)
-            raise
+    try:
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
+        logger.debug("created MyDiaryDay instance")
+        day.init_joplin_note(joplin_connector=mydiary_joplin)
+        logger.debug("initialized note")
+    except Exception as e:
+        # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
+        print(e)
+        raise
 
 
 @app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
@@ -505,16 +518,17 @@ async def day_init_markdown(
     operation_id="joplinGetNote",
     response_model=JoplinNote,
 )
-def joplin_get_note(note_id: str, remove_image_refs: bool = False):
-    from mydiary.joplin_connector import MyDiaryJoplin
-
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        note = mydiary_joplin.get_note(note_id)
-        if remove_image_refs is True:
-            note.body = re.sub(
-                r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", r"[Joplin resource_id: \1]", note.body
-            )
-        return note
+def joplin_get_note(
+    note_id: str,
+    remove_image_refs: bool = False,
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+):
+    note = mydiary_joplin.get_note(note_id)
+    if remove_image_refs is True:
+        note.body = re.sub(
+            r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", r"[Joplin resource_id: \1]", note.body
+        )
+    return note
 
 
 @app.get(
@@ -522,22 +536,21 @@ def joplin_get_note(note_id: str, remove_image_refs: bool = False):
     operation_id="joplinNoteImages",
     response_model=List[MyDiaryImageRead],
 )
-def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)):
+def joplin_get_note_images(
+    note_id: str,
+    session: Session = Depends(get_session),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+):
     if not note_id or note_id == "does_not_exist":
         return []
 
-    from mydiary.joplin_connector import MyDiaryJoplin
-
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        note = mydiary_joplin.get_note(note_id)
-        return [
-            session.exec(
-                select(MyDiaryImage).where(
-                    MyDiaryImage.joplin_resource_id == resource_id
-                )
-            ).one()
-            for resource_id in note.md_note.get_image_resource_ids()
-        ]
+    note = mydiary_joplin.get_note(note_id)
+    return [
+        session.exec(
+            select(MyDiaryImage).where(MyDiaryImage.joplin_resource_id == resource_id)
+        ).one()
+        for resource_id in note.md_note.get_image_resource_ids()
+    ]
 
 
 @app.post(
@@ -545,28 +558,26 @@ def joplin_get_note_images(note_id: str, session: Session = Depends(get_session)
     operation_id="joplinUpdateNote",
 )
 async def joplin_update_note(
-    dt: str, tz: str = "local", session: Session = Depends(get_session)
+    dt: str,
+    tz: str = "local",
+    session: Session = Depends(get_session),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
 ):
-    from mydiary.joplin_connector import MyDiaryJoplin
-
     if dt == "today":
         dt = pendulum.today(tz=tz)
     elif dt == "yesterday":
         dt = pendulum.yesterday(tz=tz)
     else:
         dt = pendulum.parse(dt, tz=tz)
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        try:
-            day = MyDiaryDay.from_dt(
-                dt, joplin_connector=mydiary_joplin, session=session
-            )
-            logger.debug("created MyDiaryDay instance")
-            day.update_joplin_note(joplin_connector=mydiary_joplin)
-            logger.debug("initialized note")
-        except Exception as e:
-            # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
-            print(e)
-            raise
+    try:
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
+        logger.debug("created MyDiaryDay instance")
+        day.update_joplin_note(joplin_connector=mydiary_joplin)
+        logger.debug("initialized note")
+    except Exception as e:
+        # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
+        print(e)
+        raise
 
 
 @app.get(
@@ -574,13 +585,12 @@ async def joplin_update_note(
     operation_id="joplinGetInfoAllDays",
     response_model=list,
 )
-async def joplin_get_info_all_days(min_dt: str, max_dt: str):
-    from mydiary.joplin_connector import MyDiaryJoplin
-
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        return mydiary_joplin.get_info_all_days(
-            min_dt=pendulum.parse(min_dt), max_dt=pendulum.parse(max_dt)
-        )
+async def joplin_get_info_all_days(
+    min_dt: str, max_dt: str, mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client)
+):
+    return mydiary_joplin.get_info_all_days(
+        min_dt=pendulum.parse(min_dt), max_dt=pendulum.parse(max_dt)
+    )
 
 
 @app.get(
@@ -719,51 +729,65 @@ def get_nextcloud_image(url: str):
     operation_id="nextcloudPhotosAddToJoplin",
     response_model=dict,
 )
-async def nextcloud_photos_add_to_joplin(note_id: str, photos: List[str]):
+async def nextcloud_photos_add_to_joplin(
+    *,
+    session: Session = Depends(get_session),
+    note_id: str,
+    photos: List[str],
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+):
     # TODO: refactor
-    from mydiary.joplin_connector import MyDiaryJoplin
     from mydiary.markdown_edits import MarkdownDoc
     from mydiary.core import reduce_size_recurse
 
     mydiary_nextcloud = MyDiaryNextcloud()
 
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        note = mydiary_joplin.get_note(note_id)
-        md_note = MarkdownDoc(note.body, parent=note)
+    note = mydiary_joplin.get_note(note_id)
+    db_note = session.get(JoplinNote, note_id)
+    md_note = MarkdownDoc(note.body, parent=note)
 
-        sec_images = md_note.get_section_by_title("images")
-        # if not md_note.get_image_resource_ids():
-        #     # currently, an error is raised if there are already any images present.
-        #     # TODO: handle the case where there are already images present
-        #     raise RuntimeError()
-        resource_ids = []
-        for photo in photos:
-            image_bytes = mydiary_nextcloud.get_image(photo)
-            image_name = Path(requests.utils.unquote(photo)).stem
-            created_at = mydiary_nextcloud.parse_datetime_from_filepath(photo)
-            r = mydiary_joplin.create_thumbnail(
-                image_bytes,
-                name=image_name,
-                nextcloud_path=photo,
-                created_at=created_at,
-            )
-            r.raise_for_status()
-            resource_id = r.json()["id"]
-            resource_ids.append(f"![](:/{resource_id})")
-            logger.debug(f"new resource id: {resource_id}")
+    if md_note.get_image_resource_ids():
+        # currently, an error is raised if there are already any images present.
+        # TODO: handle the case where there are already images present
+        raise RuntimeError(f"note with id {note_id} already has images present")
 
-        new_txt = sec_images.txt
-        new_txt += "\n"
-        new_txt += "\n\n".join(resource_ids)
-        new_txt += "\n"
-        sec_images.update(new_txt)
-        logger.info(f"updating note: {note.title}")
-        r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
-        r_put_note.raise_for_status()
-        return {
-            "note_id": note.id,
-            "resource_ids": resource_ids,
-        }
+    sec_images = md_note.get_section_by_title("images")
+    resource_ids = []
+    for i, photo in enumerate(photos):
+        image_bytes = mydiary_nextcloud.get_image(photo)
+        image_name = Path(requests.utils.unquote(photo)).stem
+        created_at = mydiary_nextcloud.parse_datetime_from_filepath(photo)
+        mydiary_image = mydiary_joplin.create_thumbnail(
+            image_bytes,
+            name=image_name,
+            nextcloud_path=photo,
+            created_at=created_at,
+        )
+        resource_id = mydiary_image.joplin_resource_id
+        resource_ids.append(f"![](:/{resource_id})")
+        note_image_link = JoplinNoteImageLink(
+            note=db_note,
+            mydiary_image=mydiary_image,
+            sequence_num=i + 1,
+            note_title=note["title"],
+        )
+        session.add(note_image_link)
+        logger.debug(f"new resource id: {resource_id}")
+
+    session.commit()
+
+    new_txt = sec_images.txt
+    new_txt += "\n"
+    new_txt += "\n\n".join(resource_ids)
+    new_txt += "\n"
+    sec_images.update(new_txt)
+    logger.info(f"updating note: {note.title}")
+    r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
+    r_put_note.raise_for_status()
+    return {
+        "note_id": note.id,
+        "resource_ids": resource_ids,
+    }
 
 
 @app.post(
@@ -1013,48 +1037,47 @@ def experimental_lifespan():
     # txt = f.read()
     # logger.info(txt)
     # return json.loads(txt)
+    print(pendulum.now())
     scheduler.print_jobs()
 
 
 @app.get("/experimental/joplinevents")
-def joplinevents():
-    from mydiary.joplin_connector import MyDiaryJoplin
+def joplinevents(mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client)):
 
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        # params = {
-        #     "token": mydiary_joplin.token,
-        #     "cursor": pendulum.now().subtract(days=100).int_timestamp,
-        # }
-        # r = requests.get(f"{mydiary_joplin.base_url}/events", params=params)
-        # return r.json()
-        fields = [
-            "id",
-            "parent_id",
-            "title",
-            "body",
-            "created_time",
-            "updated_time",
-            "source",
-        ]
-        params = {
-            "token": mydiary_joplin.token,
-            "fields": fields,
-            "query": "updated:20241220",
-            "limit": 25,
-            "order_by": "updated_time",
-            "order_dir": "DESC",
-        }
-        # r = requests.get(f"{mydiary_joplin.base_url}/notes", params=params)
-        r = requests.get(f"{mydiary_joplin.base_url}/search", params=params)
-        return r.json()
-        # items = r.json()["items"]
-        # dt = pendulum.now().subtract(days=10)
-        # return {
-        #     # "items": [item for item in items if int(item["updated_time"])//1000>dt.int_timestamp],
-        #     "items": items,
-        #     "dt": dt.int_timestamp,
-        #     "has_more": r.json().get("has_more", False)
-        # }
+    # params = {
+    #     "token": mydiary_joplin.token,
+    #     "cursor": pendulum.now().subtract(days=100).int_timestamp,
+    # }
+    # r = requests.get(f"{mydiary_joplin.base_url}/events", params=params)
+    # return r.json()
+    fields = [
+        "id",
+        "parent_id",
+        "title",
+        "body",
+        "created_time",
+        "updated_time",
+        "source",
+    ]
+    params = {
+        "token": mydiary_joplin.token,
+        "fields": fields,
+        "query": "updated:20241220",
+        "limit": 25,
+        "order_by": "updated_time",
+        "order_dir": "DESC",
+    }
+    # r = requests.get(f"{mydiary_joplin.base_url}/notes", params=params)
+    r = requests.get(f"{mydiary_joplin.base_url}/search", params=params)
+    return r.json()
+    # items = r.json()["items"]
+    # dt = pendulum.now().subtract(days=10)
+    # return {
+    #     # "items": [item for item in items if int(item["updated_time"])//1000>dt.int_timestamp],
+    #     "items": items,
+    #     "dt": dt.int_timestamp,
+    #     "has_more": r.json().get("has_more", False)
+    # }
 
 
 if __name__ == "__main__":

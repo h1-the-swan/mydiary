@@ -400,6 +400,20 @@ class JoplinFolder(SQLModel):
         )
 
 
+class JoplinNoteImageLink(SQLModel, table=True):
+    joplin_note_id: Optional[str] = Field(
+        default=None, foreign_key="joplinnote.id", primary_key=True
+    )
+    mydiary_image_id: Optional[int] = Field(
+        default=None, foreign_key="mydiaryimage.id", primary_key=True
+    )
+    sequence_num: int = Field(primary_key=True)
+    note_title: Optional[str] = Field(default=None, index=True)
+
+    note: "JoplinNote" = Relationship(back_populates="mydiary_image_links")
+    mydiary_image: "MyDiaryImage" = Relationship(back_populates="note_links")
+
+
 class JoplinNoteBase(SQLModel):
     id: str = Field(primary_key=True)
     parent_id: str  # notebook id
@@ -430,6 +444,7 @@ class JoplinNote(JoplinNoteBase, table=True):
     time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
 
     words: Optional["MyDiaryWords"] = Relationship(back_populates="joplin_note")
+    mydiary_image_links: List[JoplinNoteImageLink] = Relationship(back_populates="note")
 
 
 class TagBase(SQLModel):
@@ -462,6 +477,8 @@ class MyDiaryImageBase(SQLModel):
 
 class MyDiaryImage(MyDiaryImageBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+
+    note_links: List[JoplinNoteImageLink] = Relationship(back_populates="mydiary_image")
 
 
 class MyDiaryWordsBase(SQLModel):

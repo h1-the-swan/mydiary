@@ -388,8 +388,7 @@ class MyDiaryJoplin:
         name: Optional[str] = None,
         nextcloud_path: Optional[str] = None,
         created_at: Optional[pendulum.DateTime] = None,
-        session: Optional[Session] = None,
-    ) -> requests.Response:
+    ) -> MyDiaryImage:
         size = (512, 512)
         bytes_threshold = 60000
         if len(image_bytes) > bytes_threshold:
@@ -397,8 +396,6 @@ class MyDiaryJoplin:
         r = self.create_resource(data=image_bytes, title=name)
         r.raise_for_status()
         # if failed, need to run self.delete_resource(hash)
-        if session is None:
-            session = self.new_session()
         resource_id = r.json()["id"]
         image_hash = hashlib.md5()
         image_hash.update(image_bytes)
@@ -414,10 +411,7 @@ class MyDiaryJoplin:
             joplin_resource_id=resource_id,
             created_at=created_at.in_timezone("UTC"),
         )
-        session.add(mydiary_image)
-        session.commit()
-
-        return r
+        return mydiary_image
 
     def get_resource_file(self, resource_id: str) -> bytes:
         r = requests.get(
@@ -479,3 +473,13 @@ class MyDiaryJoplin:
                 yield note
             has_more = resp["has_more"]
             params["page"] += 1
+
+    def yield_all_mydiary_notes(
+        self, fields: Optional[List[str]] = None
+    ) -> Generator[Dict, None, None]:
+        min_year = 2022
+        max_year = pendulum.yesterday().year
+        for year in range(min_year, max_year + 1):
+            subfolder_id = self.get_subfolder_id(str(year))
+            for note in self.yield_notes_by_subfolder_id(subfolder_id, fields=fields):
+                yield note

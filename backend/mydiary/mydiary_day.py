@@ -17,6 +17,7 @@ from .models import (
     PocketArticle,
     GoogleCalendarEvent,
     Tag,
+    JoplinNote,
 )
 from .markdown_edits import MarkdownDoc
 from .db import Session, engine, select
@@ -78,6 +79,7 @@ class MyDiaryDay:
         spotify_sync: bool = True,
         gcal_save: bool = True,
         session: Optional[Session] = None,
+        note: Optional[Union[JoplinNote, str]] = None,  # can use note or note_id
         **kwargs,
     ) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
@@ -95,7 +97,14 @@ class MyDiaryDay:
             )
         ).one_or_none()
 
-        # TODO: get MyDiaryImages
+        if note is not None and not isinstance(note, JoplinNote):
+            note = session.get(JoplinNote, note)
+        elif words is not None and words.joplin_note is not None:
+            note = words.joplin_note
+
+        images = []
+        if note is not None:
+            images = [link.mydiary_image for link in note.mydiary_image_links]
 
         mydiary_pocket = MyDiaryPocket()
         # TODO: implement pocket sync
@@ -132,9 +141,11 @@ class MyDiaryDay:
         return cls(
             dt=dt,
             words=words,
+            images=images,
             pocket_articles=pocket_articles,
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
+            joplin_note_id=getattr(note, "id", None),
             **kwargs,
         )
 
@@ -274,11 +285,15 @@ class MyDiaryDay:
         # fill in the note id
         self.get_joplin_note_id()
 
-    def init_or_update_joplin_note(self, joplin_connector=None):
+    def init_or_update_joplin_note(
+        self, joplin_connector=None, session: Optional[Session] = None
+    ):
         from .joplin_connector import MyDiaryJoplin
 
         if joplin_connector is not None:
             self.joplin_connector = joplin_connector
+        if session is None:
+            session = Session(engine)
         if not isinstance(self.joplin_connector, MyDiaryJoplin):
             raise RuntimeError("need to supply a Joplin connector instance")
         if self.joplin_note_id is None:
@@ -293,3 +308,11 @@ class MyDiaryDay:
             raise RuntimeError(
                 f"error when checking if Joplin note already exists (date: {self.dt}"
             )
+
+        note = self.joplin_connector.get_note(self.joplin_note_id)
+        note.time_last_api_sync = pendulum.now(tz="UTC")
+        session.merge(note)
+        if note.md_note.get_section_by_title("words").get_content():
+            db_words = MyDiaryWords.from_joplin_note(note)
+            session.merge(db_words)
+        session.commit()
