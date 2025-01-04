@@ -137,34 +137,6 @@ class TestPocketArticleDatabase:
         db_tags = db_session.exec(select(Tag)).all()
         assert len(db_tags) == n
 
-    # def test_update_article(self, rootdir: str, db_session: Session):
-    #     raindrop_id = 917478042
-    #     fp = Path(rootdir).joinpath("pocketitem.json")
-    #     article_json = json.loads(fp.read_text())
-    #     article = PocketArticle.from_pocket_item(article_json)
-    #     article.raindrop_id = raindrop_id
-    #     db_session.add(article)
-    #     db_session.commit()
-
-    #     fp2 = Path(rootdir).joinpath("pocketitemupdate.json")
-    #     article_json = json.loads(fp2.read_text())
-    #     article_update = PocketArticle.from_pocket_item(article_json)
-    #     db_session.merge(article_update)
-    #     # db_session.delete(article)
-    #     # db_session.commit()
-    #     # db_session.add(article_update)
-    #     db_session.commit()
-
-    #     db_article = db_session.get(PocketArticle, article.id)
-    #     assert db_article.status == PocketStatusEnum.ARCHIVED
-    #     assert db_article.favorite is False
-    #     assert db_article.word_count == 398
-    #     assert db_article.listen_duration_estimate == 154
-    #     assert db_article.time_added.year == 2021
-    #     assert db_article.time_added.day == 4
-    #     assert db_article.time_read.day == 8
-    #     assert db_article.raindrop_id == raindrop_id
-
 
 class TestMyDiaryImage:
     JOPLIN_TEST_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"

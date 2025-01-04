@@ -245,6 +245,7 @@ class MyDiaryPocket:
                 else:
                     article_json["time_last_api_sync"] = now
                     article_update = PocketArticleUpdate.model_validate(article_json)
+                    article_update.pocket_tags = list(article_json["tags"].keys())
                 self.update_article(
                     session=session,
                     db_article=db_article,

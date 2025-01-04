@@ -24,7 +24,8 @@
   "tags": {
     "internet": { "item_id": "3496035100", "tag": "internet" },
     "news": { "item_id": "3496035100", "tag": "news" },
-    "quickbites": { "item_id": "3496035100", "tag": "quickbites" }
+    "quickbites": { "item_id": "3496035100", "tag": "quickbites" },
+    "tagupdate": { "item_id": "0000000000", "tag": "tagupdate" }
   },
   "authors": {
     "151254935": {
