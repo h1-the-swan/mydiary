@@ -44,7 +44,7 @@ class MyDiaryDay:
         diary_txt: str = "",  # Markdown text
         joplin_connector: Optional[Any] = None,
         joplin_note_id: str = None,
-        thumbnail: MyDiaryImage = None,
+        thumbnail: Optional[MyDiaryImage] = None,
         images: List[MyDiaryImage] = [],
         spotify_tracks: List[
             SpotifyTrackHistoryFrozen
@@ -76,6 +76,7 @@ class MyDiaryDay:
     def from_dt(
         cls,
         dt: datetime = now().start_of("day"),
+        pocket_sync: bool = False,
         spotify_sync: bool = True,
         gcal_save: bool = True,
         session: Optional[Session] = None,
@@ -107,9 +108,9 @@ class MyDiaryDay:
             images = [link.mydiary_image for link in note.mydiary_image_links]
 
         mydiary_pocket = MyDiaryPocket()
-        # TODO: implement pocket sync
+        if pocket_sync is True:
+            mydiary_pocket.pocket_sync_new(session=session, post_commit=True)
         pocket_articles = mydiary_pocket.get_articles_for_day(dt, session=session)
-        # mydiary_pocket.save_articles_to_database(pocket_articles)
 
         mydiary_spotify = MyDiarySpotify()
         if spotify_sync is True:
@@ -122,21 +123,6 @@ class MyDiaryDay:
             mydiary_gcal.save_events_to_database(
                 google_calendar_events, session=session
             )
-
-        # DEPRECATED: I stopped using Habitica
-        # # TODO: figure out how to actually use the Habitica data instead of just saving it
-        # mydiary_habitica = MyDiaryHabitica()
-        # habitica_data = mydiary_habitica.get_user_data()
-        # # check if there is any new data
-        # habitica_files = list(Path("mydiary/habitica_backups").glob('habitica_userdata*.json'))
-        # habitica_files.sort(reverse=True)
-        # habitica_most_recent = json.loads(habitica_files[0].read_text())
-        # if not mydiary_habitica.iseq_user_data(habitica_most_recent, habitica_data):
-        #     outfile = Path("mydiary/habitica_backups").joinpath(
-        #         f"habitica_userdata_{pendulum.now():%Y%m%dT%H%M%S}.json"
-        #     )
-        #     logger.info(f"saving Habitica userdata to {outfile}")
-        #     outfile.write_text(json.dumps(habitica_data))
 
         return cls(
             dt=dt,
@@ -173,10 +159,19 @@ class MyDiaryDay:
         if self.words and self.words.txt:
             md += f"{self.words.txt}\n\n"
         md += f"## Images\n\n"
+        if self.images:
+            md += f"{self.images_markdown()}\n\n"
         md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
         md += f"## Pocket articles\n\n{pocket_articles}\n\n"
         md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"
         return md
+
+    def images_markdown(self) -> str:
+        resource_ids_md = []
+        for image in self.images:
+            if image.joplin_resource_id:
+                resource_ids_md.append(f"![](:/{image.joplin_resource_id})")
+        return "\n\n".join(resource_ids_md)
 
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:
@@ -311,8 +306,7 @@ class MyDiaryDay:
 
         note = self.joplin_connector.get_note(self.joplin_note_id)
         note.time_last_api_sync = pendulum.now(tz="UTC")
-        session.merge(note)
         if note.md_note.get_section_by_title("words").get_content():
-            db_words = MyDiaryWords.from_joplin_note(note)
-            session.merge(db_words)
+            note.words = MyDiaryWords.from_joplin_note(note)
+        session.merge(note)
         session.commit()

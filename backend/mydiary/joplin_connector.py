@@ -13,8 +13,8 @@ import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union, Generator
 
-from .core import reduce_image_size, reduce_size_recurse
-from .models import JoplinNote, JoplinFolder, MyDiaryImage
+from .core import get_hash_from_txt, reduce_image_size, reduce_size_recurse
+from .models import JoplinNote, JoplinFolder, MyDiaryImage, MyDiaryWords
 from .db import engine, Session, select
 
 import logging
@@ -239,21 +239,51 @@ class MyDiaryJoplin:
         )
         return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
-    def get_note(self, id: str) -> JoplinNote:
-        fields = [
-            "id",
-            "parent_id",
-            "title",
-            "body",
-            "created_time",
-            "updated_time",
-        ]
+    def get_note(self, id: str, fields: Optional[List[str]] = None) -> JoplinNote:
+        if fields is None:
+            # default list of fields to fetch
+            fields = [
+                "id",
+                "parent_id",
+                "title",
+                "body",
+                "created_time",
+                "updated_time",
+            ]
         params = {
             "token": self.token,
             "fields": fields,
         }
         r = requests.get(f"{self.base_url}/notes/{id}", params=params)
         return JoplinNote.from_api_response(r)
+
+    def sync_note_api_to_db_obj(
+        self,
+        note: Union[str, JoplinNote],
+        session: Session,
+        commit: bool = True,
+        sync_dt: Optional[datetime] = None,
+    ):
+        if not isinstance(note, JoplinNote):
+            note = self.get_note(note)
+        if sync_dt is None:
+            sync_dt = pendulum.now(tz="UTC")
+        md_note = note.md_note
+        words_content = md_note.get_section_by_title("words").get_content()
+        words_hash = get_hash_from_txt(words_content)
+        db_words = session.exec(
+            select(MyDiaryWords).where(MyDiaryWords.joplin_note_id == note.id)
+        ).one()
+        if db_words.hash != words_hash:
+            note.words = MyDiaryWords.from_joplin_note(note)
+            # session.merge(words_update)
+        resource_ids = md_note.get_image_resource_ids()
+        note.has_words = len(words_content) > 0
+        note.has_images = len(resource_ids) > 0
+        note.time_last_api_sync = sync_dt
+        session.merge(note)
+        if commit is True:
+            session.commit()
 
     def update_note_body(self, note_id: str, new_body: str):
         return requests.put(

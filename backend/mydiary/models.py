@@ -421,18 +421,24 @@ class JoplinNoteBase(SQLModel):
     body: Optional[str] = None  # in markdown
     created_time: datetime
     updated_time: datetime
+    body_hash: Optional[str] = Field(default=None, index=True)
+    has_words: bool = Field(default=False, index=True)
+    has_images: bool = Field(default=False, index=True)
 
     @classmethod
     def from_api_response(cls, r: Union[Response, Dict]) -> "JoplinNote":
         if isinstance(r, Response):
             r = r.json()
+        body = r.get("body", None)
+        body_hash = get_hash_from_txt(body) if body else None
         return cls(
             id=r["id"],
             parent_id=r["parent_id"],
             title=r["title"],
-            body=r.get("body", None),
+            body=body,
             created_time=datetime.fromtimestamp(r["created_time"] / 1000),
             updated_time=datetime.fromtimestamp(r["updated_time"] / 1000),
+            body_hash=body_hash,
         )
 
     @property
@@ -499,10 +505,17 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
     joplin_note: Optional[JoplinNote] = Relationship(back_populates="words")
 
     @classmethod
-    def from_joplin_note(cls, note: JoplinNote) -> "MyDiaryWords":
-        if note.body is None:
-            raise ValueError("JoplinNote instance must have a 'body' value")
-        txt = note.md_note.get_section_by_title("words").get_content()
+    def from_joplin_note(
+        cls, note: JoplinNote, body: Optional[str] = None
+    ) -> "MyDiaryWords":
+        if body is None:
+            body = note.body
+        if body is None:
+            raise ValueError(
+                "body must be specified or JoplinNote instance must have a 'body' value"
+            )
+        md_note = MarkdownDoc(body)
+        txt = md_note.get_section_by_title("words").get_content()
         return cls(
             joplin_note_id=note.id,
             note_title=note.title,

@@ -230,10 +230,6 @@ app = FastAPI(
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
-# @app.get("/api/app")
-# def read_main(request: Request):
-#     return {"message": "Hello World", "root_path": request.scope.get("root_path")}
-
 
 @app.get("/testhealthcheck", operation_id="testHealthCheck2")
 async def testhealthcheck():
