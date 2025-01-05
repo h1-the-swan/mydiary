@@ -482,7 +482,7 @@ async def joplin_init_note(
     try:
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.init_joplin_note(joplin_connector=mydiary_joplin)
+        day.init_joplin_note(session=session, joplin_connector=mydiary_joplin)
         logger.debug("initialized note")
     except Exception as e:
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
@@ -568,8 +568,8 @@ async def joplin_update_note(
     try:
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.update_joplin_note(joplin_connector=mydiary_joplin)
-        logger.debug("initialized note")
+        day.update_joplin_note(session=session, joplin_connector=mydiary_joplin)
+        logger.debug("updated note")
     except Exception as e:
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
         print(e)

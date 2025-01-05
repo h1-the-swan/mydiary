@@ -206,7 +206,7 @@ class MyDiaryDay:
                 lines[-1] += "\n"
         return "\n".join(lines)
 
-    def update_joplin_note(self, joplin_connector=None):
+    def update_joplin_note(self, session: Session, joplin_connector=None):
         from .joplin_connector import MyDiaryJoplin
 
         if joplin_connector is not None:
@@ -240,11 +240,14 @@ class MyDiaryDay:
             logger.info(f"updating note: {note.title}")
             r_put_note = self.joplin_connector.update_note_body(note.id, md_note.txt)
             logger.info(f"done. status code: {r_put_note.status_code}")
+            self.save_note_and_words_to_db(session=session)
 
         else:
             logger.info("no updates made")
 
-    def init_joplin_note(self, joplin_connector=None):
+    def init_joplin_note(
+        self, session: Session, joplin_connector=None, body: str = None
+    ):
         from .joplin_connector import MyDiaryJoplin
 
         logger.debug("starting init_joplin_note")
@@ -261,7 +264,8 @@ class MyDiaryDay:
 
         title = self.dt.strftime("%Y-%m-%d")
         logger.debug("initializing markdown")
-        body = self.init_markdown()
+        if body is None:
+            body = self.init_markdown()
         subfolder_title = str(self.dt.year)
         subfolder_id = self.joplin_connector.get_subfolder_id(subfolder_title)
         if subfolder_id is None:
@@ -280,6 +284,8 @@ class MyDiaryDay:
         # fill in the note id
         self.get_joplin_note_id()
 
+        self.save_note_and_words_to_db(session=session)
+
     def init_or_update_joplin_note(
         self, joplin_connector=None, session: Optional[Session] = None
     ):
@@ -295,15 +301,16 @@ class MyDiaryDay:
             self.get_joplin_note_id()
 
         if self.joplin_note_id == "does_not_exist":
-            self.init_joplin_note()
+            self.init_joplin_note(session=session)
         elif self.joplin_note_id:
-            self.update_joplin_note()
+            self.update_joplin_note(session=session)
         else:
             # this should not happen
             raise RuntimeError(
                 f"error when checking if Joplin note already exists (date: {self.dt}"
             )
 
+    def save_note_and_words_to_db(self, session: Session):
         note = self.joplin_connector.get_note(self.joplin_note_id)
         note.time_last_api_sync = pendulum.now(tz="UTC")
         if note.md_note.get_section_by_title("words").get_content():
