@@ -74,7 +74,7 @@ class MyDiaryPocket:
         since: Optional[int] = None,
         offset: int = 0,
         count: int = 30,
-    ) -> Iterable[PocketArticle]:
+    ) -> Generator[Dict, None, None]:
         while True:
             r = self.pocket_instance.get(
                 state=state,
@@ -105,7 +105,7 @@ class MyDiaryPocket:
         since: Optional[int] = None,
         offset: int = 0,
         count: int = 30,
-    ) -> Iterable[PocketArticle]:
+    ) -> Generator[PocketArticle, None, None]:
         for item in self.yield_all_articles_from_api_json(
             state=state, detailType=detailType, since=since, offset=offset, count=count
         ):
@@ -204,7 +204,8 @@ class MyDiaryPocket:
         if article_data.get("pocket_tags"):
             new_tags = []
             # sqlalchemy is weird. I couldn't get the merge to work right, so instead I avoid creating new Tag objects if they already exist
-            existing_tags_map = {t.name: t for t in db_article.tags}
+            existing_tags = session.exec(select(Tag)).all()
+            existing_tags_map = {t.name: t for t in existing_tags}
             for tag_name in article_data["pocket_tags"]:
                 if tag_name in existing_tags_map:
                     new_tags.append(existing_tags_map[tag_name])
@@ -217,13 +218,25 @@ class MyDiaryPocket:
         return db_article
 
     def pocket_sync_new(
-        self, session: Optional[Session] = None, post_commit: bool = True
+        self,
+        session: Optional[Session] = None,
+        post_commit: bool = True,
+        since: Optional[Union[datetime, int]] = None,
     ) -> Dict[str, int]:
+        # if since parameter is not specified, we will use the last sync time
         if session is None:
             session = self.new_session()
-        stmt = select(PocketArticle).order_by(desc(PocketArticle.time_last_api_sync))
-        r = session.exec(stmt).first()
-        since = int(r.time_last_api_sync.timestamp())
+        if since is None:
+            # get time of last sync
+            stmt = select(PocketArticle).order_by(
+                desc(PocketArticle.time_last_api_sync)
+            )
+            r = session.exec(stmt).first()
+            since = int(r.time_last_api_sync.timestamp())
+        elif isinstance(since, datetime):
+            since = int(since.timestamp())
+        else:
+            since = int(since)
         now = pendulum.now().in_timezone("UTC")
         added = 0
         updated = 0
@@ -239,6 +252,7 @@ class MyDiaryPocket:
             else:
                 # update article
                 if article_json["status"] == "2":
+                    # deleted article
                     article_update = PocketArticleUpdate.model_validate(
                         {"status": 2, "time_last_api_sync": now}
                     )
