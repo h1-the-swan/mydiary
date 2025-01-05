@@ -35,7 +35,8 @@
 				"yzhang.markdown-all-in-one",
 				"ms-python.isort",
 				"nickdemayo.vscode-json-editor",
-				"eriklynd.json-tools"
+				"eriklynd.json-tools",
+				"tamasfe.even-better-toml"
 			]
 		}
 	}

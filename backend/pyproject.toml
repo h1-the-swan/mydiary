@@ -6,6 +6,7 @@ authors = ["h1-the-swan <jason.portenoy@gmail.com>"]
 packages = [
 	{ include = "mydiary" },
 ]
+exclude = ["**/database.db", "**/db_backup/*"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
