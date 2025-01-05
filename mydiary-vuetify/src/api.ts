@@ -402,11 +402,16 @@ export interface MyDiaryImageRead {
 
 export type JoplinNoteTimeLastApiSync = string | null;
 
+export type JoplinNoteBodyHash = string | null;
+
 export type JoplinNoteBody = string | null;
 
 export interface JoplinNote {
   body?: JoplinNoteBody;
+  body_hash?: JoplinNoteBodyHash;
   created_time: string;
+  has_images?: boolean;
+  has_words?: boolean;
   id: string;
   parent_id: string;
   time_last_api_sync?: JoplinNoteTimeLastApiSync;

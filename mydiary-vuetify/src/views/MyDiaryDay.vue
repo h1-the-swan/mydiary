@@ -40,7 +40,7 @@
             <v-expansion-panel-text>
                 <div
                     style="white-space: pre"
-                    v-if="diaryNote"
+                    v-if="diaryNote && diaryNote.body"
                     v-html="md.render(diaryNote.body)"
                 ></div>
             </v-expansion-panel-text>
