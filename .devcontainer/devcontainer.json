@@ -5,7 +5,7 @@
 	"build": { 
 		"context": "..",
 		"dockerfile": "Dockerfile"
-	}
+	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
@@ -17,7 +17,37 @@
 	// "postCreateCommand": "python --version",
 
 	// Configure tool-specific properties.
-	// "customizations": {},
+	"customizations": {
+		"vscode": {
+			// Use 'settings' to set *default* container specific settings.json values on container create.
+			// You can edit these settings after create using File > Preferences > Settings > Remote.
+			"settings": {
+				"python.pythonPath": "/usr/local/bin/python",
+    				"editor.defaultFormatter": "ms-python.black-formatter",
+				"python.testing.pytestEnabled": true,
+				"python.analysis.indexing": true,
+				"python.analysis.autoImportCompletions": true
+			},
+			// Add the IDs of extensions you want installed when the container is created in the array below.
+			"extensions": [
+				"ms-python.python",
+				"ms-toolsai.jupyter",
+				"ms-python.black-formatter",
+				"alexcvzz.vscode-sqlite",
+				"qwtel.sqlite-viewer",
+				"iliazeus.vscode-ansi",
+				"njpwerner.autodocstring",
+				"ZainChen.json",
+				"ms-python.debugpy",
+				"donjayamanne.python-environment-manager",
+				"yzhang.markdown-all-in-one",
+				"ms-python.isort",
+				"nickdemayo.vscode-json-editor",
+				"eriklynd.json-tools",
+				"ms-toolsai.datawrangler"
+			]
+		}
+	}
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

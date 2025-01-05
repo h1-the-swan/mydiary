@@ -16,6 +16,7 @@ venv.bak/
 Untitled*.ipynb
 # ignore all notebooks for now
 notebooks/
+notebooks_anaconda/
 
 tmp*
 
