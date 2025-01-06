@@ -11,22 +11,38 @@
     </v-btn>
     <v-dialog v-model="dialog" max-width="900">
         <v-card title="Initialize New Joplin Note">
-            <v-card-text>
-                <div
-                    v-if="initMarkdown"
-                    style="white-space: pre"
-                    v-html="md.render(initMarkdown)"
-                ></div>
-                <div v-else>
-                    initMarkdown Loading...
-                    <v-progress-linear indeterminate v-if="!initMarkdown" />
-                </div>
-            </v-card-text>
-            <v-card-actions>
-                <v-btn text="Close" @click="dialog = false"></v-btn>
-            </v-card-actions>
+            <v-form>
+                <v-card-text>
+                    <div
+                        v-if="initMarkdown"
+                        style="white-space: pre"
+                        v-html="md.render(initMarkdown)"
+                    ></div>
+                    <div v-else>
+                        initMarkdown Loading...
+                        <v-progress-linear indeterminate v-if="!initMarkdown" />
+                    </div>
+                </v-card-text>
+                <v-card-actions>
+                    <v-btn
+                        color="primary"
+                        variant="elevated"
+                        @click="onSaveNote"
+                        text="Initialize note"
+                    ></v-btn>
+                    <v-btn text="Close" @click="dialog = false"></v-btn>
+                </v-card-actions>
+            </v-form>
         </v-card>
     </v-dialog>
+    <v-snackbar v-model="snackbarInit">
+        Note initialized for date {{ getDateStr }}. ID: {{ joplinNoteId }}
+        <template v-slot:actions>
+            <v-btn color="green" variant="text" @click="snackbarInit = false">
+                Close
+            </v-btn>
+        </template>
+    </v-snackbar>
     <p>Joplin note ID: {{ joplinNoteId }}</p>
     <v-expansion-panels v-if="diaryNoteExists" style="max-width: 800px">
         <v-expansion-panel>
@@ -60,6 +76,7 @@ import {
     JoplinNote,
     joplinNoteImages,
     MyDiaryImageRead,
+    joplinInitNote,
 } from '@/api'
 import GCalAuth from '@/components/GCalAuth.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
@@ -76,6 +93,7 @@ const joplinNoteId = ref('')
 const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const dialog = ref(false)
+const snackbarInit = ref(false)
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
@@ -109,6 +127,13 @@ async function fetchInitMarkdown() {
         (
             await axios.get(`/day_init_markdown/${getDateStr.value}?tz=infer`)
         ).data
+}
+async function onSaveNote() {
+    joplinNoteId.value = (
+        await joplinInitNote(getDateStr.value, { body: initMarkdown.value })
+    ).data
+    dialog.value = false
+    snackbarInit.value = true
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''

@@ -68,6 +68,7 @@ tz?: string;
 
 export type JoplinInitNoteParams = {
 tz?: string;
+body?: string | null;
 };
 
 export type ReadSpotifyHistoryParams = {
@@ -693,7 +694,7 @@ export const joplinGetNoteId = <TData = AxiosResponse<string>>(
 /**
  * @summary Joplin Init Note
  */
-export const joplinInitNote = <TData = AxiosResponse<unknown>>(
+export const joplinInitNote = <TData = AxiosResponse<string>>(
     dt: string,
     params?: JoplinInitNoteParams, options?: AxiosRequestConfig
  ): Promise<TData> => {
@@ -1087,7 +1088,7 @@ export type SpotifyHistoryCountResult = AxiosResponse<number>
 export type GetSpotifyImageUrlResult = AxiosResponse<string>
 export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
 export type JoplinGetNoteIdResult = AxiosResponse<string>
-export type JoplinInitNoteResult = AxiosResponse<unknown>
+export type JoplinInitNoteResult = AxiosResponse<string>
 export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>

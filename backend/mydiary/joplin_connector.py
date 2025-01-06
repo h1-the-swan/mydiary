@@ -106,7 +106,10 @@ class MyDiaryJoplin:
         r.raise_for_status()
         return JoplinFolder.from_api_response(r)
 
-    def get_subfolder_id(self, title: str) -> Union[str, None]:
+    def get_subfolder_id(
+        self, title: str, create_if_not_exists: bool = False
+    ) -> Union[str, None]:
+        # Example usage: subfolder_id = get_subfolder_id("2024")
         params = {
             "query": title,
             "type": "folder",
@@ -123,7 +126,18 @@ class MyDiaryJoplin:
         item = [x for x in items if x["parent_id"] == self.notebook_id]
         logger.debug(f"item is {item}")
         if len(item) == 0:
-            return None
+            # subfolder doesn't exist
+            if create_if_not_exists is True:
+                logger.info(f'"{title}" subfolder (subnotebook) not found.')
+                logger.info(f'creating subfolder "{title}"')
+                r_create_subfolder = self.joplin_connector.create_subfolder(title)
+                r_create_subfolder.raise_for_status()
+                logger.debug(
+                    f"created subfolder. response: {r_create_subfolder.json()}"
+                )
+                return r_create_subfolder.json()["id"]
+            else:
+                return None
         elif len(item) == 1:
             return item[0]["id"]
         else:

@@ -267,14 +267,9 @@ class MyDiaryDay:
         if body is None:
             body = self.init_markdown()
         subfolder_title = str(self.dt.year)
-        subfolder_id = self.joplin_connector.get_subfolder_id(subfolder_title)
-        if subfolder_id is None:
-            logger.info(f'"{subfolder_title}" subfolder (subnotebook) not found.')
-            logger.info(f'creating subfolder "{subfolder_title}"')
-            r_create_subfolder = self.joplin_connector.create_subfolder(subfolder_title)
-            r_create_subfolder.raise_for_status()
-            logger.debug(f"created subfolder. response: {r_create_subfolder.json()}")
-            subfolder_id = r_create_subfolder.json()["id"]
+        subfolder_id = self.joplin_connector.get_subfolder_id(
+            subfolder_title, create_if_not_exists=True
+        )
         logger.info(f"creating note: {title}")
         r_post_note = self.joplin_connector.post_note(
             title=title, body=body, parent_id=subfolder_id

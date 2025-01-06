@@ -472,7 +472,8 @@ async def joplin_init_note(
     tz: str = "local",
     session: Session = Depends(get_session),
     mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
-):
+    body: Optional[str] = None,
+) -> str:
     if dt == "today":
         dt = pendulum.today(tz=tz)
     elif dt == "yesterday":
@@ -480,10 +481,26 @@ async def joplin_init_note(
     else:
         dt = pendulum.parse(dt, tz=tz)
     try:
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
+        if body:
+            # body is supplied, so no need to sync with external APIs
+            day = MyDiaryDay.from_dt(
+                dt,
+                joplin_connector=mydiary_joplin,
+                session=session,
+                pocket_sync=False,
+                spotify_sync=False,
+                gcal_save=False,
+            )
+        else:
+            day = MyDiaryDay.from_dt(
+                dt, joplin_connector=mydiary_joplin, session=session
+            )
         logger.debug("created MyDiaryDay instance")
-        day.init_joplin_note(session=session, joplin_connector=mydiary_joplin)
+        day.init_joplin_note(
+            session=session, joplin_connector=mydiary_joplin, body=body
+        )
         logger.debug("initialized note")
+        return day.joplin_note_id
     except Exception as e:
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
         print(e)
@@ -765,7 +782,7 @@ async def nextcloud_photos_add_to_joplin(
             note=db_note,
             mydiary_image=mydiary_image,
             sequence_num=i + 1,
-            note_title=note["title"],
+            note_title=note.title,
         )
         session.add(note_image_link)
         logger.debug(f"new resource id: {resource_id}")
