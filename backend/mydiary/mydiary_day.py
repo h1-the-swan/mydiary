@@ -155,6 +155,7 @@ class MyDiaryDay:
         spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
         dt_string = self.dt.to_formatted_date_string()
         md = f"# {dt_string}\n\n"
+        md += f"timezone: {self.dt.timezone_name}\n\n"
         md += f"## Words\n\n"
         if self.words and self.words.txt:
             md += f"{self.words.txt}\n\n"
