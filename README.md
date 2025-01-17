@@ -16,7 +16,7 @@ This is **not** a plug-and-play solution for starting or maintaining a diary. Th
 
 ## Diary entries (MyDiaryDay)
 
-Each daily dairy entry has a few different sections, which are connected to other apps and services. The entries are generated as [Markdown](https://en.wikipedia.org/wiki/Markdown) (.md) files, with these sections outlined and filled in as much as possible.
+Each daily diary entry has a few different sections, which are connected to other apps and services. The entries are generated as [Markdown](https://en.wikipedia.org/wiki/Markdown) (.md) files, with these sections outlined and filled in as much as possible.
 
 ### Words
 
