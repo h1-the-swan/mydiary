@@ -130,7 +130,7 @@ class MyDiaryJoplin:
             if create_if_not_exists is True:
                 logger.info(f'"{title}" subfolder (subnotebook) not found.')
                 logger.info(f'creating subfolder "{title}"')
-                r_create_subfolder = self.joplin_connector.create_subfolder(title)
+                r_create_subfolder = self.create_subfolder(title)
                 r_create_subfolder.raise_for_status()
                 logger.debug(
                     f"created subfolder. response: {r_create_subfolder.json()}"

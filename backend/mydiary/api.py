@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
     )  # At 10 minutes past the hour
     scheduler.add_job(
         scheduled_pocket_sync_new, CronTrigger.from_crontab("4 0,5,10,16,21 * * *")
-    )  # At 01:03 AM, 10:03 AM, 04:03 PM and 09:03 PM
+    )  # At 01:04 AM, 10:04 AM, 04:04 PM and 09:04 PM
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
@@ -224,7 +224,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="mydiary",
     root_path="/api",
-    openapi_url="/api/openapi.json",
+    openapi_url="/openapi.json",
     debug=True,
 )
 

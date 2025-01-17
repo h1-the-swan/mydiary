@@ -1,5 +1,5 @@
 <template>
-    <div v-if="nextCloudThumbs">
+    <div v-if="nextCloudThumbs && nextCloudThumbs.length">
         <v-form @submit.prevent="onSubmit">
             <v-row>
                 <v-col
