@@ -1,5 +1,6 @@
 <template>
     <div v-if="nextCloudThumbs && nextCloudThumbs.length">
+        <p>Selected synced with note: {{ selectedSyncedWithNote }}</p>
         <v-form @submit.prevent="onSubmit">
             <v-row>
                 <v-col
@@ -16,7 +17,13 @@
                     />
                 </v-col>
             </v-row>
-            <v-btn :loading="loading" class="mt-2" type="submit" block>
+            <v-btn
+                :loading="loading"
+                class="mt-2"
+                type="submit"
+                block
+                :disabled="disabled"
+            >
                 Submit
             </v-btn>
         </v-form>
@@ -32,7 +39,7 @@ import {
     MyDiaryImageRead,
     nextcloudPhotosAddToJoplin,
 } from '@/api'
-import { ref, watch, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 const props = defineProps<{
     dt: string
     joplinNoteId?: string
@@ -41,10 +48,24 @@ interface INextCloudThumb {
     url: string
     src: string
     selected: boolean
+    existing: boolean // whether this image is already in the joplin note
 }
 const nextCloudThumbs = ref<INextCloudThumb[]>([])
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const loading = ref(false)
+const selectedSyncedWithNote = computed<boolean>(() => {
+    return nextCloudThumbs.value.every(
+        (item) => item.existing === item.selected
+    )
+})
+const disabled = computed<boolean>(() => {
+    // submit button will be disabled if any of the conditions is true
+    return (
+        !props.joplinNoteId ||
+        props.joplinNoteId === 'does_not_exist' || // no note; so can't add photos
+        selectedSyncedWithNote.value // no change to submit
+    )
+})
 async function fetchImageUrls() {
     const imgUrls = (await nextcloudPhotosThumbnailUrls(props.dt)).data
     nextCloudThumbs.value = imgUrls.map((url) => {
@@ -52,6 +73,7 @@ async function fetchImageUrls() {
             url: url,
             src: `/api/nextcloud/thumbnail_img?url=${url}`,
             selected: false,
+            existing: false,
         }
     })
 }
@@ -69,9 +91,11 @@ watchEffect(() => {
     const existingUrls = diaryNoteImages.value.map(
         (item) => item.nextcloud_path
     )
-    nextCloudThumbs.value.forEach(
-        (item) => (item.selected = existingUrls.includes(item.url))
-    )
+    nextCloudThumbs.value.forEach((item) => {
+        const val = existingUrls.includes(item.url)
+        item.existing = val
+        item.selected = val
+    })
     console.log(diaryNoteImages)
 })
 watchEffect(() => {
