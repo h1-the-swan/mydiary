@@ -15,7 +15,7 @@
                 <v-card-text>
                     <div
                         v-if="initMarkdown"
-                        style="white-space: pre"
+                        style="white-space: pre-wrap"
                         v-html="md.render(initMarkdown)"
                     ></div>
                     <div v-else>
@@ -55,7 +55,7 @@
             </v-expansion-panel-title>
             <v-expansion-panel-text>
                 <div
-                    style="white-space: pre"
+                    style="white-space: pre-wrap"
                     v-if="diaryNote && diaryNote.body"
                     v-html="md.render(diaryNote.body)"
                 ></div>
