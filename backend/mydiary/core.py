@@ -59,7 +59,12 @@ def reduce_size_recurse(data, size: Tuple[int, int], bytes_threshold: int = 6000
 def get_last_timezone(dt_str: str, session: Session) -> str:
     from .models import TimeZoneChange
 
-    dt_obj = pendulum.parse(dt_str)
+    if dt_str == "today":
+        dt_obj =  pendulum.today()
+    elif dt_str == "yesterday":
+        dt_obj = pendulum.yesterday()
+    else:
+        dt_obj = pendulum.parse(dt_str)
     z = session.exec(
         select(TimeZoneChange)
         .where(TimeZoneChange.changed_at < dt_obj.end_of("day"))

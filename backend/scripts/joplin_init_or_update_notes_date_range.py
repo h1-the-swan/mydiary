@@ -23,12 +23,14 @@ logger = root_logger.getChild(__name__)
 
 from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.core import get_last_timezone
+from mydiary.db import Session, engine
 
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 # JOPLIN_NOTEBOOK_ID = "b2494842bba94ef3b429f682c4e3386f"
 
 
-def parse_date(date_str: str, tz: str):
+def parse_date(date_str: str, tz: str) -> pendulum.DateTime:
     if date_str == "today":
         return pendulum.today(tz=tz)
     elif date_str == "yesterday":
@@ -38,25 +40,42 @@ def parse_date(date_str: str, tz: str):
 
 
 def main(args):
-    start_date = parse_date(args.start_date, tz=args.timezone)
-    end_date = parse_date(args.end_date, tz=args.timezone)
+    with Session(engine) as session:
+        if args.timezone == "infer":
+            tz = get_last_timezone(args.start_date, session=session)
+            logger.debug(f"inferred tz: {tz}")
+        else:
+            tz = args.timezone
+        dt = parse_date(args.start_date, tz=tz)
 
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        for i in range(end_date.diff(start_date).in_days() + 1):
-            if i == 0:
-                spotify_sync = True
-            else:
-                spotify_sync = False
+        with MyDiaryJoplin(init_config=False) as mydiary_joplin:
+            i = 0
+            while True:
+                if i == 0:
+                    spotify_sync = True
+                else:
+                    spotify_sync = False
 
-            dt = start_date.add(days=i)
-            day = MyDiaryDay.from_dt(
-                dt, spotify_sync=spotify_sync, joplin_connector=mydiary_joplin
-            )
+                if args.timezone == "infer":
+                    new_tz = get_last_timezone(dt.to_date_string(), session=session)
+                    if new_tz != tz:
+                        tz = new_tz
+                        logger.debug(f"inferred tz: {tz}")
+                        dt = parse_date(dt.to_date_string(), tz=tz)
+                day = MyDiaryDay.from_dt(
+                    dt, spotify_sync=spotify_sync, joplin_connector=mydiary_joplin, session=session
+                )
 
-            logger.info(
-                f"initializing or updating Joplin note for day: {dt.to_date_string()}..."
-            )
-            day.init_or_update_joplin_note()
+                logger.info(
+                    f"initializing or updating Joplin note for day: {dt.to_date_string()}..."
+                )
+                day.init_or_update_joplin_note()
+
+                if dt.is_same_day(parse_date(args.end_date, tz=tz)) or dt.is_future():
+                    break
+                
+                dt = dt.add(days=1)
+                i += 1
 
 
 if __name__ == "__main__":
