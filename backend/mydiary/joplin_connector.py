@@ -435,6 +435,8 @@ class MyDiaryJoplin:
     ) -> MyDiaryImage:
         size = (512, 512)
         bytes_threshold = 60000
+        orig_image_hash = hashlib.md5()
+        orig_image_hash.update(image_bytes)
         if len(image_bytes) > bytes_threshold:
             image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
         r = self.create_resource(data=image_bytes, title=name)
@@ -454,6 +456,7 @@ class MyDiaryJoplin:
             thumbnail_size=len(image_bytes),
             joplin_resource_id=resource_id,
             created_at=created_at.in_timezone("UTC"),
+            orig_image_hash=orig_image_hash.hexdigest(),
         )
         return mydiary_image
 

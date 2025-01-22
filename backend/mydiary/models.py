@@ -479,6 +479,7 @@ class MyDiaryImageBase(SQLModel):
     thumbnail_size: int
     joplin_resource_id: Optional[str] = Field(index=True, default=None)
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    orig_image_hash: Optional[str] = Field(default=None, index=True)
 
 
 class MyDiaryImage(MyDiaryImageBase, table=True):
