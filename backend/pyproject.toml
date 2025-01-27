@@ -11,7 +11,7 @@ exclude = ["**/database.db", "**/db_backup/*"]
 [tool.poetry.dependencies]
 python = "^3.10"
 python-dotenv = "^1.0.0"
-pydantic = "^2.9.2"
+pydantic = "^2.10.6"
 spotipy = "^2.22.1"
 pocket = "^0.3.6"
 google-api-python-client = "^2.146.0"
