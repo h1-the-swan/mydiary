@@ -69,4 +69,6 @@ function updateDate(val: any) {
     router.push({ query: { dt: newQD } })
 }
 watchEffect(() => (joplinInfoAllDays.value = app.joplinInfoAllDays))
+
+defineExpose({ calendarLoadJoplinInfo })
 </script>

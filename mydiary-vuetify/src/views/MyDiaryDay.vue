@@ -1,7 +1,7 @@
 <template>
     <h1>MyDiaryDay</h1>
     <div class="w-75" style="width: auto">
-        <my-diary-day-date-picker />
+        <my-diary-day-date-picker ref="datePicker" />
     </div>
     <div>
         <g-cal-auth />
@@ -66,7 +66,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, ref, watch, watchEffect } from 'vue'
+import {
+    onMounted,
+    computed,
+    ref,
+    watch,
+    watchEffect,
+    useTemplateRef,
+} from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
 import markdownit from 'markdown-it'
@@ -82,7 +89,6 @@ import GCalAuth from '@/components/GCalAuth.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
 // import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
 import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue'
-import { useAppStore } from '@/store/app'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
@@ -94,6 +100,7 @@ const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const dialog = ref(false)
 const snackbarInit = ref(false)
+const datePicker = useTemplateRef('datePicker')
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
@@ -134,6 +141,7 @@ async function onSaveNote() {
     ).data
     dialog.value = false
     snackbarInit.value = true
+    datePicker.value?.calendarLoadJoplinInfo()
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''
