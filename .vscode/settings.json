@@ -5,13 +5,5 @@
 	],
 	"python.testing.unittestEnabled": false,
 	"python.testing.pytestEnabled": true,
-	"coverage-gutters.coverageBaseDir": "backend",
-	"sqltools.connections": [
-		{
-			"previewLimit": 100,
-			"driver": "SQLite",
-			"name": "mydiary",
-			"database": "\\\\wsl.localhost\\Ubuntu\\home\\hasone\\code\\mydiary\\backend\\mydiary\\database.db"
-		}
-	]
+	"coverage-gutters.coverageBaseDir": "backend"
 }
