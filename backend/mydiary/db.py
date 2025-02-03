@@ -4,7 +4,10 @@ from sqlmodel import create_engine, SQLModel, Session, select, func, Field
 from sqlalchemy import text, inspect
 from . import models
 
-rootdir = os.path.dirname(os.path.abspath(__file__))
+rootdir = os.getenv("MYDIARY_ROOTDIR")
+if not rootdir:
+    rootdir = os.path.dirname(os.path.abspath(__file__))
+
 sqlite_file_name = os.path.join(rootdir, "database.db")
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
@@ -30,9 +33,11 @@ def get_db_status(more=False):
         "db_is_initialized": len(table_names) > 0,
     }
     if more is True:
-        ret.update({
-            "db_table_names": table_names,
-        })
+        ret.update(
+            {
+                "db_table_names": table_names,
+            }
+        )
     return ret
 
 

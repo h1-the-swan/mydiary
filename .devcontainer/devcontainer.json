@@ -2,20 +2,16 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/anaconda
 {
 	"name": "Anaconda (Python 3)",
-	"build": { 
+	"build": {
 		"context": "..",
 		"dockerfile": "Dockerfile"
 	},
-
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
-
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
-
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// "postCreateCommand": "python --version",
-
 	// Configure tool-specific properties.
 	"customizations": {
 		"vscode": {
@@ -23,7 +19,7 @@
 			// You can edit these settings after create using File > Preferences > Settings > Remote.
 			"settings": {
 				"python.pythonPath": "/usr/local/bin/python",
-    				"editor.defaultFormatter": "ms-python.black-formatter",
+				"editor.defaultFormatter": "ms-python.black-formatter",
 				"python.testing.pytestEnabled": true,
 				"python.analysis.indexing": true,
 				"python.analysis.autoImportCompletions": true
@@ -47,8 +43,10 @@
 				"ms-toolsai.datawrangler"
 			]
 		}
+	},
+	"containerEnv": {
+		"MYDIARY_ROOTDIR": "/workspaces/mydiary/backend/mydiary/"
 	}
-
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 }
