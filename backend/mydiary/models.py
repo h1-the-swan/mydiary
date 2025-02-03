@@ -208,6 +208,10 @@ class PocketArticleBase(SQLModel):
     def pocket_url(self) -> str:
         return f"https://getpocket.com/read/{self.id}"
 
+    @property
+    def archived(self) -> bool:
+        return self.status == PocketStatusEnum.ARCHIVED
+
     def to_markdown(self) -> str:
         if self.resolved_title:
             title = self.resolved_title
@@ -227,6 +231,10 @@ class PocketArticle(PocketArticleBase, table=True):
         link_model=PocketArticleTagLink,
         sa_relationship_kwargs={"cascade": "save-update,merge"},
     )
+
+    @property
+    def tags_str(self) -> list[str]:
+        return [tag.name for tag in self.tags]
 
     @classmethod
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
