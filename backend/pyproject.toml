@@ -23,7 +23,7 @@ sqlmodel = "^0.0.22"
 alembic = "1.14.1"
 fastapi = "^0.115.0"
 uvicorn = {extras = ["standard"], version = "^0.34.0"}
-lxml = "^5.3.0"
+lxml = "^5.3.1"
 pylint = "^3.3.0"
 lyricsgenius = "^3.0.1"
 apscheduler = "^3.10.4"
