@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, ref, useTemplateRef, watch, watchEffect } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/store/app'
 import { getDate } from '@/util'
@@ -23,7 +23,8 @@ const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
 const joplinInfoAllDays = ref<any[]>([])
-const calendar = ref<any>(null)
+// const calendar = ref<any>(null)
+const calendar = useTemplateRef<any>('calendar')
 const calendarVisibleDates = computed<Date[]>(() => {
     if (calendar.value == null) {
         return []
@@ -40,6 +41,7 @@ async function calendarLoadJoplinInfo() {
         .toISOString()
         .split('T')[0]
     app.loadJoplinInfoAllDays(minDt, maxDt)
+    app.calendarShouldUpdate = false
 }
 const attributes = computed<AttributeConfig[]>(() => [
     {
@@ -68,7 +70,14 @@ function updateDate(val: any) {
     const newQD = val.toISOString().split('T')[0]
     router.push({ query: { dt: newQD } })
 }
+watchEffect(() => {
+    if (app.calendarShouldUpdate) {
+        calendarLoadJoplinInfo()
+    }
+})
 watchEffect(() => (joplinInfoAllDays.value = app.joplinInfoAllDays))
 
-defineExpose({ calendarLoadJoplinInfo })
+onMounted(() => app.calendarShouldUpdate = true)
+
+defineExpose({ calendarLoadJoplinInfo }) // deprecated
 </script>

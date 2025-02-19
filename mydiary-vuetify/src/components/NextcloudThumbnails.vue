@@ -40,16 +40,19 @@ import {
     nextcloudPhotosAddToJoplin,
 } from '@/api'
 import { computed, ref, watch, watchEffect } from 'vue'
+import { useAppStore } from '@/store/app';
 const props = defineProps<{
     dt: string
     joplinNoteId?: string
 }>()
+// const emit = defineEmits(['nextcloudPhotosSuccess'])
 interface INextCloudThumb {
     url: string
     src: string
     selected: boolean
     existing: boolean // whether this image is already in the joplin note
 }
+const app = useAppStore()
 const nextCloudThumbs = ref<INextCloudThumb[]>([])
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const loading = ref(false)
@@ -116,6 +119,8 @@ async function onSubmit() {
     ).data
     console.log(response.value)
     loading.value = false
+    app.calendarShouldUpdate = true
+    await fetchJoplinNoteImages()
 }
 </script>
 

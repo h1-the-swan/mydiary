@@ -41,6 +41,7 @@ export const useAppStore = defineStore('app', () => {
             await joplinGetInfoAllDays({ min_dt: min_dt, max_dt: max_dt })
         ).data
     }
+    const calendarShouldUpdate = ref<boolean>(false)
 
     const timeZoneChanges = ref<TimeZoneChange[]>()
     async function loadTimeZoneChanges() {
@@ -57,6 +58,7 @@ export const useAppStore = defineStore('app', () => {
         getPerformSongById,
         joplinInfoAllDays,
         loadJoplinInfoAllDays,
+        calendarShouldUpdate,
         timeZoneChanges,
         loadTimeZoneChanges,
     }

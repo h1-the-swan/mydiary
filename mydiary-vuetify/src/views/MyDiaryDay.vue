@@ -89,10 +89,11 @@ import GCalAuth from '@/components/GCalAuth.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
 // import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
 import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue'
+import { useAppStore } from '@/store/app'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
-// const app = useAppStore()
+const app = useAppStore()
 const initMarkdown = ref('')
 const md = markdownit()
 const joplinNoteId = ref('')
@@ -141,7 +142,8 @@ async function onSaveNote() {
     ).data
     dialog.value = false
     snackbarInit.value = true
-    datePicker.value?.calendarLoadJoplinInfo()
+    // datePicker.value?.calendarLoadJoplinInfo()
+    app.calendarShouldUpdate = true
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''
