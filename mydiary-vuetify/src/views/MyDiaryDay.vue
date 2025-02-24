@@ -1,7 +1,7 @@
 <template>
     <h1>MyDiaryDay</h1>
     <div class="w-75" style="width: auto">
-        <my-diary-day-date-picker ref="datePicker" />
+        <my-diary-day-date-picker />
     </div>
     <div>
         <g-cal-auth />
@@ -101,7 +101,7 @@ const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const dialog = ref(false)
 const snackbarInit = ref(false)
-const datePicker = useTemplateRef('datePicker')
+// const datePicker = useTemplateRef('datePicker')
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
