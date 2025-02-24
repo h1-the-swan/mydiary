@@ -1,5 +1,5 @@
 <template>
-    <v-container>
+    <v-container id="performsong-main">
         <v-list>
             <v-list-item>
                 <PerformSongsDropdown
@@ -35,7 +35,28 @@
                 :headers="displayCols"
                 items-per-page="100"
                 :search="search"
-            ></v-data-table>
+            >
+                <template v-slot:item="{ item }">
+                    <tr>
+                        <td>{{ item.id }}</td>
+                        <td>
+                            <router-link
+                                :to="{
+                                    name: 'performSong',
+                                    params: { id: item.id },
+                                    hash: '#performsong-main',
+                                }"
+                            >
+                                {{ item.name }}
+                            </router-link>
+                        </td>
+                        <td>{{ item.artist_name }}</td>
+                        <td>{{ item.created_at }}</td>
+                        <td>{{ item.learned }}</td>
+                        <td>{{ item.learned_dt }}</td>
+                    </tr>
+                </template>
+            </v-data-table>
         </v-card>
     </v-container>
 </template>
