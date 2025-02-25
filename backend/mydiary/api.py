@@ -190,7 +190,7 @@ def scheduled_spotify_save_recent_tracks():
     from mydiary.spotify_connector import MyDiarySpotify
 
     mydiary_spotify = MyDiarySpotify()
-    num_saved = mydiary_spotify.save_recent_tracks_to_database()
+    num_saved = mydiary_spotify.save_recent_tracks_to_database(add_or_update_audio_features=True)
     logger.info(f"{num_saved} recent spotify tracks saved")
 
 

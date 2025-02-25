@@ -28,12 +28,14 @@ logger = root_logger.getChild(__name__)
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
+from spotipy import SpotifyException
 
 from .models import (
     SpotifyTrack,
     SpotifyTrackHistory,
     SpotifyTrackHistoryFrozen,
     SpotifyContextTypeEnum,
+    SpotifyTrackAudioFeatures,
 )
 from .db import engine, Session, select
 
@@ -79,7 +81,7 @@ class MyDiarySpotify:
         track: Union[Dict, SpotifyTrack],
         session: Optional[Session] = None,
         commit: bool = True,
-    ) -> None:
+    ) -> SpotifyTrack:
         if session is None:
             session = self.new_session()
         if isinstance(track, SpotifyTrack):
@@ -95,15 +97,19 @@ class MyDiarySpotify:
         db_track = session.get(SpotifyTrack, spotify_id)
         if db_track is None:
             session.add(spotify_track)
+            ret = spotify_track
         else:
             # db_track = db_track.update_track_data(track_data)
             db_track.name = spotify_track.name
             db_track.artist_name = spotify_track.artist_name
             db_track.uri = spotify_track.uri
             # session.add(db_track)
+            ret = db_track
 
         if commit is True:
             session.commit()
+
+        return ret
 
     def check_existing_history(
         self, spotify_id: str, played_at: datetime, session: Session
@@ -116,19 +122,64 @@ class MyDiarySpotify:
         existing_row = session.exec(stmt).one_or_none()
         return existing_row
 
+    def add_or_update_audio_features_in_database(
+        self,
+        spotify_id: str,
+        session: Session,
+        commit: bool = True,
+    ) -> None:
+        db_track = session.get(SpotifyTrack, spotify_id)
+        db_track.audio_features = SpotifyTrackAudioFeatures.from_api_response(
+            self.sp.audio_features(spotify_id)
+        )
+        db_track.audio_features.updated_at = pendulum.now().in_timezone("UTC")
+        session.add(db_track)
+        if commit is True:
+            session.commit()
+
+    def save_one_track_but_not_history(
+        self,
+        t: Union[Dict, SpotifyTrackHistory],
+        session: Session,
+        commit: bool = True,
+        add_or_update_audio_features: bool = False,
+    ):
+        db_track = self.add_or_update_track_in_database(
+            t, session=session, commit=False
+        )
+        session.add(db_track)
+        if add_or_update_audio_features is True:
+            spotify_id = db_track.spotify_id
+            self.add_or_update_audio_features_in_database(
+                spotify_id, session=session, commit=False
+            )
+        if commit is True:
+            session.commit()
+        return "added_track_but_not_history"
+
     def save_one_track_to_database(
         self,
         t: Union[Dict, SpotifyTrackHistory],
         session: Session,
         commit: bool = True,
         add_or_update_track: bool = True,
-    ) -> SpotifyTrackHistory:
+        add_or_update_audio_features: bool = False,
+    ) -> str:
         if isinstance(t, SpotifyTrackHistory):
             spotify_track_history = t
         else:
             spotify_track_history: SpotifyTrackHistory = (
                 SpotifyTrackHistory.from_spotify_track(t)
             )
+        spotify_id = spotify_track_history.spotify_id
+        if spotify_track_history.played_at is None:
+            if add_or_update_track is True:
+                return self.save_one_track_but_not_history(
+                    t,
+                    session=session,
+                    commit=commit,
+                    add_or_update_audio_features=add_or_update_audio_features,
+                )
         existing_row = self.check_existing_history(
             spotify_id=spotify_track_history.spotify_id,
             played_at=spotify_track_history.played_at,
@@ -143,11 +194,22 @@ class MyDiarySpotify:
         session.add(spotify_track_history)
         if add_or_update_track is True:
             self.add_or_update_track_in_database(t, session=session, commit=False)
+        if add_or_update_audio_features is True:
+            try:
+                self.add_or_update_audio_features_in_database(
+                    spotify_id, session=session, commit=False
+                )
+            except (SpotifyException, AttributeError) as e:
+                logger.error(f"FAILURE when trying to get spotify audio features: {e}")
         if commit is True:
             session.commit()
         return "added"
 
-    def save_recent_tracks_to_database(self, session: Optional[Session] = None) -> int:
+    def save_recent_tracks_to_database(
+        self,
+        session: Optional[Session] = None,
+        add_or_update_audio_features: bool = False,
+    ) -> int:
         logger.info(
             "getting recently played Spotify tracks from API and saving to database"
         )
@@ -157,7 +219,12 @@ class MyDiarySpotify:
         num_added = 0
         num_skipped = 0
         for t in recent_tracks:
-            r = self.save_one_track_to_database(t, session, commit=False)
+            r = self.save_one_track_to_database(
+                t,
+                session,
+                commit=False,
+                add_or_update_audio_features=add_or_update_audio_features,
+            )
             if r == "skipped":
                 num_skipped += 1
             elif r == "added":

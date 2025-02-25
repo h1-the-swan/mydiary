@@ -18,6 +18,7 @@ from mydiary.models import (
     PocketStatusEnum,
     Tag,
     SpotifyTrackHistory,
+    SpotifyTrackAudioFeatures,
     JoplinNote,
     MyDiaryImage,
     MyDiaryWords,
@@ -34,6 +35,11 @@ def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session
     MyDiarySpotify().add_or_update_track_in_database(
         track_json, session=db_session, commit=False
     )
+    fp_audio_featers = Path(rootdir).joinpath("spotifyaudiofeatures.json")
+    audio_features_json = json.loads(fp_audio_featers.read_text())
+    spotify_track_history.track.audio_features = SpotifyTrackAudioFeatures.from_api_response(audio_features_json)
+    spotify_track_history.track.audio_features.updated_at = pendulum.now().in_timezone("UTC")
+    db_session.add(spotify_track_history)
     db_session.commit()
     db_session.refresh(spotify_track_history)
 
@@ -43,6 +49,7 @@ def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session
     assert pendulum.parser.parse(track_json["played_at"]) == pendulum.instance(
         spotify_track_history.played_at
     )
+    assert audio_features_json[0]["key"] == spotify_track_history.track.audio_features.key
 
 
 def test_add_dog_to_database(rootdir: str, db_session: Session):
