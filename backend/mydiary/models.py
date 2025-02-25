@@ -173,6 +173,15 @@ class SpotifyTrackHistoryAudioFeaturesBase(SQLModel):
         index=True
     )  # The time signature ranges from 3 to 7 indicating time signatures of "3/4", to "7/4".
     valence: float = Field(index=True)  # higher values mean happy, cheerful, euphoric
+    updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+
+    @classmethod
+    def from_api_response(cls, resp: Dict | List) -> "SpotifyTrackHistoryAudioFeatures":
+        if isinstance(resp, list):
+            resp = resp[0]
+        spotify_id = resp.get("id")
+        resp["spotify_id"] = spotify_id
+        return cls(**resp)
 
 
 class SpotifyTrackHistoryAudioFeatures(
