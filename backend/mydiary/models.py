@@ -73,9 +73,7 @@ class SpotifyTrackBase(SQLModel):
 
 class SpotifyTrack(SpotifyTrackBase, table=True):
     track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
-    audio_features: "SpotifyTrackHistoryAudioFeatures" = Relationship(
-        back_populates="track"
-    )
+    audio_features: "SpotifyTrackAudioFeatures" = Relationship(back_populates="track")
 
 
 class SpotifyContextTypeEnum(IntEnum):
@@ -155,7 +153,7 @@ class SpotifyTrackHistoryFrozen(SQLModel):
 #     played_at: datetime
 
 
-class SpotifyTrackHistoryAudioFeaturesBase(SQLModel):
+class SpotifyTrackAudioFeaturesBase(SQLModel):
     spotify_id: str = Field(primary_key=True, foreign_key="spotifytrack.spotify_id")
     acousticness: float = Field(index=True)
     danceability: float = Field(index=True)
@@ -176,7 +174,7 @@ class SpotifyTrackHistoryAudioFeaturesBase(SQLModel):
     updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
 
     @classmethod
-    def from_api_response(cls, resp: Dict | List) -> "SpotifyTrackHistoryAudioFeatures":
+    def from_api_response(cls, resp: Dict | List) -> "SpotifyTrackAudioFeatures":
         if isinstance(resp, list):
             resp = resp[0]
         spotify_id = resp.get("id")
@@ -184,9 +182,7 @@ class SpotifyTrackHistoryAudioFeaturesBase(SQLModel):
         return cls(**resp)
 
 
-class SpotifyTrackHistoryAudioFeatures(
-    SpotifyTrackHistoryAudioFeaturesBase, table=True
-):
+class SpotifyTrackAudioFeatures(SpotifyTrackAudioFeaturesBase, table=True):
     track: SpotifyTrack = Relationship(
         back_populates="audio_features", sa_relationship_kwargs={"lazy": "joined"}
     )
