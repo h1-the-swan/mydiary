@@ -73,6 +73,9 @@ class SpotifyTrackBase(SQLModel):
 
 class SpotifyTrack(SpotifyTrackBase, table=True):
     track_history: List["SpotifyTrackHistory"] = Relationship(back_populates="track")
+    audio_features: "SpotifyTrackHistoryAudioFeatures" = Relationship(
+        back_populates="track"
+    )
 
 
 class SpotifyContextTypeEnum(IntEnum):
@@ -150,6 +153,34 @@ class SpotifyTrackHistoryFrozen(SQLModel):
 #     id: Optional[int] = Field(default=None, primary_key=True)
 #     spotify_id: str
 #     played_at: datetime
+
+
+class SpotifyTrackHistoryAudioFeaturesBase(SQLModel):
+    spotify_id: str = Field(primary_key=True, foreign_key="spotifytrack.spotify_id")
+    acousticness: float = Field(index=True)
+    danceability: float = Field(index=True)
+    duration_ms: int = Field(index=True)
+    energy: float = Field(index=True)
+    instrumentalness: float = Field(index=True)
+    key: int = Field(
+        index=True
+    )  # uses standard Pitch Class notation. e.g. 0 = C, 1 = C#/Db, -1 means no key detected
+    liveness: float = Field(index=True)
+    mode: int = Field(index=True)  # Major is 1, minor is 0
+    speechiness: float = Field(index=True)
+    tempo: float = Field(index=True)  # in BPM
+    time_signature: int = Field(
+        index=True
+    )  # The time signature ranges from 3 to 7 indicating time signatures of "3/4", to "7/4".
+    valence: float = Field(index=True)  # higher values mean happy, cheerful, euphoric
+
+
+class SpotifyTrackHistoryAudioFeatures(
+    SpotifyTrackHistoryAudioFeaturesBase, table=True
+):
+    track: SpotifyTrack = Relationship(
+        back_populates="audio_features", sa_relationship_kwargs={"lazy": "joined"}
+    )
 
 
 class PerformSongBase(SQLModel):
