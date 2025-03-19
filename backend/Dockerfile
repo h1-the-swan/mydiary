@@ -1,6 +1,6 @@
 FROM python:3.10
 
-ENV POETRY_VERSION=1.8
+ENV POETRY_VERSION=2.1
 
 # Setup a spot for the api code
 WORKDIR /usr/local/src/app/backend

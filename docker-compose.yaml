@@ -57,8 +57,6 @@ services:
       - NODE_ENV=development
     ports:
         - 3001:3001
-    depends_on:
-      - backend
   proxy-vue:
     image: nginx:1.25
     restart: unless-stopped
