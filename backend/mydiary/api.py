@@ -190,7 +190,7 @@ def scheduled_spotify_save_recent_tracks():
     from mydiary.spotify_connector import MyDiarySpotify
 
     mydiary_spotify = MyDiarySpotify()
-    num_saved = mydiary_spotify.save_recent_tracks_to_database(add_or_update_audio_features=True)
+    num_saved = mydiary_spotify.save_recent_tracks_to_database(add_or_update_audio_features=False)
     logger.info(f"{num_saved} recent spotify tracks saved")
 
 
@@ -212,9 +212,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         scheduled_spotify_save_recent_tracks, CronTrigger.from_crontab("10 * * * *")
     )  # At 10 minutes past the hour
-    scheduler.add_job(
-        scheduled_pocket_sync_new, CronTrigger.from_crontab("4 0,5,10,16,21 * * *")
-    )  # At 01:04 AM, 10:04 AM, 04:04 PM and 09:04 PM
+    # scheduler.add_job(
+    #     scheduled_pocket_sync_new, CronTrigger.from_crontab("4 0,5,10,16,21 * * *")
+    # )  # At 01:04 AM, 10:04 AM, 04:04 PM and 09:04 PM
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
