@@ -7,7 +7,7 @@ WORKDIR /usr/local/src/app/backend
 
 RUN python -m pip install --upgrade pip && python -m pip install pipx && python -m pipx ensurepath && python -m pipx install "poetry==$POETRY_VERSION"
 
-# COPY poetry.lock .
+COPY poetry.lock .
 COPY pyproject.toml .
 
 # Project initialization:
