@@ -21,7 +21,7 @@ SECTIONS = [
 def mydiary_day_from_loaded_db(loaded_db: Session):
     dt = pendulum.datetime(2024, 10, 19, tz="America/New_York")
     day = MyDiaryDay.from_dt(
-        dt=dt, session=loaded_db, spotify_sync=False, gcal_save=False, pocket_sync=False
+        dt=dt, session=loaded_db, spotify_sync=False, gcal_save=False
     )
     yield day
 
@@ -56,7 +56,7 @@ def test_mydiary_day_from_dt():
     # this tests created a day from production database, not test temp db
     dt = pendulum.parse("2022-11-02")
     day = MyDiaryDay.from_dt(
-        dt=dt, spotify_sync=False, gcal_save=False, pocket_sync=False
+        dt=dt, spotify_sync=False, gcal_save=False
     )
     assert dt.is_same_day(day.dt)
     assert len(day.google_calendar_events) > 0

@@ -194,13 +194,6 @@ def scheduled_spotify_save_recent_tracks():
     logger.info(f"{num_saved} recent spotify tracks saved")
 
 
-def scheduled_pocket_sync_new():
-    mydiary_pocket = MyDiaryPocket()
-    result = mydiary_pocket.pocket_sync_new(post_commit=True)
-    logger.info(
-        f"""{result["added"]} pocket articles added to database. {result["updated"]} pocket articles updated."""
-    )
-
 
 scheduler = BackgroundScheduler()
 
@@ -212,9 +205,6 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         scheduled_spotify_save_recent_tracks, CronTrigger.from_crontab("10 * * * *")
     )  # At 10 minutes past the hour
-    # scheduler.add_job(
-    #     scheduled_pocket_sync_new, CronTrigger.from_crontab("4 0,5,10,16,21 * * *")
-    # )  # At 01:04 AM, 10:04 AM, 04:04 PM and 09:04 PM
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
@@ -487,7 +477,6 @@ async def joplin_init_note(
                 dt,
                 joplin_connector=mydiary_joplin,
                 session=session,
-                pocket_sync=False,
                 spotify_sync=False,
                 gcal_save=False,
             )

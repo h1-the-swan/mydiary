@@ -14,20 +14,6 @@ from mydiary.pocket_connector import MyDiaryPocket
 # load_dotenv(find_dotenv())
 
 
-def test_env_loaded():
-    assert "POCKET_CONSUMER_KEY" in os.environ
-    assert "POCKET_ACCESS_TOKEN" in os.environ
-
-
-@pytest.mark.external_api
-def test_pocket_api_call():
-    from mydiary.pocket_connector import MyDiaryPocket
-
-    mydiary_pocket = MyDiaryPocket()
-    r = mydiary_pocket.pocket_instance.get(count=1)
-    assert len(r[0]["list"]) == 1
-
-
 def test_pocket_article(rootdir, caplog, db_session: Session):
     caplog.set_level(logging.DEBUG)
     fp = Path(rootdir).joinpath("pocketitem.json")

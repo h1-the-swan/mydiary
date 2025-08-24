@@ -27,6 +27,8 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
+POCKET_SHUTDOWN_DATE = pendulum.datetime(2025, 7, 8, tz="UTC")
+
 
 def make_markdown_table_header(columns: List[str]) -> str:
     sep = " | "
@@ -76,7 +78,6 @@ class MyDiaryDay:
     def from_dt(
         cls,
         dt: datetime = now().start_of("day"),
-        pocket_sync: bool = False,
         spotify_sync: bool = True,
         gcal_save: bool = True,
         session: Optional[Session] = None,
@@ -108,8 +109,6 @@ class MyDiaryDay:
             images = [link.mydiary_image for link in note.mydiary_image_links]
 
         mydiary_pocket = MyDiaryPocket()
-        if pocket_sync is True:
-            mydiary_pocket.pocket_sync_new(session=session, post_commit=True)
         pocket_articles = mydiary_pocket.get_articles_for_day(dt, session=session)
 
         mydiary_spotify = MyDiarySpotify()
@@ -151,7 +150,6 @@ class MyDiaryDay:
     def init_markdown(self) -> str:
         # md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
         google_calendar_events = self.google_calendar_events_markdown()
-        pocket_articles = self.pocket_articles_markdown()
         spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
         dt_string = self.dt.to_formatted_date_string()
         md = f"# {dt_string}\n\n"
@@ -163,7 +161,9 @@ class MyDiaryDay:
         if self.images:
             md += f"{self.images_markdown()}\n\n"
         md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
-        md += f"## Pocket articles\n\n{pocket_articles}\n\n"
+        if self.dt < POCKET_SHUTDOWN_DATE:
+            pocket_articles = self.pocket_articles_markdown()
+            md += f"## Pocket articles\n\n{pocket_articles}\n\n"
         md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"
         return md
 

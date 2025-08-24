@@ -2,6 +2,8 @@
 
 DESCRIPTION = """Get pocket data using the Pocket API and the pocket library"""
 
+#! Pocket was discontinued in 2025. API connection is deprecated.
+
 import sys, os, time
 from pathlib import Path
 from datetime import date, datetime
@@ -32,6 +34,8 @@ from .models import PocketArticle, PocketArticleUpdate, Tag
 
 # load_dotenv(find_dotenv())
 
+POCKET_SHUTDOWN_DATE = pendulum.datetime(2025, 7, 8, tz="UTC")
+
 
 class MyDiaryPocket:
     def __init__(self, pocket_instance: Optional[Pocket] = None) -> None:
@@ -48,9 +52,11 @@ class MyDiaryPocket:
     def get_articles_for_day(
         self, dt: datetime, session: Optional[Session] = None
     ) -> Dict[str, List[PocketArticle]]:
+        dt = pendulum.instance(dt)
+        if dt > POCKET_SHUTDOWN_DATE:
+            return {"added": [], "read": [], "favorited": []}
         if session is None:
             session = self.new_session()
-        dt = pendulum.instance(dt)
         start = dt.start_of("day").in_timezone("UTC")
         end = dt.end_of("day").in_timezone("UTC")
         articles = {}
@@ -66,63 +72,6 @@ class MyDiaryPocket:
             r = session.exec(stmt).all()
             articles[k] = r
         return articles
-
-    def yield_all_articles_from_api_json(
-        self,
-        state: str = "all",
-        detailType: str = "complete",
-        since: Optional[int] = None,
-        offset: int = 0,
-        count: int = 30,
-    ) -> Generator[Dict, None, None]:
-        while True:
-            r = self.pocket_instance.get(
-                state=state,
-                detailType=detailType,
-                since=since,
-                offset=offset,
-                count=count,
-            )
-            if r[0]["status"] != 1:
-                break
-            this_total = r[0].get("total")
-            if this_total:
-                this_total = int(this_total)
-                if count + offset > this_total:
-                    break
-            items_dict: Dict = r[0]["list"]
-            if len(items_dict) == 0:
-                break
-            for item in items_dict.values():
-                yield item
-
-            offset += count
-
-    def yield_all_articles_from_api(
-        self,
-        state: str = "all",
-        detailType: str = "complete",
-        since: Optional[int] = None,
-        offset: int = 0,
-        count: int = 30,
-    ) -> Generator[PocketArticle, None, None]:
-        for item in self.yield_all_articles_from_api_json(
-            state=state, detailType=detailType, since=since, offset=offset, count=count
-        ):
-            yield PocketArticle.from_pocket_item(item)
-
-    def get_all_articles_from_api(
-        self,
-        state: str = "all",
-        detailType: str = "complete",
-        since: Optional[int] = None,
-        count: int = 5000,
-    ) -> List[PocketArticle]:
-        return list(
-            self.yield_all_articles_from_api(
-                state=state, detailType=detailType, since=since, count=count
-            )
-        )
 
     def collect_tags(
         self,
@@ -216,63 +165,3 @@ class MyDiaryPocket:
         if post_commit is True:
             session.commit()
         return db_article
-
-    def pocket_sync_new(
-        self,
-        session: Optional[Session] = None,
-        post_commit: bool = True,
-        since: Optional[Union[datetime, int]] = None,
-    ) -> Dict[str, int]:
-        # if since parameter is not specified, we will use the last sync time
-        if session is None:
-            session = self.new_session()
-        if since is None:
-            # get time of last sync
-            stmt = select(PocketArticle).order_by(
-                desc(PocketArticle.time_last_api_sync)
-            )
-            r = session.exec(stmt).first()
-            since = int(r.time_last_api_sync.timestamp())
-        elif isinstance(since, datetime):
-            since = int(since.timestamp())
-        else:
-            since = int(since)
-        now = pendulum.now().in_timezone("UTC")
-        added = 0
-        updated = 0
-        for article_json in self.yield_all_articles_from_api_json(since=since):
-            article_id = int(article_json["item_id"])
-            db_article = session.get(PocketArticle, article_id)
-            if db_article is None:
-                # new article
-                article_new = PocketArticle.from_pocket_item(article_json)
-                article_new.time_last_api_sync = now
-                session.merge(article_new)
-                added += 1
-            else:
-                # update article
-                if article_json["status"] == "2":
-                    # deleted article
-                    article_update = PocketArticleUpdate.model_validate(
-                        {"status": 2, "time_last_api_sync": now}
-                    )
-                else:
-                    article_json["time_last_api_sync"] = now
-                    article_update = PocketArticleUpdate.model_validate(article_json)
-                    article_update.pocket_tags = list(article_json["tags"].keys())
-                self.update_article(
-                    session=session,
-                    db_article=db_article,
-                    article_update=article_update,
-                    post_commit=False,
-                )
-                updated += 1
-        if post_commit is True:
-            session.commit()
-        logger.debug(
-            f"{added} pocket articles added to database. {updated} pocket articles updated."
-        )
-        return {
-            "added": added,
-            "updated": updated,
-        }
