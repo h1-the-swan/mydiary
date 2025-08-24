@@ -2,7 +2,7 @@
 # environment where the JavaScript build process can run. In production the
 # files built by this process are served from disk, while in development a HTTP
 # server that's distributed with the UI build tools is used.
-ARG VARIANT=18
+ARG VARIANT=20
 FROM node:${VARIANT}
 
 # Setup a spot for our code

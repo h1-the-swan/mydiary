@@ -29,7 +29,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.5.5",
     "@types/webfontloader": "^1.6.38",
-    "@vitejs/plugin-vue": "^5.1.4",
+    "@vitejs/plugin-vue": "^6.0.1",
     "@vue/eslint-config-typescript": "^14.3.0",
     "eslint": "^9.19.0",
     "eslint-plugin-vue": "^9.28.0",
