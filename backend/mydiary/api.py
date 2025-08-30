@@ -237,7 +237,7 @@ async def get_gcal_auth_url():
 
     mydiary_gcal = MyDiaryGCal(init_service=False)
     mydiary_gcal._init_flow()
-    return mydiary_gcal.flow.authorization_url()[0]
+    return Response(mydiary_gcal.flow.authorization_url()[0])
 
 
 @app.post("/gcal/refresh_token", operation_id="refreshGCalToken")
@@ -419,7 +419,7 @@ async def get_spotify_image_url(
     mydiary_spotify = MyDiarySpotify()
     sp = mydiary_spotify.sp
     track = sp.track(track_id)
-    return track["album"]["images"][0]["url"]
+    return Response(track["album"]["images"][0]["url"].strip('"'))
 
 
 @app.post(
@@ -450,7 +450,7 @@ def joplin_get_note_id(
     #     raise RuntimeError(
     #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
     #     )
-    return existing_id
+    return Response(existing_id)
 
 
 @app.post(
