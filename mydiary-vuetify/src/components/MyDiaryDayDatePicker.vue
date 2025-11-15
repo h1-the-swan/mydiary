@@ -6,13 +6,20 @@
         :attributes="attributes"
         expanded
     />
-    <v-btn @click="calendarLoadJoplinInfo">
+    <v-btn @click="app.calendarShouldUpdate = true">
         refresh diary details for calendar
     </v-btn>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useTemplateRef, watch, watchEffect } from 'vue'
+import {
+    computed,
+    onMounted,
+    ref,
+    useTemplateRef,
+    watch,
+    watchEffect,
+} from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '@/store/app'
 import { getDate } from '@/util'
@@ -77,7 +84,7 @@ watchEffect(() => {
 })
 watchEffect(() => (joplinInfoAllDays.value = app.joplinInfoAllDays))
 
-onMounted(() => app.calendarShouldUpdate = true)
+onMounted(() => (app.calendarShouldUpdate = true))
 
-defineExpose({ calendarLoadJoplinInfo }) // deprecated
+defineExpose({ calendarLoadJoplinInfo }) // deprecated (the export, not the function)
 </script>

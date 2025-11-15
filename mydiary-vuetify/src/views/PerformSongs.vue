@@ -103,9 +103,9 @@ watchEffect(async () => {
 })
 watchEffect(async () => {
     if (performSong.value && performSong.value.spotify_id) {
-        imageUrl.value = await getSpotifyImageUrl(
-            performSong.value.spotify_id
-        ).then((res) => res.data)
+        imageUrl.value = await getSpotifyImageUrl(performSong.value.spotify_id)
+            .then((res) => res.data)
+        imageUrl.value = imageUrl.value.replace(/"/g, '')
     }
 })
 </script>
