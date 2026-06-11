@@ -29,10 +29,12 @@ def test_has_token(joplin_client: MyDiaryJoplin):
     assert joplin_client.token != ""
 
 
+@pytest.mark.external_api
 def test_server_is_running(joplin_client: MyDiaryJoplin):
     assert joplin_client.server_is_running()
 
 
+@pytest.mark.external_api
 def test_joplin_note_from_api(joplin_client: MyDiaryJoplin):
     dt_str = "2022-01-14"
     dt = pendulum.parse(dt_str)
@@ -45,6 +47,7 @@ def test_joplin_note_from_api(joplin_client: MyDiaryJoplin):
     assert notebook.title == "2022"
 
 
+@pytest.mark.external_api
 def test_create_resource(resource, image_bytes):
     r = resource(image_bytes)
     j = r.json()

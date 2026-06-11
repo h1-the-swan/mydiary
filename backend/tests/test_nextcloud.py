@@ -1,6 +1,7 @@
 import os
 import io
 import pendulum
+import pytest
 
 from PIL import Image, UnidentifiedImageError
 
@@ -22,6 +23,7 @@ def test_env_loaded():
     assert "NEXTCLOUD_PASSWORD" in os.environ
 
 
+@pytest.mark.external_api
 def test_image_preview():
     path_to_file = "H1phone_sync/2022/06/22-06-24 19-07-01 4885.jpg"
     mydiary_nextcloud = MyDiaryNextcloud()
@@ -29,6 +31,7 @@ def test_image_preview():
     assert verify_img_file(image_bytes) is True
 
 
+@pytest.mark.external_api
 def test_get_filepaths_for_day():
     mydiary_nextcloud = MyDiaryNextcloud()
     dt = pendulum.parse("2022-06-24")

@@ -21,3 +21,11 @@ venv.bak/
 .env.backup*
 
 .pytest_cache
+
+notebooks/
+notebooks_*/
+token_cache/
+**/db_backup/
+database.db
+**/*backup*.db
+**/*Copy*.db

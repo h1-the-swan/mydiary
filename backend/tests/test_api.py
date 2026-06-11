@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 import pendulum
 import pytest
 from pathlib import Path
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, PerformSong, PocketArticle, PocketStatusEnum
+from mydiary.models import Dog, PerformSong, PocketArticle, PocketStatusEnum, TimeZoneChange
 from mydiary.api import app, get_session
 
 
@@ -29,6 +30,17 @@ def client_fixture(session: Session):
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
+
+
+def test_health_check(client: TestClient):
+    response = client.get("/testhealthcheck")
+    assert response.status_code == 200
+
+
+def test_db_status(client: TestClient):
+    response = client.get("/db_status")
+    assert response.status_code == 200
+    assert response.json()["db_is_initialized"] is True
 
 
 class TestPocketArticle:
@@ -56,8 +68,10 @@ class TestPocketArticle:
         assert data[0]["url"] == article.url
         assert data[0]["favorite"] == article.favorite
         assert data[0]["status"] == article.status
-        assert pendulum.parse(data[0]["time_added"]).timestamp() == article.time_added.timestamp()
-        assert pendulum.parse(data[0]["time_updated"]).timestamp() == article.time_updated.timestamp()
+        # time_added/time_updated are stored as naive local datetimes (from datetime.fromtimestamp).
+        # Compare components directly — pendulum.parse() would wrongly assume UTC.
+        assert datetime.fromisoformat(data[0]["time_added"]) == article.time_added
+        assert datetime.fromisoformat(data[0]["time_updated"]) == article.time_updated
         # assert pendulum.parse(data[0]["time_read"]).timestamp() == article.time_read.timestamp()
         # assert pendulum.parse(data[0]["time_favorited"]).timestamp() == article.time_favorited.timestamp()
         assert data[0]["time_read"] is None
@@ -106,6 +120,10 @@ class TestPocketArticle:
         assert tags[1]["is_pocket_tag"] is True
         assert tags[2]["name"] == "quickbites"
         assert tags[2]["is_pocket_tag"] is True
+
+    def test_update_pocket_article_missing(self, client: TestClient):
+        response = client.patch("/pocket/articles/99999", json={"resolved_title": "X"})
+        assert response.status_code == 404
 
     def test_update_pocket_article_from_json(
         self, rootdir, session: Session, client: TestClient
@@ -156,6 +174,83 @@ class TestPocketArticle:
         assert db_article.time_added.day == 4
         assert db_article.time_read.day == 8
         assert db_article.raindrop_id == raindrop_id
+
+    def test_filter_by_status(self, session: Session, client: TestClient):
+        unread = PocketArticle(
+            id=1, given_title="Unread", resolved_title="Unread",
+            url="https://example.com/1", favorite=False, status=PocketStatusEnum.UNREAD,
+        )
+        archived = PocketArticle(
+            id=2, given_title="Archived", resolved_title="Archived",
+            url="https://example.com/2", favorite=False, status=PocketStatusEnum.ARCHIVED,
+        )
+        session.add(unread)
+        session.add(archived)
+        session.commit()
+
+        response = client.get("/pocket/articles", params={"status": 0})
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data) == 1
+        assert data[0]["resolved_title"] == "Unread"
+
+        response = client.get("/pocket/articles", params={"status": 1})
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["resolved_title"] == "Archived"
+
+    def test_filter_by_year(self, session: Session, client: TestClient):
+        article_2021 = PocketArticle(
+            id=1, given_title="Old Article", resolved_title="Old Article",
+            url="https://example.com/1", favorite=False, status=PocketStatusEnum.UNREAD,
+            time_added=pendulum.datetime(2021, 6, 1, tz="UTC"),
+        )
+        article_2023 = PocketArticle(
+            id=2, given_title="New Article", resolved_title="New Article",
+            url="https://example.com/2", favorite=False, status=PocketStatusEnum.UNREAD,
+            time_added=pendulum.datetime(2023, 6, 1, tz="UTC"),
+        )
+        session.add(article_2021)
+        session.add(article_2023)
+        session.commit()
+
+        response = client.get("/pocket/articles", params={"year": 2021})
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data) == 1
+        assert data[0]["resolved_title"] == "Old Article"
+
+        response = client.get("/pocket/articles", params={"year": 2023})
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["resolved_title"] == "New Article"
+
+    def test_filter_by_date_range(self, session: Session, client: TestClient):
+        jan = PocketArticle(
+            id=1, given_title="January", resolved_title="January",
+            url="https://example.com/1", favorite=False, status=PocketStatusEnum.UNREAD,
+            time_added=pendulum.datetime(2023, 1, 15, tz="UTC"),
+        )
+        mar = PocketArticle(
+            id=2, given_title="March", resolved_title="March",
+            url="https://example.com/2", favorite=False, status=PocketStatusEnum.UNREAD,
+            time_added=pendulum.datetime(2023, 3, 15, tz="UTC"),
+        )
+        jun = PocketArticle(
+            id=3, given_title="June", resolved_title="June",
+            url="https://example.com/3", favorite=False, status=PocketStatusEnum.UNREAD,
+            time_added=pendulum.datetime(2023, 6, 15, tz="UTC"),
+        )
+        session.add(jan)
+        session.add(mar)
+        session.add(jun)
+        session.commit()
+
+        response = client.get("/pocket/articles", params={"dateMin": "2023-02-01", "dateMax": "2023-05-01"})
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data) == 1
+        assert data[0]["resolved_title"] == "March"
 
     # def test_read_perform_song_missing(self, session: Session, client: TestClient):
     #     perform_song_id = 11
@@ -445,3 +540,53 @@ class TestRecipe:
     #     assert response.status_code == 200
 
     #     assert dog_in_db is None
+
+
+class TestTimeZoneChange:
+    def test_create_timezone_change(self, client: TestClient):
+        response = client.post(
+            "/tzchange/",
+            params={
+                "dt": "2024-03-10T02:00:00",
+                "tz_before": "America/New_York",
+                "tz_after": "America/Chicago",
+            },
+        )
+        assert response.status_code == 200
+        d = response.json()
+        assert d["tz_before"] == "America/New_York"
+        assert d["tz_after"] == "America/Chicago"
+        assert d["changed_at"] is not None
+
+    def test_read_timezone_changes_sorted(self, session: Session, client: TestClient):
+        later = pendulum.datetime(2024, 6, 1, 12, 0, 0, tz="UTC")
+        earlier = pendulum.datetime(2024, 3, 10, 7, 0, 0, tz="UTC")
+        # insert out-of-order
+        session.add(TimeZoneChange(changed_at=later, tz_before="America/Chicago", tz_after="America/New_York"))
+        session.add(TimeZoneChange(changed_at=earlier, tz_before="America/New_York", tz_after="America/Chicago"))
+        session.commit()
+
+        response = client.get("/tzchange/")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert pendulum.parse(data[0]["changed_at"]) < pendulum.parse(data[1]["changed_at"])
+        assert data[0]["tz_before"] == "America/New_York"
+        assert data[1]["tz_before"] == "America/Chicago"
+
+    def test_create_and_read_roundtrip(self, client: TestClient):
+        client.post(
+            "/tzchange/",
+            params={"dt": "2024-03-10T02:00:00", "tz_before": "America/New_York", "tz_after": "America/Chicago"},
+        )
+        client.post(
+            "/tzchange/",
+            params={"dt": "2024-11-03T02:00:00", "tz_before": "America/Chicago", "tz_after": "America/New_York"},
+        )
+        response = client.get("/tzchange/")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert pendulum.parse(data[0]["changed_at"]) < pendulum.parse(data[1]["changed_at"])
+        assert data[0]["tz_after"] == "America/Chicago"
+        assert data[1]["tz_after"] == "America/New_York"

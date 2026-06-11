@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from mydiary.markdown_edits import MarkdownDoc, MarkdownSection
 
+
+
 markdown_text = """
 # sync_test_note
 
@@ -57,3 +59,46 @@ def test_update_body(rootdir):
     assert any(results)  # at least one section was updated
 
     assert md1.txt == txt2
+
+
+def test_code_block_protects_headings():
+    md_doc = MarkdownDoc(markdown_text)
+    assert len(md_doc.sections) == 4
+    titles = [sec.title for sec in md_doc.sections]
+    assert "comment" not in titles  # ## comment inside ``` block must not become a section
+    assert "heading 2" in titles    # the section containing the code block is still present
+
+
+def test_update_force():
+    sec = MarkdownSection(["## heading", "", "original line", ""], title="heading")
+    result = sec.update("## heading\n\nreplacement\n", force=True)
+    assert result == "updated"
+    assert sec.content == "replacement"
+
+
+def test_update_conflict_raises():
+    sec = MarkdownSection(["## heading", "", "original line", ""], title="heading")
+    with pytest.raises(RuntimeError):
+        sec.update("## heading\n\nreplacement\n")
+
+
+def test_update_no_op_empty_new_content():
+    sec = MarkdownSection(["## heading", "", "existing content", ""], title="heading")
+    result = sec.update("## heading\n\n\n")
+    assert result == "no update"
+    assert sec.content == "existing content"
+
+
+def test_update_no_op_identical():
+    txt = "## heading\n\nexisting content\n"
+    sec = MarkdownSection(txt.split("\n"), title="heading")
+    result = sec.update(txt)
+    assert result == "no update"
+
+
+def test_get_resource_ids():
+    sec = MarkdownSection(
+        ["## images", "", "![](:/abc123)", "", "![](:/def456)", ""],
+        title="images",
+    )
+    assert sec.get_resource_ids() == ["abc123", "def456"]

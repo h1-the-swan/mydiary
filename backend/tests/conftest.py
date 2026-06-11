@@ -1,11 +1,12 @@
 import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import GoogleCalendarEvent, PocketArticle, MyDiaryWords
+from mydiary.models import GoogleCalendarEvent, PocketArticle, MyDiaryWords, SpotifyContextTypeEnum
 from mydiary.googlecalendar_connector import MyDiaryGCal
 from mydiary.pocket_connector import MyDiaryPocket
 from mydiary.spotify_connector import MyDiarySpotify
@@ -77,9 +78,17 @@ def loaded_db(rootdir: str, db_session: Session):
         datadir.joinpath("spotify_tracks.json").read_text()
     )
     mydiary_spotify = MyDiarySpotify()
-    for t in spotify_tracks_json:
-        # TODO: mock or bypass spotify api call
-        mydiary_spotify.save_one_track_to_database(t, session=db_session, commit=False)
+
+    def _fake_hydrate_context(context_uri: str, force: bool = False):
+        return {
+            "context_uri": context_uri,
+            "context_name": "Test Playlist",
+            "context_type": SpotifyContextTypeEnum.playlist.value,
+        }
+
+    with patch.object(mydiary_spotify, "hydrate_context", _fake_hydrate_context):
+        for t in spotify_tracks_json:
+            mydiary_spotify.save_one_track_to_database(t, session=db_session, commit=False)
     db_session.commit()
 
     yield db_session

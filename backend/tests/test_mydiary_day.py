@@ -52,6 +52,7 @@ def mydiary_day_joplin_initialized(
 #     yield loaded_db
 
 
+@pytest.mark.external_api
 def test_mydiary_day_from_dt():
     # this tests created a day from production database, not test temp db
     dt = pendulum.parse("2022-11-02")
@@ -74,6 +75,7 @@ def test_mydiary_day_from_loaded_db(day: MyDiaryDay):
     assert "Test words." in md
 
 
+@pytest.mark.external_api
 def test_mydiary_day_loaded_db_joplin(
     loaded_db: Session,
     joplin_client: MyDiaryJoplin,
@@ -89,6 +91,7 @@ def test_mydiary_day_loaded_db_joplin(
     assert db_note.md_note.txt == note.md_note.txt
 
 
+@pytest.mark.external_api
 def test_add_images(
     rootdir: str,
     joplin_client: MyDiaryJoplin,
@@ -148,6 +151,7 @@ def test_add_images(
             joplin_client.delete_resource(resource_id, force=True)
 
 
+@pytest.mark.external_api
 def test_alter_note_and_sync(
     joplin_client: MyDiaryJoplin,
     loaded_db: Session,

@@ -77,3 +77,53 @@ def test_update_article(rootdir: str, db_session: Session):
     assert "news" in tag_names
     assert "quickbites" in tag_names
     assert "tagupdate" in tag_names
+
+
+def _minimal_pocket_item(**overrides):
+    base = {
+        "item_id": 1,
+        "given_title": "Given Title",
+        "resolved_title": "Resolved Title",
+        "resolved_url": "https://example.com/article",
+        "favorite": "0",
+        "status": "0",
+        "time_added": "1609459200",
+        "time_updated": "1609459200",
+        "time_read": "0",
+        "time_favorited": "0",
+        "word_count": "500",
+        "listen_duration_estimate": "193",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_pocket_article_no_tags():
+    item = _minimal_pocket_item()  # no "tags" key
+    article = PocketArticle.from_pocket_item(item)
+    assert article.tags == []
+
+    item_empty_tags = _minimal_pocket_item(tags={})
+    article2 = PocketArticle.from_pocket_item(item_empty_tags)
+    assert article2.tags == []
+
+
+def test_pocket_article_to_markdown_title_fallback():
+    # resolved_title takes precedence when both are set
+    item = _minimal_pocket_item(given_title="Given Title", resolved_title="Resolved Title")
+    article = PocketArticle.from_pocket_item(item)
+    md = article.to_markdown()
+    assert "Resolved Title" in md
+    assert "Given Title" not in md
+
+    # falls back to given_title when resolved_title is empty
+    item2 = _minimal_pocket_item(given_title="Given Title", resolved_title="")
+    article2 = PocketArticle.from_pocket_item(item2)
+    md2 = article2.to_markdown()
+    assert "Given Title" in md2
+
+    # falls back to "Unknown title" when both are empty
+    item3 = _minimal_pocket_item(given_title="", resolved_title="")
+    article3 = PocketArticle.from_pocket_item(item3)
+    md3 = article3.to_markdown()
+    assert "Unknown title" in md3

@@ -2,6 +2,7 @@ import os, json
 from pathlib import Path
 
 import pendulum
+import pytest
 from mydiary.models import GoogleCalendarEvent
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -16,6 +17,7 @@ def test_env_loaded():
     assert "GOOGLECALENDAR_TOKEN_CACHE" in os.environ
 
 
+@pytest.mark.external_api
 def test_gcal_api_call():
     dt = pendulum.datetime(year=2018, month=8, day=30, tz="America/Los_Angeles")
     events = MyDiaryGCal().get_events_for_day(dt)

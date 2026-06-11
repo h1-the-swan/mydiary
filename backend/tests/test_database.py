@@ -81,28 +81,6 @@ def test_add_gcal_event_to_database(rootdir: str, db_session: Session):
 
 
 class TestPocketArticleDatabase:
-    def test_add_pocket_article_to_database(self, rootdir: str, db_session: Session):
-        fp = Path(rootdir).joinpath("pocketitem.json")
-        article_json = json.loads(fp.read_text())
-        article = PocketArticle.from_pocket_item(article_json)
-        now = pendulum.now(tz="UTC")
-        article.time_last_api_sync = now
-        db_session.add(article)
-        db_session.commit()
-
-        db_article = db_session.get(PocketArticle, article.id)
-        assert db_article.status == PocketStatusEnum.UNREAD
-        assert db_article.favorite is False
-        assert db_article.word_count == 398
-        assert db_article.listen_duration_estimate == 154
-        assert db_article.time_added.year == 2021
-        assert db_article.time_last_api_sync.timestamp() == now.timestamp()
-
-        tag_names = [tag.name for tag in db_article.tags]
-        assert "internet" in tag_names
-        assert "news" in tag_names
-        assert "quickbites" in tag_names
-
     def test_add_pocket_article_existing_tag(self, rootdir: str, db_session: Session):
         tag_1 = Tag(name="internet")
         tag_2 = Tag(name="news")
@@ -212,8 +190,9 @@ class TestMyDiaryWords:
         assert db_words.joplin_note_id == note_id
         assert db_words.note_title == note_title
         assert db_words.txt == txt
-        assert db_words.created_at.timestamp() == now.timestamp()
-        assert db_words.updated_at.timestamp() == now.timestamp()
+        # SQLite strips timezone info; compare naive components, not absolute timestamps
+        assert db_words.created_at == now.naive()
+        assert db_words.updated_at == now.naive()
 
 
 class TestJoplinNoteDatabase:
@@ -253,15 +232,16 @@ class TestJoplinNoteDatabase:
         assert db_note.parent_id == self.JOPLIN_TEST_NOTEBOOK_ID
         assert db_note.title == "2022-11-02"
         assert db_note.body == note_body
-        assert db_note.created_time.timestamp() == now.timestamp()
-        assert db_note.updated_time.timestamp() == now.timestamp()
+        # SQLite strips timezone info; compare naive components, not absolute timestamps
+        assert db_note.created_time == now.naive()
+        assert db_note.updated_time == now.naive()
 
         assert db_note.words.joplin_note_id == note_id
         assert db_note.words.note_title == "2022-11-02"
         words_txt = joplin_note.md_note.get_section_by_title("words").get_content()
         assert db_note.words.txt == words_txt
-        assert db_note.words.created_at.timestamp() == now.timestamp()
-        assert db_note.words.updated_at.timestamp() == now.timestamp()
+        assert db_note.words.created_at == now.naive()
+        assert db_note.words.updated_at == now.naive()
         hash = hashlib.md5()
         hash.update(words_txt.encode("utf-8"))
         assert db_note.words.hash == hash.hexdigest()

@@ -332,8 +332,7 @@ def read_pocket_articles(
         .order_by(desc(PocketArticle.time_updated))
     )
     if status is not None:
-        # stmt = stmt.where(PocketArticle.status==status)
-        stmt = stmt.where(PocketArticle.status.in_(status))
+        stmt = stmt.where(PocketArticle.status.in_([PocketStatusEnum(s) for s in status]))
     if tags:
         for t in tags.split(","):
             stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
@@ -363,10 +362,10 @@ def update_pocket_article(
     article_id: int,
     article: PocketArticleUpdate,
 ):
-    mydiary_pocket = MyDiaryPocket()
     db_article = session.get(PocketArticle, article_id)
     if not db_article:
         raise HTTPException(status_code=404, detail="PocketArticle not found")
+    mydiary_pocket = MyDiaryPocket()
     db_article = mydiary_pocket.update_article(
         db_article=db_article,
         article_update=article,

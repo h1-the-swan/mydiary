@@ -3,6 +3,7 @@ import pytest
 from pathlib import Path
 import pendulum
 from mydiary.models import SpotifyTrack, SpotifyTrackHistory
+from mydiary.spotify_connector import normalize_spotify_id
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -27,6 +28,25 @@ def test_spotify_api_call():
     assert cached_token is not None
     r = mydiary_spotify.sp.current_user_recently_played()
     assert "items" in r
+
+
+@pytest.mark.parametrize("input_id,expected", [
+    ("4oGTdOClZUxcM2H3UmXlwL", "4oGTdOClZUxcM2H3UmXlwL"),
+    ("spotify:track:4oGTdOClZUxcM2H3UmXlwL", "4oGTdOClZUxcM2H3UmXlwL"),
+    ("https://open.spotify.com/track/4oGTdOClZUxcM2H3UmXlwL", "4oGTdOClZUxcM2H3UmXlwL"),
+    ("https://open.spotify.com/track/4oGTdOClZUxcM2H3UmXlwL?si=abc123def", "4oGTdOClZUxcM2H3UmXlwL"),
+])
+def test_normalize_spotify_id(input_id, expected):
+    assert normalize_spotify_id(input_id) == expected
+
+
+@pytest.mark.parametrize("bad_id", [
+    "https://example.com/track/4oGTdOClZUxcM2H3UmXlwL",
+    "foo:track:4oGTdOClZUxcM2H3UmXlwL",
+])
+def test_normalize_spotify_id_invalid(bad_id):
+    with pytest.raises(ValueError):
+        normalize_spotify_id(bad_id)
 
 
 def test_spotify_track(rootdir):
