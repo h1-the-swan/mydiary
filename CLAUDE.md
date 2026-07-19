@@ -86,15 +86,21 @@ alembic revision --autogenerate -m "REVISION DESCRIPTION"
 alembic upgrade head
 ```
 
-### API client codegen (from `mydiary-vuetify/`)
+### API client codegen
 
-After changing any route in `api.py`:
+After changing any route in `api.py`, run **inside the docker container** (with the compose stack up):
 
 ```sh
-npm run generateClientAPI
+docker compose exec mydiary-vuetify npm run generateClientAPI
 ```
 
-This fetches the OpenAPI JSON from the running backend and regenerates `src/api.ts`.
+This fetches the OpenAPI JSON from the running backend and regenerates `src/api.ts` (which syncs to the host via the `src/` volume mount). Prefer running it in the container — the default OpenAPI URL (`http://backend:8888`) only resolves on the compose network, and the backend's port 8888 is not mapped to the host.
+
+Alternatively, run it on the host (from `mydiary-vuetify/`) by pointing `OPENAPI_URL` at the backend through the nginx proxy:
+
+```sh
+OPENAPI_URL=http://localhost:8086/api/generate_openapi_json npm run generateClientAPI
+```
 
 ## Environment Variables
 
