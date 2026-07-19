@@ -79,8 +79,7 @@ class SpotifyTrackHistoryCreate(SpotifyTrackHistoryBase):
 
 
 class SpotifyTrackHistoryRead(SpotifyTrackHistoryBase):
-    # id: int
-    id_: int = Field(alias="id")
+    id: int
     track: SpotifyTrackBase
 
 
