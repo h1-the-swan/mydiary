@@ -27,11 +27,10 @@ services:
       - GOOGLECALENDAR_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlecalendar_token.json
       - GOOGLECALENDAR_CREDENTIALS_FILE=/usr/local/src/app/backend/token_cache/googlecalendar_credentials.json
       - GOOGLEPHOTOS_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlephotos_token.json
-      - JOPLIN_BASE_URL=http://host.docker.internal:41185
+      # no port: the backend scans Joplin's port range (41184-41194) and
+      # finds the data API wherever it landed
+      - JOPLIN_BASE_URL=http://host.docker.internal
     # command: ["main:app", "--host", "0.0.0.0", "--reload"]
-    ports:
-      - 41184:41184
-    #     - 8888:8888
   mydiary-vuetify:
     build: ./mydiary-vuetify
     # We can't mount the entire UI directory, since JavaScript dependencies

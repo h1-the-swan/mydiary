@@ -3,6 +3,7 @@
 DESCRIPTION = """Joplin API (local instance)"""
 
 import sys, os, time, json, re
+from urllib.parse import urlsplit
 import requests
 import subprocess
 import hashlib
@@ -26,9 +27,43 @@ logger = root_logger.getChild(__name__)
 
 # load_dotenv(find_dotenv())
 
-JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
+JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost"
 JOPLIN_AUTH_TOKEN = os.environ.get("JOPLIN_AUTH_TOKEN")
 JOPLIN_NOTEBOOK_ID = os.environ.get("JOPLIN_NOTEBOOK_ID", None)
+
+# Joplin's data API claims the first free port in 41184-41194, so a port
+# hardcoded in JOPLIN_BASE_URL goes stale whenever something else grabs the
+# default 41184 first. If JOPLIN_BASE_URL has no port, scan that range and
+# identify the service by its documented ping response. An explicit port in
+# JOPLIN_BASE_URL disables the scan.
+JOPLIN_PORT_SCAN_RANGE = range(41184, 41195)
+
+_discovered_base_url: Optional[str] = None
+
+
+def discover_joplin_base_url(force: bool = False) -> str:
+    global _discovered_base_url
+    if urlsplit(JOPLIN_BASE_URL).port is not None:
+        return JOPLIN_BASE_URL.rstrip("/")
+    if _discovered_base_url is not None and force is False:
+        return _discovered_base_url
+    host = JOPLIN_BASE_URL.rstrip("/")
+    for port in JOPLIN_PORT_SCAN_RANGE:
+        url = f"{host}:{port}"
+        try:
+            r = requests.get(f"{url}/ping", timeout=1)
+        except requests.exceptions.RequestException:
+            continue
+        if r.ok and r.text.strip() == "JoplinClipperServer":
+            logger.info(f"discovered Joplin data API at {url}")
+            _discovered_base_url = url
+            return url
+    logger.warning(
+        f"could not find a Joplin data API on {host} ports "
+        f"{JOPLIN_PORT_SCAN_RANGE.start}-{JOPLIN_PORT_SCAN_RANGE.stop - 1}; "
+        f"falling back to port {JOPLIN_PORT_SCAN_RANGE.start}"
+    )
+    return f"{host}:{JOPLIN_PORT_SCAN_RANGE.start}"
 
 # for testing purposes. we'll probably want to get this from an environment variable.
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
@@ -56,7 +91,7 @@ class MyDiaryJoplin:
     ) -> None:
         # ! Don't use more than one level of subnotebooks (i.e., don't use subsubnotebooks). it's hard to work with.
         # subnotebooks are by year (so each will contain 365-366 diary entries)
-        self.base_url = JOPLIN_BASE_URL
+        self.base_url = discover_joplin_base_url()
         self.token = token
         if not self.token:
             self.token = JOPLIN_AUTH_TOKEN
@@ -170,9 +205,18 @@ class MyDiaryJoplin:
             p.check_returncode()
 
     def server_is_running(self) -> bool:
+        if self._ping():
+            return True
+        # Joplin may have restarted on a different port; rescan once
+        if urlsplit(JOPLIN_BASE_URL).port is None:
+            self.base_url = discover_joplin_base_url(force=True)
+            return self._ping()
+        return False
+
+    def _ping(self) -> bool:
         try:
-            r = requests.get(f"{self.base_url}/ping")
-        except requests.ConnectionError:
+            r = requests.get(f"{self.base_url}/ping", timeout=5)
+        except requests.exceptions.RequestException:
             return False
         return r.ok
 
