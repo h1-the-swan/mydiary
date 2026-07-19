@@ -36,7 +36,7 @@
                 <div
                     style="white-space: pre"
                     v-if="diaryNote"
-                    v-html="md.render(diaryNote.body)"
+                    v-html="md.render(diaryNote.body ?? '')"
                 ></div>
             </v-expansion-panel-text>
         </v-expansion-panel>
@@ -73,7 +73,7 @@ const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
-        let dt = new Date()
+        const dt = new Date()
         dt.setDate(dt.getDate() - 1)
         return dt
     } else if (qd === 'today') {

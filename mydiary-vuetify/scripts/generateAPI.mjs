@@ -1,8 +1,4 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
-/* eslint-disable no-undef */
-import fetch from 'node-fetch';
 import { writeFileSync } from 'fs';
-import orval from 'orval';
 
 function wait(delay) {
     return new Promise((resolve) => setTimeout(resolve, delay));
@@ -19,7 +15,10 @@ function fetchRetry(url, delay, tries, fetchOptions = {}) {
     return fetch(url, fetchOptions).catch(onError);
 }
 
-fetchRetry('http://backend:8888/generate_openapi_json', 1000, 100)
+const openapiUrl =
+    process.env.OPENAPI_URL ?? 'http://backend:8888/generate_openapi_json';
+
+fetchRetry(openapiUrl, 1000, 100)
     .then((res) => res.json())
     .then((res) => {
 	    writeFileSync("./api.json", JSON.stringify(res));

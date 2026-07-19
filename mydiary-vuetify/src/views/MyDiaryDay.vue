@@ -105,7 +105,7 @@ const snackbarInit = ref(false)
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
-        let dt = new Date()
+        const dt = new Date()
         dt.setDate(dt.getDate() - 1)
         return dt
     } else if (qd === 'today') {

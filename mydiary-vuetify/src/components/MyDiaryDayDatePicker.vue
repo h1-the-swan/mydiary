@@ -25,7 +25,6 @@ import { useAppStore } from '@/store/app'
 import { getDate } from '@/util'
 import { DatePicker } from 'v-calendar'
 import 'v-calendar/style.css'
-import { AttributeConfig } from 'v-calendar/dist/types/src/utils/attribute'
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
@@ -50,7 +49,7 @@ async function calendarLoadJoplinInfo() {
     app.loadJoplinInfoAllDays(minDt, maxDt)
     app.calendarShouldUpdate = false
 }
-const attributes = computed<AttributeConfig[]>(() => [
+const attributes = computed<any[]>(() => [
     {
         highlight: {
             fillMode: 'outline',

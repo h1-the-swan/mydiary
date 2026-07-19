@@ -18,7 +18,7 @@ import { onMounted } from 'vue';
 import { ref } from 'vue';
 import Axios from 'axios';
 Axios.defaults.baseURL = '/api';
-const numPocketArticles = ref<Number>()
+const numPocketArticles = ref<number>()
 const pocketArticles = ref<PocketArticleRead[]>();
 const headers = [
   { title: "Title", key: "given_title" },

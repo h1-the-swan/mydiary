@@ -5,7 +5,7 @@
   <SpotifySaveRecentTracksButton />
   <GCalAuth />
   <p v-if="numSpotifyHistory">Spotify history records: {{ numSpotifyHistory }}</p>
-  <div v-if="diaryNote" v-html="md.render(diaryNote.body)"></div>
+  <div v-if="diaryNote" v-html="md.render(diaryNote.body ?? '')"></div>
 </template>
 
 <script lang="ts" setup>
@@ -30,7 +30,7 @@ const headers = ref([
 const app = useAppStore()
 const md = markdownit()
 const performSongsLoading = ref(false);
-const numSpotifyHistory = ref<Number>()
+const numSpotifyHistory = ref<number>()
 const joplinNoteId = ref<string>()
 const diaryNote = ref<JoplinNote>()
 onMounted(async () => {
