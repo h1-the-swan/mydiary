@@ -27,8 +27,6 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
-POCKET_SHUTDOWN_DATE = pendulum.datetime(2025, 7, 8, tz="UTC")
-
 
 def make_markdown_table_header(columns: List[str]) -> str:
     sep = " | "
@@ -161,7 +159,11 @@ class MyDiaryDay:
         if self.images:
             md += f"{self.images_markdown()}\n\n"
         md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
-        if self.dt < POCKET_SHUTDOWN_DATE:
+        # Pocket is defunct: entries after the latest Pocket item in the
+        # database no longer get a Pocket articles section
+        from .pocket_connector import get_pocket_section_cutoff
+
+        if self.dt.start_of("day") <= get_pocket_section_cutoff():
             pocket_articles = self.pocket_articles_markdown()
             md += f"## Pocket articles\n\n{pocket_articles}\n\n"
         md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"

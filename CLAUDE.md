@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-mydiary is a personal diary application that generates automated daily journal entries from third-party APIs (Google Calendar, Spotify, Pocket). It's a full-stack app: a Python FastAPI backend with a SQLite database, and a Vue 3 / Vuetify 3 frontend.
+mydiary is a personal diary application that generates automated daily journal entries from third-party APIs (Google Calendar, Spotify). It's a full-stack app: a Python FastAPI backend with a SQLite database, and a Vue 3 / Vuetify 3 frontend.
+
+Pocket was formerly one of the data sources, but the service was shut down on 2025-07-08 and the API integration is deprecated. Existing Pocket articles remain in the database (read/update API routes and the frontend Pocket view still work), but no new data is fetched, and diary entries for days after the latest Pocket item in the database omit the Pocket articles section (see `get_pocket_section_cutoff` in `pocket_connector.py`).
 
 ## Architecture
 
@@ -24,9 +26,9 @@ mydiary is a personal diary application that generates automated daily journal e
 | `mydiary_day.py` | `MyDiaryDay` class — assembles a day's data from all sources and generates Markdown |
 | `core.py` | Shared utilities: image resize, timezone inference, hash helpers |
 | `markdown_edits.py` | `MarkdownDoc` class for parsing and editing structured diary Markdown |
-| `*_connector.py` | One connector class per external service (Spotify, Pocket, Google Calendar, Google Photos, Joplin, Nextcloud, Habitica, Raindrop) |
+| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Google Photos, Joplin, Nextcloud, Habitica, Raindrop); `pocket_connector.py` is database-only since the Pocket API shut down |
 
-The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Pocket articles, Spotify tracks). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
+The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
 
 ### Frontend (`mydiary-vuetify/src/`)
 
@@ -103,8 +105,6 @@ SPOTIPY_CLIENT_ID=
 SPOTIPY_CLIENT_SECRET=
 SPOTIPY_REDIRECT_URI=
 SPOTIFY_TOKEN_CACHE_PATH=
-POCKET_CONSUMER_KEY=
-POCKET_ACCESS_TOKEN=
 JOPLIN_AUTH_TOKEN=
 JOPLIN_BASE_URL=
 JOPLIN_NOTEBOOK_ID=

@@ -1,49 +1,54 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = """Get pocket data using the Pocket API and the pocket library"""
+DESCRIPTION = """Access Pocket articles stored in the mydiary database.
 
-#! Pocket was discontinued in 2025. API connection is deprecated.
+Pocket was shut down on 2025-07-08 and its API no longer exists, so the
+integration is deprecated: no new data is fetched, but articles already
+saved to the database are kept and remain readable/editable. Diary entries
+for days after the latest Pocket item in the database no longer include a
+Pocket articles section (see get_pocket_section_cutoff)."""
 
-import sys, os, time
-from pathlib import Path
-from datetime import date, datetime
+from datetime import datetime
 import pendulum
-from timeit import default_timer as timer
-from typing import Dict, Generator, Iterable, List, Mapping, Optional, Tuple, Union
-
-try:
-    from humanfriendly import format_timespan
-except ImportError:
-
-    def format_timespan(seconds):
-        return "{:.2f} seconds".format(seconds)
-
+from typing import Dict, Iterable, List, Mapping, Optional, Union
 
 import logging
 
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
-from pocket import Pocket
-from sqlalchemy import desc
+from sqlalchemy import func
 
 from .db import engine, Session, select
 from .models import PocketArticle, PocketArticleUpdate, Tag
 
-# from dotenv import load_dotenv, find_dotenv
-
-# load_dotenv(find_dotenv())
-
 POCKET_SHUTDOWN_DATE = pendulum.datetime(2025, 7, 8, tz="UTC")
 
 
+def get_pocket_section_cutoff(session: Optional[Session] = None) -> pendulum.DateTime:
+    """Datetime of the latest Pocket item in the database.
+
+    Diary entries for days after this datetime do not include a Pocket
+    articles section. Falls back to POCKET_SHUTDOWN_DATE if the database
+    contains no Pocket articles.
+    """
+    if session is None:
+        session = Session(engine)
+    times = []
+    for col in (
+        PocketArticle.time_added,
+        PocketArticle.time_updated,
+        PocketArticle.time_read,
+        PocketArticle.time_favorited,
+    ):
+        t = session.exec(select(func.max(col))).one()
+        if t is not None:
+            times.append(pendulum.instance(t))
+    return max(times) if times else POCKET_SHUTDOWN_DATE
+
+
 class MyDiaryPocket:
-    def __init__(self, pocket_instance: Optional[Pocket] = None) -> None:
-        self.pocket_instance = pocket_instance
-        if self.pocket_instance is None:
-            consumer_key = os.environ["POCKET_CONSUMER_KEY"]
-            access_token = os.environ["POCKET_ACCESS_TOKEN"]
-            self.pocket_instance = Pocket(consumer_key, access_token)
+    """Database-only access to Pocket articles (the Pocket API is defunct)."""
 
     def new_session(self, engine=engine):
         with Session(engine) as session:
@@ -53,10 +58,10 @@ class MyDiaryPocket:
         self, dt: datetime, session: Optional[Session] = None
     ) -> Dict[str, List[PocketArticle]]:
         dt = pendulum.instance(dt)
-        if dt > POCKET_SHUTDOWN_DATE:
-            return {"added": [], "read": [], "favorited": []}
         if session is None:
             session = self.new_session()
+        if dt.start_of("day") > get_pocket_section_cutoff(session=session):
+            return {"added": [], "read": [], "favorited": []}
         start = dt.start_of("day").in_timezone("UTC")
         end = dt.end_of("day").in_timezone("UTC")
         articles = {}

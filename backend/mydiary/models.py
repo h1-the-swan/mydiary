@@ -274,7 +274,7 @@ class PocketArticle(PocketArticleBase, table=True):
 
     @classmethod
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
-        # Parse a Pocket article from the Pocket API
+        # Parse a Pocket article item in the (now defunct) Pocket API format
         id = item["item_id"]
         given_title = item.get("given_title", "")
         resolved_title = item.get("resolved_title", "")

@@ -22,8 +22,6 @@ logger = root_logger.getChild(__name__)
 
 # load_dotenv(find_dotenv())
 
-# from pocket import Pocket
-
 JOPLIN_BASE_URL = os.environ.get("JOPLIN_BASE_URL") or "http://localhost:41184"
 JOPLIN_AUTH_TOKEN = os.environ.get("JOPLIN_AUTH_TOKEN")
 

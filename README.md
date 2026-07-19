@@ -30,9 +30,9 @@ Every day I choose a few images (usually between 1 and 5) and add them to this s
 
 Mydiary connects to my personal Google Calendar and fills in all the events for a day. I often use my calendar as a lightweight journaling solution, even backfilling things I did in the last few days when I have a few minutes to do so.
 
-### Pocket articles
+### Pocket articles (deprecated)
 
-I use [Pocket](https://getpocket.com) as my read-it-later app for internet articles and other content. Mydiary connects to the [Pocket API](https://getpocket.com/developer/) to get the articles I saved, read, and/or favorited on a given day.
+I used [Pocket](https://en.wikipedia.org/wiki/Pocket_(service)) as my read-it-later app for internet articles and other content, and mydiary connected to the Pocket API to get the articles I saved, read, and/or favorited on a given day. Pocket was shut down on July 8, 2025, so this integration is deprecated: the articles already collected remain in the database and in past diary entries, but no new data is fetched, and diary entries after the date of the last Pocket item no longer include a Pocket articles section.
 
 ### Spotify tracks
 
@@ -49,8 +49,6 @@ SPOTIPY_CLIENT_ID=
 SPOTIPY_CLIENT_SECRET=
 SPOTIPY_REDIRECT_URI=
 SPOTIFY_TOKEN_CACHE_PATH=
-POCKET_CONSUMER_KEY=
-POCKET_ACCESS_TOKEN=
 JOPLIN_AUTH_TOKEN=
 JOPLIN_BASE_URL=
 JOPLIN_NOTEBOOK_ID=

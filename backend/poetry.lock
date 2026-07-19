@@ -3147,21 +3147,6 @@ dev = ["pre-commit", "tox"]
 testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
-name = "pocket"
-version = "0.3.6"
-description = "api wrapper for getpocket.com"
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "pocket-0.3.6.tar.gz", hash = "sha256:907bf16a19fae9c2080f799d979de4c8daa36d6d28e86ceb9fc17d6f0bdb89b9"},
-    {file = "pocket-0.3.6.zip", hash = "sha256:798aa87dac7e009332c4997a1c9f74c93885c762faae1efbb5f4c5fc0713cc74"},
-]
-
-[package.dependencies]
-requests = "*"
-
-[[package]]
 name = "prometheus-client"
 version = "0.25.0"
 description = "Python client for the Prometheus monitoring system."
@@ -5224,4 +5209,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "9da4f88da520e85f045184c4f7b575403c377f857be422593bcb47d85d6818e1"
+content-hash = "116394be72e972cc7878cc65c884ff10c62b58a3d28a7d00acb57a337b66dc87"
