@@ -1,9 +1,12 @@
 {
+	"python.envFile": "${workspaceFolder}/backend/.env",
 	"python.defaultInterpreterPath": "",
 	"python.testing.pytestArgs": [
-		"tests"
+		"backend"
 	],
 	"python.testing.unittestEnabled": false,
 	"python.testing.pytestEnabled": true,
-	"coverage-gutters.coverageBaseDir": "backend"
+	"coverage-gutters.coverageBaseDir": "backend",
+	"python-envs.defaultEnvManager": "ms-python.python:poetry",
+	"python-envs.defaultPackageManager": "ms-python.python:poetry"
 }
