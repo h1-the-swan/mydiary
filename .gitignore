@@ -43,3 +43,11 @@ habitica_backups/
 .pytest_cache
 
 git-filter-repo
+
+# Claude Code local config (machine-specific paths)
+.claude/
+.mcp.json
+
+# browser/session artifacts and scratch files
+.playwright-mcp/
+scratch/
