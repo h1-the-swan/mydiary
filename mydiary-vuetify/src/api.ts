@@ -10,6 +10,10 @@ import type {
   AxiosResponse
 } from 'axios';
 
+export interface BodyUploadImagesToNote {
+  files: Blob[];
+}
+
 export interface DogCreate {
   name: string;
   how_met?: string | null;
@@ -50,12 +54,6 @@ export interface GoogleCalendarEventRead {
   time_last_api_sync?: string | null;
 }
 
-export interface GooglePhotosThumbnail {
-  baseUrl: string;
-  width: number;
-  height: number;
-}
-
 export type ValidationErrorCtx = { [key: string]: unknown };
 
 export interface ValidationError {
@@ -93,6 +91,7 @@ export interface MyDiaryImageRead {
   joplin_resource_id?: string | null;
   created_at: string;
   orig_image_hash?: string | null;
+  diary_date?: string | null;
   id: number;
 }
 
@@ -292,11 +291,19 @@ min_dt: string;
 max_dt: string;
 };
 
-export type GetNextcloudImageNextcloudThumbnailImgGetParams = {
+export type NextcloudThumbnailImgParams = {
 url: string;
 };
 
-export type NextcloudPhotosAddToJoplin200 = { [key: string]: unknown };
+export type UploadImagesToNoteParams = {
+dt: string;
+};
+
+export type SyncNoteImagesParams = {
+dt?: string | null;
+};
+
+export type SyncNoteImages200 = { [key: string]: unknown };
 
 export type ReadPerformSongsListParams = {
 offset?: number;
@@ -600,30 +607,6 @@ export const joplinGetInfoAllDays = (
   }
 
 /**
- * @summary Google Photos Thumbnails Url
- */
-export const googlePhotosThumbnailUrls = (
-    dt: string, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<GooglePhotosThumbnail[]>> => {
-    return axios.get(
-      `/googlephotos/thumbnails/${dt}`,options
-    );
-  }
-
-/**
- * @summary Google Photos Add To Joplin
- */
-export const googlePhotosAddToJoplin = (
-    noteId: string,
-    googlePhotosThumbnail: GooglePhotosThumbnail[], options?: AxiosRequestConfig
- ): Promise<AxiosResponse<unknown>> => {
-    return axios.post(
-      `/googlephotos/add_to_joplin/${noteId}`,
-      googlePhotosThumbnail,options
-    );
-  }
-
-/**
  * @summary Nextcloud Photos Thumbnails Url
  */
 export const nextcloudPhotosThumbnailUrls = (
@@ -637,8 +620,8 @@ export const nextcloudPhotosThumbnailUrls = (
 /**
  * @summary Get Nextcloud Image
  */
-export const getNextcloudImageNextcloudThumbnailImgGet = (
-    params: GetNextcloudImageNextcloudThumbnailImgGetParams, options?: AxiosRequestConfig
+export const nextcloudThumbnailImg = (
+    params: NextcloudThumbnailImgParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<unknown | Blob>> => {
     return axios.get(
       `/nextcloud/thumbnail_img`,{
@@ -649,15 +632,51 @@ export const getNextcloudImageNextcloudThumbnailImgGet = (
   }
 
 /**
- * @summary Nextcloud Photos Add To Joplin
+ * Store uploaded originals in Nextcloud (mydiary_uploads/{YYYY}/{MM}/), then
+ * run them through the same shrink/database/Joplin pipeline as iPhone photos.
+ * @summary Upload Images To Note
  */
-export const nextcloudPhotosAddToJoplin = (
+export const uploadImagesToNote = (
     noteId: string,
-    nextcloudPhotosAddToJoplinBody: string[], options?: AxiosRequestConfig
- ): Promise<AxiosResponse<NextcloudPhotosAddToJoplin200>> => {
+    bodyUploadImagesToNote: BodyUploadImagesToNote,
+    params: UploadImagesToNoteParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<MyDiaryImageRead[]>> => {const formData = new FormData();
+bodyUploadImagesToNote.files.forEach(value => formData.append(`files`, value));
+
     return axios.post(
-      `/nextcloud/add_to_joplin/${noteId}`,
-      nextcloudPhotosAddToJoplinBody,options
+      `/images/upload/${noteId}`,
+      formData,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Uploaded Images For Day
+ */
+export const uploadedImagesForDay = (
+    dt: string, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<MyDiaryImageRead[]>> => {
+    return axios.get(
+      `/images/uploads/${dt}`,options
+    );
+  }
+
+/**
+ * Two-way sync: make the note's images section match `photos` (the full
+ * desired list of nextcloud paths, in display order).
+ * @summary Sync Note Images Route
+ */
+export const syncNoteImages = (
+    noteId: string,
+    syncNoteImagesBody: string[],
+    params?: SyncNoteImagesParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SyncNoteImages200>> => {
+    return axios.post(
+      `/images/sync_note/${noteId}`,
+      syncNoteImagesBody,{
+    ...options,
+        params: {...params, ...options?.params},}
     );
   }
 
@@ -924,11 +943,11 @@ export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>
 export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown[]>
-export type GooglePhotosThumbnailUrlsResult = AxiosResponse<GooglePhotosThumbnail[]>
-export type GooglePhotosAddToJoplinResult = AxiosResponse<unknown>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>
-export type GetNextcloudImageNextcloudThumbnailImgGetResult = AxiosResponse<unknown | Blob>
-export type NextcloudPhotosAddToJoplinResult = AxiosResponse<NextcloudPhotosAddToJoplin200>
+export type NextcloudThumbnailImgResult = AxiosResponse<unknown | Blob>
+export type UploadImagesToNoteResult = AxiosResponse<MyDiaryImageRead[]>
+export type UploadedImagesForDayResult = AxiosResponse<MyDiaryImageRead[]>
+export type SyncNoteImagesResult = AxiosResponse<SyncNoteImages200>
 export type CreatePerformSongResult = AxiosResponse<PerformSongRead>
 export type ReadPerformSongsListResult = AxiosResponse<PerformSongRead[]>
 export type PerformSongCountResult = AxiosResponse<number>

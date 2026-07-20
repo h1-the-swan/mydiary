@@ -590,3 +590,127 @@ class TestTimeZoneChange:
         assert pendulum.parse(data[0]["changed_at"]) < pendulum.parse(data[1]["changed_at"])
         assert data[0]["tz_after"] == "America/Chicago"
         assert data[1]["tz_after"] == "America/New_York"
+
+
+class TestImages:
+    def test_uploaded_images_for_day_filters_by_date(
+        self, session: Session, client: TestClient
+    ):
+        from mydiary.models import MyDiaryImage
+
+        def make_image(name, diary_date):
+            return MyDiaryImage(
+                hash=f"hash-{name}",
+                name=name,
+                nextcloud_path=f"mydiary_uploads/2026/07/{name}.jpg",
+                thumbnail_size=1000,
+                joplin_resource_id=f"res-{name}",
+                created_at=datetime(2026, 7, 15, 12, 0, 0),
+                diary_date=diary_date,
+            )
+
+        session.add(make_image("a", datetime(2026, 7, 15).date()))
+        session.add(make_image("b", datetime(2026, 7, 15).date()))
+        session.add(make_image("other-day", datetime(2026, 7, 16).date()))
+        # iphone-sync rows have no diary_date and must not appear
+        session.add(
+            MyDiaryImage(
+                hash="hash-iphone",
+                name="iphone",
+                nextcloud_path="H1phone_sync/2026/07/x.jpg",
+                thumbnail_size=1000,
+                joplin_resource_id="res-iphone",
+                created_at=datetime(2026, 7, 15, 12, 0, 0),
+            )
+        )
+        session.commit()
+
+        response = client.get("/images/uploads/2026-07-15")
+        assert response.status_code == 200
+        data = response.json()
+        assert [img["name"] for img in data] == ["a", "b"]
+        assert all(img["diary_date"] == "2026-07-15" for img in data)
+
+    def test_joplin_note_images_tolerates_unknown_resource_ids(
+        self, session: Session, client: TestClient
+    ):
+        import pendulum as _pendulum
+        from mydiary.api import get_joplin_client
+        from mydiary.models import JoplinNote, MyDiaryImage
+
+        note = JoplinNote(
+            id="note1",
+            parent_id="parent",
+            title="2026-07-15",
+            body="## Images\n\n![](:/knownres)\n\n![](:/unknownres)\n",
+            created_time=datetime(2026, 7, 15),
+            updated_time=datetime(2026, 7, 15),
+        )
+
+        class FakeJoplin:
+            def get_note(self, note_id):
+                return note
+
+        session.add(
+            MyDiaryImage(
+                hash="hash-known",
+                name="known",
+                nextcloud_path="H1phone_sync/2026/07/known.jpg",
+                thumbnail_size=1000,
+                joplin_resource_id="knownres",
+                created_at=datetime(2026, 7, 15, 12, 0, 0),
+            )
+        )
+        session.commit()
+
+        from mydiary.api import app as _app
+
+        _app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin()
+        try:
+            response = client.get("/joplin/get_note_images/note1")
+        finally:
+            del _app.dependency_overrides[get_joplin_client]
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["joplin_resource_id"] == "knownres"
+
+    def test_thumbnail_route_caches_and_304s(
+        self, client: TestClient, tmp_path, monkeypatch, rootdir
+    ):
+        from mydiary.nextcloud_connector import MyDiaryNextcloud
+
+        monkeypatch.setenv("MYDIARY_CACHE_DIR", str(tmp_path))
+        image_bytes = (
+            Path(rootdir).joinpath("images/24-05-18 13-50-28 9143.jpg").read_bytes()
+        )
+        calls = []
+
+        async def fake_aget(self, path_to_file, w=512, h=512):
+            calls.append(path_to_file)
+            return image_bytes
+
+        monkeypatch.setattr(MyDiaryNextcloud, "aget_image_thumbnail", fake_aget)
+
+        url = "H1phone_sync/2024/05/24-05-18%2013-50-28%209143.jpg"
+        r1 = client.get("/nextcloud/thumbnail_img", params={"url": url})
+        assert r1.status_code == 200
+        assert r1.content == image_bytes
+        assert r1.headers["content-type"] == "image/jpeg"
+        assert "etag" in r1.headers
+        assert "immutable" in r1.headers["cache-control"]
+        assert len(calls) == 1
+
+        # second request is served from the disk cache (no upstream call)
+        r2 = client.get("/nextcloud/thumbnail_img", params={"url": url})
+        assert r2.status_code == 200
+        assert len(calls) == 1
+
+        # conditional request gets 304
+        r3 = client.get(
+            "/nextcloud/thumbnail_img",
+            params={"url": url},
+            headers={"If-None-Match": r1.headers["etag"]},
+        )
+        assert r3.status_code == 304
+        assert len(calls) == 1

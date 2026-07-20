@@ -104,14 +104,24 @@ class MyDiaryDay:
 
         images = []
         if note is not None:
-            images = [link.mydiary_image for link in note.mydiary_image_links]
+            images = [
+                link.mydiary_image
+                for link in sorted(
+                    note.mydiary_image_links, key=lambda link: link.sequence_num
+                )
+            ]
 
         mydiary_pocket = MyDiaryPocket()
         pocket_articles = mydiary_pocket.get_articles_for_day(dt, session=session)
 
         mydiary_spotify = MyDiarySpotify()
         if spotify_sync is True:
-            mydiary_spotify.save_recent_tracks_to_database()
+            # a Spotify outage / revoked token must not break day assembly
+            # (e.g. note init); fall back to whatever is already in the database
+            try:
+                mydiary_spotify.save_recent_tracks_to_database()
+            except Exception as e:
+                logger.warning(f"skipping Spotify sync during day assembly: {e}")
         spotify_tracks = mydiary_spotify.get_tracks_for_day(dt, session=session)
 
         mydiary_gcal = MyDiaryGCal()

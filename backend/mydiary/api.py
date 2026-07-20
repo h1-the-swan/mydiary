@@ -7,7 +7,7 @@ import json
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import pydantic
@@ -40,14 +40,12 @@ from .models import (
     PocketArticle,
     PocketArticleBase,
     PocketArticleUpdate,
-    GooglePhotosThumbnail,
     JoplinNoteImageLink,
     JoplinNote,
     MyDiaryImageBase,
     MyDiaryImage,
     TimeZoneChange,
 )
-from .googlephotos_connector import MyDiaryGooglePhotos
 from .nextcloud_connector import MyDiaryNextcloud
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
@@ -196,17 +194,33 @@ def scheduled_spotify_save_recent_tracks():
 
 scheduler = BackgroundScheduler()
 
+apscheduler_logger = logging.getLogger("apscheduler")
+apscheduler_logger.setLevel(logging.INFO)
+if not apscheduler_logger.handlers:
+    apscheduler_handler = logging.StreamHandler()
+    apscheduler_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s")
+    )
+    apscheduler_logger.addHandler(apscheduler_handler)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
     scheduler.add_job(
-        scheduled_spotify_save_recent_tracks, CronTrigger.from_crontab("10 * * * *")
+        scheduled_spotify_save_recent_tracks,
+        CronTrigger.from_crontab("10 * * * *"),
+        # sleep/suspend (e.g. WSL2 host sleeping) makes wakeups miss the default
+        # 1-second misfire grace time; run the job however late it fires
+        misfire_grace_time=None,
     )  # At 10 minutes past the hour
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
+    from .nextcloud_connector import close_async_client
+
+    await close_async_client()
 
 
 app = FastAPI(
@@ -545,12 +559,15 @@ def joplin_get_note_images(
         return []
 
     note = mydiary_joplin.get_note(note_id)
-    return [
+    images = [
         session.exec(
             select(MyDiaryImage).where(MyDiaryImage.joplin_resource_id == resource_id)
-        ).one()
+        ).first()
         for resource_id in note.md_note.get_image_resource_ids()
     ]
+    # skip resource ids with no database row (e.g. images added by the removed
+    # Google Photos integration)
+    return [img for img in images if img is not None]
 
 
 @app.post(
@@ -593,79 +610,6 @@ async def joplin_get_info_all_days(
     )
 
 
-@app.get(
-    "/googlephotos/thumbnails/{dt}",
-    operation_id="googlePhotosThumbnailUrls",
-    response_model=List[GooglePhotosThumbnail],
-)
-def google_photos_thumbnails_url(dt: str):
-    if dt == "today":
-        dt = pendulum.today()
-    elif dt == "yesterday":
-        dt = pendulum.yesterday()
-    else:
-        dt = pendulum.parse(dt)
-
-    mydiary_googlephotos = MyDiaryGooglePhotos()
-    items = mydiary_googlephotos.query_photos_api_for_day(dt)
-    items = [
-        {
-            # "url": mydiary_googlephotos.get_thumbnail_download_url(item),
-            "baseUrl": item["baseUrl"],
-            "width": item["mediaMetadata"]["width"],
-            "height": item["mediaMetadata"]["height"],
-            "creationTime": pendulum.parse(item["mediaMetadata"]["creationTime"]),
-        }
-        for item in items
-    ]
-    items.sort(key=lambda item: item["creationTime"])
-    return items
-
-
-@app.post(
-    "/googlephotos/add_to_joplin/{note_id}",
-    operation_id="googlePhotosAddToJoplin",
-)
-async def google_photos_add_to_joplin(
-    note_id: str, photos: List[GooglePhotosThumbnail]
-):
-    from mydiary.joplin_connector import MyDiaryJoplin
-    from mydiary.markdown_edits import MarkdownDoc
-    from mydiary.core import reduce_size_recurse
-
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        note = mydiary_joplin.get_note(note_id)
-        md_note = MarkdownDoc(note.body, parent=note)
-
-        sec_images = md_note.get_section_by_title("images")
-        resource_ids = sec_images.get_resource_ids()
-        if resource_ids:
-            raise RuntimeError()
-        size = (512, 512)
-        bytes_threshold = 60000
-        resource_ids = []
-        for photo in photos:
-            download_url = f"{photo.baseUrl}=d"
-            image_bytes_request = requests.get(download_url)
-            image_bytes: bytes = image_bytes_request.content
-            if len(image_bytes) > bytes_threshold:
-                image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-            r = mydiary_joplin.create_resource(data=image_bytes)
-            r.raise_for_status()
-            resource_id = r.json()["id"]
-            resource_ids.append(f"![](:/{resource_id})")
-            logger.debug(f"new resource id: {resource_id}")
-
-        new_txt = sec_images.txt
-        new_txt += "\n"
-        new_txt += "\n\n".join(resource_ids)
-        new_txt += "\n"
-        sec_images.update(new_txt)
-        logger.info(f"updating note: {note.title}")
-        r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
-        r_put_note.raise_for_status()
-
-
 # def _modify_filepath(filepath):
 #     filepath = filepath.split("/")[-4:]
 #     filepath = "/".join(filepath)
@@ -706,88 +650,143 @@ def nextcloud_photos_thumbnails_url(dt: str):
 
 @app.get(
     "/nextcloud/thumbnail_img",
+    operation_id="nextcloudThumbnailImg",
     # Set what the media type will be in the autogenerated OpenAPI specification.
     # fastapi.tiangolo.com/advanced/additional-responses/#additional-media-types-for-the-main-response
     responses={200: {"content": {"image/png": {}}}},
-    # Prevent FastAPI from adding "application/json" as an additional
-    # response media type in the autogenerated OpenAPI specification.
-    # https://github.com/tiangolo/fastapi/issues/3258
-    # response_class=Response,
 )
-def get_nextcloud_image(url: str):
-    mydiary_nextcloud = MyDiaryNextcloud()
-    # r = requests.get(url, auth=mydiary_nextcloud.auth)
-    # r.raise_for_status()
-    # image_bytes = r.content
-    image_bytes = mydiary_nextcloud.get_image_thumbnail(url)
-    # return Response(content=io.BytesIO(image_bytes), media_type="image/png")
-    return Response(content=image_bytes, media_type="image/png")
+async def get_nextcloud_image(url: str, request: Request):
+    from . import thumbnail_cache
+
+    key = thumbnail_cache.cache_key(url)
+    etag = f'"{key}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+
+    image_bytes = thumbnail_cache.get_cached(key)
+    if image_bytes is None:
+        mydiary_nextcloud = MyDiaryNextcloud()
+        image_bytes = await mydiary_nextcloud.aget_image_thumbnail(url)
+        thumbnail_cache.store(key, image_bytes)
+    return Response(
+        content=image_bytes,
+        media_type=thumbnail_cache.sniff_media_type(image_bytes),
+        headers={
+            "ETag": etag,
+            "Cache-Control": "private, max-age=31536000, immutable",
+        },
+    )
 
 
 @app.post(
-    "/nextcloud/add_to_joplin/{note_id}",
-    operation_id="nextcloudPhotosAddToJoplin",
+    "/images/upload/{note_id}",
+    operation_id="uploadImagesToNote",
+    response_model=List[MyDiaryImageRead],
+)
+async def upload_images_to_note(
+    *,
+    session: Session = Depends(get_session),
+    note_id: str,
+    dt: str,
+    files: List[UploadFile] = File(...),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+):
+    """Store uploaded originals in Nextcloud (mydiary_uploads/{YYYY}/{MM}/), then
+    run them through the same shrink/database/Joplin pipeline as iPhone photos."""
+    from .image_sync import UPLOADS_BASEDIR, sync_note_images
+
+    diary_date = pendulum.parse(dt).date()
+    mydiary_nextcloud = MyDiaryNextcloud()
+    target_dir = f"{UPLOADS_BASEDIR}/{diary_date.year}/{diary_date.month:02d}"
+    mydiary_nextcloud.mkdirs(target_dir)
+
+    upload_paths = []
+    for f in files:
+        filename = Path(f.filename or "").name
+        if not filename:
+            raise HTTPException(status_code=400, detail="upload has no filename")
+        stem, ext = os.path.splitext(filename)
+        candidate = filename
+        suffix = 0
+        while mydiary_nextcloud.file_exists(
+            f"{target_dir}/{requests.utils.quote(candidate)}"
+        ):
+            suffix += 1
+            candidate = f"{stem}-{suffix}{ext}"
+        nextcloud_path = f"{target_dir}/{requests.utils.quote(candidate)}"
+        mydiary_nextcloud.upload_file(nextcloud_path, await f.read())
+        upload_paths.append(nextcloud_path)
+
+    # add the new uploads to the note alongside whatever is already there
+    note = mydiary_joplin.get_note(note_id)
+    current_ids = note.md_note.get_image_resource_ids()
+    current_paths = [
+        img.nextcloud_path
+        for resource_id in current_ids
+        for img in [
+            session.exec(
+                select(MyDiaryImage).where(
+                    MyDiaryImage.joplin_resource_id == resource_id
+                )
+            ).first()
+        ]
+        if img is not None and img.nextcloud_path
+    ]
+    sync_note_images(
+        session=session,
+        mydiary_joplin=mydiary_joplin,
+        mydiary_nextcloud=mydiary_nextcloud,
+        note_id=note_id,
+        desired_paths=current_paths + upload_paths,
+        diary_date=diary_date,
+    )
+    return [
+        session.exec(
+            select(MyDiaryImage).where(MyDiaryImage.nextcloud_path == path)
+        ).one()
+        for path in upload_paths
+    ]
+
+
+@app.get(
+    "/images/uploads/{dt}",
+    operation_id="uploadedImagesForDay",
+    response_model=List[MyDiaryImageRead],
+)
+def uploaded_images_for_day(dt: str, session: Session = Depends(get_session)):
+    diary_date = pendulum.parse(dt).date()
+    return session.exec(
+        select(MyDiaryImage)
+        .where(MyDiaryImage.diary_date == diary_date)
+        .order_by(MyDiaryImage.created_at)
+    ).all()
+
+
+@app.post(
+    "/images/sync_note/{note_id}",
+    operation_id="syncNoteImages",
     response_model=dict,
 )
-async def nextcloud_photos_add_to_joplin(
+async def sync_note_images_route(
     *,
     session: Session = Depends(get_session),
     note_id: str,
     photos: List[str],
+    dt: Optional[str] = None,
     mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
 ):
-    # TODO: refactor
-    from mydiary.markdown_edits import MarkdownDoc
-    from mydiary.core import reduce_size_recurse
+    """Two-way sync: make the note's images section match `photos` (the full
+    desired list of nextcloud paths, in display order)."""
+    from .image_sync import sync_note_images
 
-    mydiary_nextcloud = MyDiaryNextcloud()
-
-    note = mydiary_joplin.get_note(note_id)
-    db_note = session.get(JoplinNote, note_id)
-    md_note = MarkdownDoc(note.body, parent=note)
-
-    if md_note.get_image_resource_ids():
-        # currently, an error is raised if there are already any images present.
-        # TODO: handle the case where there are already images present
-        raise RuntimeError(f"note with id {note_id} already has images present")
-
-    sec_images = md_note.get_section_by_title("images")
-    resource_ids = []
-    for i, photo in enumerate(photos):
-        image_bytes = mydiary_nextcloud.get_image(photo)
-        image_name = Path(requests.utils.unquote(photo)).stem
-        created_at = mydiary_nextcloud.parse_datetime_from_filepath(photo)
-        mydiary_image = mydiary_joplin.create_thumbnail(
-            image_bytes,
-            name=image_name,
-            nextcloud_path=photo,
-            created_at=created_at,
-        )
-        resource_id = mydiary_image.joplin_resource_id
-        resource_ids.append(f"![](:/{resource_id})")
-        note_image_link = JoplinNoteImageLink(
-            note=db_note,
-            mydiary_image=mydiary_image,
-            sequence_num=i + 1,
-            note_title=note.title,
-        )
-        session.add(note_image_link)
-        logger.debug(f"new resource id: {resource_id}")
-
-    session.commit()
-
-    new_txt = sec_images.txt
-    new_txt += "\n"
-    new_txt += "\n\n".join(resource_ids)
-    new_txt += "\n"
-    sec_images.update(new_txt)
-    logger.info(f"updating note: {note.title}")
-    r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
-    r_put_note.raise_for_status()
-    return {
-        "note_id": note.id,
-        "resource_ids": resource_ids,
-    }
+    return sync_note_images(
+        session=session,
+        mydiary_joplin=mydiary_joplin,
+        mydiary_nextcloud=MyDiaryNextcloud(),
+        note_id=note_id,
+        desired_paths=photos,
+        diary_date=pendulum.parse(dt).date() if dt else None,
+    )
 
 
 @app.post(

@@ -62,7 +62,7 @@
             </v-expansion-panel-text>
         </v-expansion-panel>
     </v-expansion-panels>
-    <nextcloud-thumbnails :dt="getDateStr" :joplin-note-id="joplinNoteId" />
+    <photos-section :dt="getDateStr" :joplin-note-id="joplinNoteId" />
 </template>
 
 <script setup lang="ts">
@@ -88,7 +88,7 @@ import {
 import GCalAuth from '@/components/GCalAuth.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
 // import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
-import NextcloudThumbnails from '@/components/NextcloudThumbnails.vue'
+import PhotosSection from '@/components/PhotosSection.vue'
 import { useAppStore } from '@/store/app'
 axios.defaults.baseURL = '/api'
 const router = useRouter()

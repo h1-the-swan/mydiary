@@ -524,6 +524,9 @@ class MyDiaryImageBase(SQLModel):
     joplin_resource_id: Optional[str] = Field(index=True, default=None)
     created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
     orig_image_hash: Optional[str] = Field(default=None, index=True)
+    # diary date this image is associated with; only set for manually uploaded
+    # images (iPhone-sync photos derive their day from the filename)
+    diary_date: Optional[date] = Field(default=None, index=True)
 
 
 class MyDiaryImage(MyDiaryImageBase, table=True):
@@ -594,12 +597,6 @@ class DogBase(SQLModel):
 
 class Dog(DogBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-
-
-class GooglePhotosThumbnail(SQLModel):
-    baseUrl: str
-    width: int
-    height: int
 
 
 class RecipeTagLink(SQLModel, table=True):

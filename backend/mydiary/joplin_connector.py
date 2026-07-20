@@ -350,6 +350,13 @@ class MyDiaryJoplin:
             params={"token": self.token},
         )
 
+    def resource_exists(self, resource_id: str) -> bool:
+        r = requests.get(
+            f"{self.base_url}/resources/{resource_id}",
+            params={"token": self.token},
+        )
+        return r.status_code == 200
+
     def create_resource(
         self,
         data: bytes,
@@ -483,12 +490,18 @@ class MyDiaryJoplin:
         orig_image_hash.update(image_bytes)
         if len(image_bytes) > bytes_threshold:
             image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-        r = self.create_resource(data=image_bytes, title=name)
-        r.raise_for_status()
-        # if failed, need to run self.delete_resource(hash)
-        resource_id = r.json()["id"]
         image_hash = hashlib.md5()
         image_hash.update(image_bytes)
+        # the resource id is the hash of the image bytes, so identical image
+        # content maps to a single Joplin resource; creating it again would fail
+        # on the unique-id constraint
+        resource_id = image_hash.hexdigest()
+        if self.resource_exists(resource_id):
+            logger.debug(f"reusing existing joplin resource {resource_id}")
+        else:
+            r = self.create_resource(data=image_bytes, title=name)
+            r.raise_for_status()
+            resource_id = r.json()["id"]
         if created_at is None:
             created_at = pendulum.now(tz="UTC")
         mydiary_image = MyDiaryImage(

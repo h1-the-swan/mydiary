@@ -127,6 +127,24 @@ class MarkdownSection:
         # "![](:/f04c1849b3e64b5ca151a737720s0132)"
         return re.findall(r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", self.content)
 
+    def set_content(self, new_content: str) -> str:
+        """Replace this section's content unconditionally, preserving the heading line.
+
+        Unlike update(), this allows removals and empty content. Only use it for
+        sections fully owned by the application (e.g. the images section); update()
+        remains the safe path for sections that may contain handwritten text.
+        """
+        heading_line = self.lines[0] if self.lines else f"{'#' * self.level} {self.title}"
+        new_content = new_content.strip()
+        if new_content == self.content:
+            return "no update"
+        if new_content:
+            self.lines = [heading_line, "", *new_content.split("\n"), ""]
+        else:
+            self.lines = [heading_line, ""]
+        self.refresh()
+        return "updated"
+
     def update(self, new_txt: str, force: bool = False) -> str:
         new_sec = MarkdownSection(new_txt.split("\n"))
         if not new_sec.content or new_sec.content == "None":

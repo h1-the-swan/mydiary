@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 mydiary is a personal diary application that generates automated daily journal entries from third-party APIs (Google Calendar, Spotify). It's a full-stack app: a Python FastAPI backend with a SQLite database, and a Vue 3 / Vuetify 3 frontend.
 
-Pocket was formerly one of the data sources, but the service was shut down on 2025-07-08 and the API integration is deprecated. Existing Pocket articles remain in the database (read/update API routes and the frontend Pocket view still work), but no new data is fetched, and diary entries for days after the latest Pocket item in the database omit the Pocket articles section (see `get_pocket_section_cutoff` in `pocket_connector.py`).
+Pocket and Google Photos were formerly data sources. The Google Photos integration was removed in 2026-07 (it was never used by the frontend and never persisted to the database; old diary notes may still contain image refs from it, which the image sync preserves untouched — see `docs/image-workflow.md`). Pocket's service was shut down on 2025-07-08 and the API integration is deprecated. Existing Pocket articles remain in the database (read/update API routes and the frontend Pocket view still work), but no new data is fetched, and diary entries for days after the latest Pocket item in the database omit the Pocket articles section (see `get_pocket_section_cutoff` in `pocket_connector.py`).
 
 ## Architecture
 
@@ -26,9 +26,11 @@ Pocket was formerly one of the data sources, but the service was shut down on 20
 | `mydiary_day.py` | `MyDiaryDay` class — assembles a day's data from all sources and generates Markdown |
 | `core.py` | Shared utilities: image resize, timezone inference, hash helpers |
 | `markdown_edits.py` | `MarkdownDoc` class for parsing and editing structured diary Markdown |
-| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Google Photos, Joplin, Nextcloud, Habitica, Raindrop); `pocket_connector.py` is database-only since the Pocket API shut down |
+| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop); `pocket_connector.py` is database-only since the Pocket API shut down |
 
 The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
+
+The image workflow (Nextcloud photos ↔ Joplin notes, manual uploads, thumbnail caching) is documented in `docs/image-workflow.md`.
 
 ### Frontend (`mydiary-vuetify/src/`)
 
@@ -116,7 +118,6 @@ JOPLIN_BASE_URL=
 JOPLIN_NOTEBOOK_ID=
 GOOGLECALENDAR_TOKEN_CACHE=
 GOOGLECALENDAR_CREDENTIALS_FILE=
-GOOGLEPHOTOS_TOKEN_CACHE=
 NEXTCLOUD_URL=
 NEXTCLOUD_USERNAME=
 NEXTCLOUD_PASSWORD=

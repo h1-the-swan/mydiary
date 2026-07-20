@@ -3,6 +3,7 @@
 DESCRIPTION = """Nextcloud API"""
 
 import sys, os, time, json, re
+import httpx
 import requests
 from requests.auth import HTTPBasicAuth
 from lxml import etree
@@ -30,6 +31,28 @@ NEXTCLOUD_USERNAME = os.environ.get("NEXTCLOUD_USERNAME") or "admin"
 NEXTCLOUD_PASSWORD = os.environ.get("NEXTCLOUD_PASSWORD")
 
 
+_async_client: Optional[httpx.AsyncClient] = None
+
+
+def get_async_client() -> httpx.AsyncClient:
+    """Shared AsyncClient for Nextcloud requests (connection reuse across requests)."""
+    global _async_client
+    if _async_client is None or _async_client.is_closed:
+        _async_client = httpx.AsyncClient(
+            auth=(NEXTCLOUD_USERNAME, NEXTCLOUD_PASSWORD or ""),
+            timeout=30,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+    return _async_client
+
+
+async def close_async_client() -> None:
+    global _async_client
+    if _async_client is not None and not _async_client.is_closed:
+        await _async_client.aclose()
+    _async_client = None
+
+
 class MyDiaryNextcloud:
     def __init__(self, url=NEXTCLOUD_URL) -> None:
         self.url = url
@@ -54,11 +77,52 @@ class MyDiaryNextcloud:
         # TODO: separate method to download image and get width and height, and save image bytes to cache
         return r.content
 
+    async def aget_image_thumbnail(self, path_to_file: str, w=512, h=512) -> bytes:
+        url = self.get_image_thumbnail_url(path_to_file, w, h)
+        r = await get_async_client().get(url)
+        r.raise_for_status()
+        return r.content
+
     def get_image(self, path_to_file: str) -> bytes:
         url = f"{self.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/{path_to_file}"
         r = requests.get(url, auth=self.auth)
         r.raise_for_status()
         return r.content
+
+    def _dav_url(self, path_to_file: str) -> str:
+        return f"{self.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/{path_to_file}"
+
+    def upload_file(self, path_to_file: str, data: bytes) -> None:
+        """PUT a file at the given (percent-encoded) path. Parent dirs must exist."""
+        r = requests.put(self._dav_url(path_to_file), data=data, auth=self.auth)
+        r.raise_for_status()
+
+    def mkdirs(self, dirpath: str) -> None:
+        """MKCOL each segment of dirpath; existing directories are fine."""
+        segments = [s for s in dirpath.split("/") if s]
+        path = ""
+        for segment in segments:
+            path = f"{path}{segment}/"
+            r = requests.request(method="MKCOL", url=self._dav_url(path), auth=self.auth)
+            # 405 Method Not Allowed = collection already exists
+            if r.status_code != 405:
+                r.raise_for_status()
+
+    def file_exists(self, path_to_file: str) -> bool:
+        r = requests.request(
+            method="PROPFIND",
+            url=self._dav_url(path_to_file),
+            auth=self.auth,
+            headers={"Depth": "0"},
+        )
+        if r.status_code == 404:
+            return False
+        r.raise_for_status()
+        return True
+
+    def delete_file(self, path_to_file: str) -> None:
+        r = requests.delete(self._dav_url(path_to_file), auth=self.auth)
+        r.raise_for_status()
 
     def parse_datetime_from_filepath(
         self, filepath: str, tz: str = "local"
