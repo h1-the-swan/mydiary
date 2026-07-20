@@ -65,7 +65,12 @@ class MyDiaryGCal:
         gcal_credentials_file = os.environ["GOOGLECALENDAR_CREDENTIALS_FILE"]
         SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
         self.flow = InstalledAppFlow.from_client_secrets_file(
-            gcal_credentials_file, SCOPES, redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+            gcal_credentials_file,
+            SCOPES,
+            redirect_uri="urn:ietf:wg:oauth:2.0:oob",
+            # PKCE would require persisting the code_verifier between the
+            # get_auth_url and refresh_token requests, which each build a new flow
+            autogenerate_code_verifier=False,
         )
 
     def _save_token_cache(self) -> None:
