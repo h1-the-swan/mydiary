@@ -1,1 +1,11 @@
 node_modules
+
+# build output and generated artifacts (regenerated inside the container)
+dist
+build
+api.json
+*.tsbuildinfo
+
+# local env files
+.env.local
+.env.*.local

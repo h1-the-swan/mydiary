@@ -28,7 +28,9 @@ export default defineConfig({
         extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
     },
     server: {
-        port: 3000,
+        // kept in sync with the `dev` script in package.json, which passes
+        // --port explicitly
+        port: 3001,
         allowedHosts: ['mydiary-vuetify'],
     },
 })

@@ -7,12 +7,18 @@ WORKDIR /usr/local/src/app/backend
 
 RUN python -m pip install --upgrade pip && python -m pip install pipx && python -m pipx ensurepath && python -m pipx install "poetry==$POETRY_VERSION"
 
+# `pipx ensurepath` only updates the shell profile, which the non-login shells
+# used by RUN never read. Put pipx's bin directory on PATH so the Poetry
+# installed above is the one that runs (rather than `pipx run` building a
+# throwaway environment for it every time).
+ENV PATH="/root/.local/bin:$PATH"
+
 COPY poetry.lock .
 COPY pyproject.toml .
 
 # Project initialization:
-RUN pipx run poetry config virtualenvs.create false \
-  && pipx run poetry install --no-interaction --no-ansi --no-root
+RUN poetry config virtualenvs.create false \
+  && poetry install --no-interaction --no-ansi --no-root
 
 # RUN poetry run python app.py --generate-openapi-json ./api.json
 
@@ -22,7 +28,7 @@ RUN pipx run poetry config virtualenvs.create false \
 COPY . .
 
 # Run poetry install again, this time to install the root package
-RUN pipx run poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi
 
 # # Configure Joplin-Nextcloud sync
 # RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
