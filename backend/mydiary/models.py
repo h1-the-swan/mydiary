@@ -632,3 +632,64 @@ class RecipeEvent(RecipeEventBase, table=True):
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     recipe: Recipe = Relationship(back_populates="recipe_events")
+
+
+class OwnTracksLocationBase(SQLModel):
+    # a single location fix reported by the OwnTracks app, mirrored from the
+    # OwnTracks recorder. see owntracks_connector.py
+    tst: datetime = Field(index=True)  # stored in the database in UTC timezone
+    lat: float
+    lon: float
+    acc: Optional[int] = None  # horizontal accuracy, in meters
+    vac: Optional[int] = None  # vertical accuracy, in meters
+    alt: Optional[int] = None
+    vel: Optional[int] = None  # velocity, km/h
+    cog: Optional[int] = None  # course over ground
+    batt: Optional[int] = None
+    conn: Optional[str] = None  # "w" (wifi) | "m" (mobile) | "o" (offline)
+    trigger: Optional[str] = None  # the recorder's `t` field
+    motion: Optional[str] = None  # motionactivities, comma-joined
+    ssid: Optional[str] = None
+    username: str = Field(index=True)
+    device: str = Field(index=True)
+
+    @classmethod
+    def from_api_response(cls, item: Dict[str, Any]) -> "OwnTracksLocationBase":
+        motionactivities = item.get("motionactivities") or []
+        return cls(
+            tst=pendulum.from_timestamp(item["tst"], tz="UTC"),
+            lat=item["lat"],
+            lon=item["lon"],
+            acc=item.get("acc"),
+            vac=item.get("vac"),
+            alt=item.get("alt"),
+            vel=item.get("vel"),
+            cog=item.get("cog"),
+            batt=item.get("batt"),
+            conn=item.get("conn"),
+            trigger=item.get("t"),
+            motion=",".join(motionactivities) or None,
+            ssid=item.get("ssid"),
+            username=item["username"],
+            device=item["device"],
+        )
+
+
+class OwnTracksLocation(OwnTracksLocationBase, table=True):
+    __table_args__ = (
+        UniqueConstraint("username", "device", "tst", name="uix_owntracks_fix"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class OwnTracksDayMap(SQLModel, table=True):
+    # bookkeeping for the rendered daily map, so that re-rendering an unchanged
+    # day reuses its Joplin resource instead of orphaning one
+    diary_date: date = Field(primary_key=True)
+    joplin_resource_id: str
+    # sha256 over the processed track plus the render params
+    content_hash: str = Field(index=True)
+    num_points: int
+    num_stays: int
+    distance_m: int
+    created_at: datetime  # stored in the database in UTC timezone

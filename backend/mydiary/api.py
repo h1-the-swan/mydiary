@@ -192,6 +192,13 @@ def scheduled_spotify_save_recent_tracks():
 
 
 
+def scheduled_owntracks_sync():
+    from mydiary.owntracks_connector import MyDiaryOwnTracks
+
+    num_saved = MyDiaryOwnTracks().save_locations_to_database()
+    logger.info(f"{num_saved} owntracks locations saved")
+
+
 scheduler = BackgroundScheduler()
 
 apscheduler_logger = logging.getLogger("apscheduler")
@@ -215,6 +222,13 @@ async def lifespan(app: FastAPI):
         # 1-second misfire grace time; run the job however late it fires
         misfire_grace_time=None,
     )  # At 10 minutes past the hour
+    scheduler.add_job(
+        scheduled_owntracks_sync,
+        CronTrigger.from_crontab("25 * * * *"),
+        misfire_grace_time=None,
+    )  # At 25 minutes past the hour
+    # nothing writes a map into a note on a schedule: that is a manual action,
+    # via the "Add map to note" button or POST /owntracks/map/{dt}/to_note
     # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
     scheduler.start()
     yield
@@ -676,6 +690,179 @@ async def get_nextcloud_image(url: str, request: Request):
             "Cache-Control": "private, max-age=31536000, immutable",
         },
     )
+
+
+def _owntracks_day(dt: str, tz: str, session: Session) -> pendulum.DateTime:
+    """Resolve a day string to a timezone-aware start-of-day.
+
+    Defaults to the inferred timezone rather than "local": the container runs on
+    UTC, and for a map the day boundary decides what is on it.
+    """
+    if tz == "infer":
+        try:
+            tz = get_last_timezone(dt, session=session)
+        except (AttributeError, TypeError):
+            # no TimeZoneChange rows recorded yet
+            logger.warning("could not infer timezone; falling back to local")
+            tz = "local"
+    if dt == "today":
+        return pendulum.today(tz=tz)
+    if dt == "yesterday":
+        return pendulum.yesterday(tz=tz)
+    return pendulum.parse(dt, tz=tz)
+
+
+def _track_params(
+    max_acc: int,
+    stay_radius_m: float,
+    stay_minutes: float,
+    gap_minutes: float,
+    gap_metres: float,
+    dwell_max_kmh: float,
+) -> "TrackParams":
+    from .owntracks_track import TrackParams
+
+    return TrackParams(
+        max_acc=max_acc,
+        stay_radius_m=stay_radius_m,
+        stay_minutes=stay_minutes,
+        gap_minutes=gap_minutes,
+        gap_metres=gap_metres,
+        dwell_max_kmh=dwell_max_kmh,
+    )
+
+
+@app.get("/owntracks/locations/{dt}", operation_id="owntracksLocationsForDay")
+def owntracks_locations_for_day(
+    dt: str, tz: str = "infer", session: Session = Depends(get_session)
+):
+    """The day's raw location fixes, before any smoothing."""
+    from .owntracks_connector import MyDiaryOwnTracks
+
+    dt_obj = _owntracks_day(dt, tz, session)
+    locations = MyDiaryOwnTracks().get_locations_for_day(dt_obj, session=session)
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [loc.lon, loc.lat]},
+                "properties": {
+                    "tst": pendulum.instance(loc.tst, tz="UTC")
+                    .in_timezone(dt_obj.timezone_name)
+                    .isoformat(),
+                    "acc": loc.acc,
+                    "motion": loc.motion,
+                    "trigger": loc.trigger,
+                    "device": loc.device,
+                },
+            }
+            for loc in locations
+        ],
+    }
+
+
+@app.get("/owntracks/track/{dt}", operation_id="owntracksTrackForDay")
+def owntracks_track_for_day(
+    dt: str,
+    tz: str = "infer",
+    max_acc: int = 100,
+    stay_radius_m: float = 150.0,
+    stay_minutes: float = 20.0,
+    gap_minutes: float = 45.0,
+    gap_metres: float = 250.0,
+    dwell_max_kmh: float = 1.0,
+    session: Session = Depends(get_session),
+):
+    """The processed day: stays and links, as GeoJSON.
+
+    The frontend map draws this, so the interactive view and the rendered PNG
+    always agree.
+    """
+    from .owntracks_connector import MyDiaryOwnTracks
+    from .owntracks_track import build_track, points_from_locations, track_to_geojson
+
+    dt_obj = _owntracks_day(dt, tz, session)
+    params = _track_params(
+        max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
+    )
+    locations = MyDiaryOwnTracks().get_locations_for_day(dt_obj, session=session)
+    points = points_from_locations(locations, timezone=dt_obj.timezone_name)
+    return track_to_geojson(build_track(points, params))
+
+
+@app.get(
+    "/owntracks/map/{dt}.png",
+    operation_id="owntracksDayMapImage",
+    responses={200: {"content": {"image/png": {}}}},
+)
+def owntracks_day_map_image(
+    dt: str,
+    request: Request,
+    tz: str = "infer",
+    width: int = 1200,
+    height: int = 900,
+    max_acc: int = 100,
+    stay_radius_m: float = 150.0,
+    stay_minutes: float = 20.0,
+    gap_minutes: float = 45.0,
+    gap_metres: float = 250.0,
+    dwell_max_kmh: float = 1.0,
+    session: Session = Depends(get_session),
+):
+    from .owntracks_maps import render_for_day
+
+    dt_obj = _owntracks_day(dt, tz, session)
+    params = _track_params(
+        max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
+    )
+    try:
+        png, _, content_hash = render_for_day(
+            dt_obj, session, params, width=width, height=height
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    etag = f'"{content_hash}-{width}x{height}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304)
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"ETag": etag, "Cache-Control": "private, max-age=3600"},
+    )
+
+
+@app.post("/owntracks/sync", operation_id="owntracksSyncLocations")
+def owntracks_sync_locations(
+    days_back: int = 7, session: Session = Depends(get_session)
+):
+    from .owntracks_connector import MyDiaryOwnTracks
+
+    num_added = MyDiaryOwnTracks().save_locations_to_database(
+        session=session, days_back=days_back
+    )
+    return {"num_added": num_added}
+
+
+@app.post("/owntracks/map/{dt}/to_note", operation_id="owntracksMapToNote")
+def owntracks_map_to_note(
+    dt: str,
+    tz: str = "infer",
+    force: bool = False,
+    session: Session = Depends(get_session),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+):
+    """Render the day's map and write it into the note's Location section."""
+    from .owntracks_maps import sync_day_map_to_note
+
+    dt_obj = _owntracks_day(dt, tz, session)
+    try:
+        result = sync_day_map_to_note(
+            dt_obj, session=session, mydiary_joplin=mydiary_joplin, force=force
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"result": result}
 
 
 @app.post(

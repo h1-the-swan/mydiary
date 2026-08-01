@@ -3,7 +3,7 @@
 DESCRIPTION = """Make edits to Markdown docs, prioritizing making sure nothing is lost from original."""
 
 from collections import OrderedDict
-from typing import Any, Generator, List, Tuple
+from typing import Any, Generator, List, Optional, Tuple
 import difflib
 import re
 
@@ -82,6 +82,31 @@ class MarkdownDoc:
         # sections.append("\n".join(this_section))
         # this_section_txt = "\n".join(this_section)
         yield this_section_title, this_section
+
+    def ensure_section(
+        self, title: str, after_title: Optional[str] = None
+    ) -> "MarkdownSection":
+        """Return the named section, adding an empty one if the note lacks it.
+
+        Notes written before a section existed will never gain it through
+        update_joplin_note, which skips sections it does not already find. This
+        is how a new section gets backfilled into an old note.
+        """
+        try:
+            return self.get_section_by_title(title)
+        except KeyError:
+            pass
+        section = MarkdownSection(
+            [f"{'#' * 2} {title}", ""], title=title, parent=self, level=2
+        )
+        index = len(self.sections)
+        if after_title is not None:
+            for i, sec in enumerate(self.sections):
+                if sec.title.lower() == after_title.lower():
+                    index = i + 1
+                    break
+        self.sections.insert(index, section)
+        return section
 
     def get_image_resource_ids(self):
         sec = self.get_section_by_title('images')

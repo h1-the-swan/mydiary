@@ -15,10 +15,9 @@ from requests.utils import unquote
 from .db import rootdir
 
 
-def get_cache_dir() -> Path:
+def get_cache_dir(subdir: str = "nextcloud_thumbnails") -> Path:
     cache_dir = (
-        Path(os.getenv("MYDIARY_CACHE_DIR") or os.path.join(rootdir, ".cache"))
-        / "nextcloud_thumbnails"
+        Path(os.getenv("MYDIARY_CACHE_DIR") or os.path.join(rootdir, ".cache")) / subdir
     )
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir

@@ -13,8 +13,10 @@
   "dependencies": {
     "@mdi/font": "7.4.47",
     "@popperjs/core": "^2.11.8",
+    "@types/leaflet": "^1.9.22",
     "axios": "^1.18.1",
     "core-js": "^3.49.0",
+    "leaflet": "^1.9.4",
     "markdown-it": "^14.3.0",
     "pinia": "^4.0.2",
     "roboto-fontface": "^0.10.0",

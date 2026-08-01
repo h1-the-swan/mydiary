@@ -26,6 +26,12 @@ This is the text part of the diary entry, which I write after the rest as been g
 
 Every day I choose a few images (usually between 1 and 5) and add them to this section. I sync my images to Nextcloud, use a custom system in mydiary to select them and reduce the image sizes in order to keep the full diary more trim.
 
+### Location
+
+I run the [OwnTracks](https://owntracks.org/) app on my phone, which reports my location to a self-hosted [recorder](https://github.com/owntracks/recorder). Mydiary pulls those fixes into its own database and draws a map of where the day went, which I can add to the entry as an image, along with a short text itinerary of the places I stopped and for how long.
+
+Most of the work here turned out to be cleanup rather than drawing. The phone reports on significant location change rather than continuously, so a day is only a few dozen points, and putting them on a map raw looks bizarre: straight lines cutting through buildings, cell-tower fixes that fling the position across the neighborhood, and a pile of overlapping markers wherever I sat still. So mydiary throws out the imprecise fixes, works out where I actually stopped, and tries to be honest about the stretches where the phone went quiet — sometimes that silence means I was sitting at home, and sometimes it means I went somewhere by a route it can't know, and those get drawn differently. The track is colored by time of day, and the places I lingered get a circle sized by how long I was there. Adding a map to an entry is deliberate, not scheduled. [docs/location-workflow.md](docs/location-workflow.md) has the details.
+
 ### Google Calendar events
 
 Mydiary connects to my personal Google Calendar and fills in all the events for a day. I often use my calendar as a lightweight journaling solution, even backfilling things I did in the last few days when I have a few minutes to do so.
@@ -57,6 +63,8 @@ GOOGLECALENDAR_CREDENTIALS_FILE=
 NEXTCLOUD_URL=
 NEXTCLOUD_USERNAME=
 NEXTCLOUD_PASSWORD=
+OWNTRACKS_RECORDER_URL=
+OWNTRACKS_USER=
 ```
 ### Alembic
 

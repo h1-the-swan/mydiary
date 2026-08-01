@@ -26,15 +26,22 @@ Pocket and Google Photos were formerly data sources. The Google Photos integrati
 | `mydiary_day.py` | `MyDiaryDay` class — assembles a day's data from all sources and generates Markdown |
 | `core.py` | Shared utilities: image resize, timezone inference, hash helpers |
 | `markdown_edits.py` | `MarkdownDoc` class for parsing and editing structured diary Markdown |
-| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop); `pocket_connector.py` is database-only since the Pocket API shut down |
+| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down |
+| `owntracks_track.py` | Pure functions turning raw location fixes into stays and links (no I/O) |
+| `map_render.py` | Renders the daily location map to PNG (py-staticmaps + Pillow) |
+| `owntracks_maps.py` | Puts a rendered map into its Joplin note's Location section |
 
 The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
 
 The image workflow (Nextcloud photos ↔ Joplin notes, manual uploads, thumbnail caching) is documented in `docs/image-workflow.md`.
 
+The location workflow (OwnTracks recorder → database → smoothed track → rendered map → Joplin note) is documented in `docs/location-workflow.md`.
+
 ### Frontend (`mydiary-vuetify/src/`)
 
 Vue 3 SPA using Vuetify 3 and Pinia for state. Key views: `MyDiaryDay.vue` (main diary view), `PerformSongs.vue` (guitar songs tracker), `Pocket.vue` (saved articles browser).
+
+`MapSection.vue` draws the day's location track with Leaflet, from the same `/owntracks/track/{dt}` endpoint the PNG renderer uses, and exposes the smoothing thresholds as sliders for tuning.
 
 `api.ts` is **auto-generated** from the FastAPI OpenAPI spec via [Orval](https://orval.dev/) — do not edit it by hand.
 
@@ -121,6 +128,8 @@ GOOGLECALENDAR_CREDENTIALS_FILE=
 NEXTCLOUD_URL=
 NEXTCLOUD_USERNAME=
 NEXTCLOUD_PASSWORD=
+OWNTRACKS_RECORDER_URL=
+OWNTRACKS_USER=
 ```
 
 Docker Compose overrides some of these to use paths inside the container (`token_cache/` directory).

@@ -164,3 +164,30 @@ def test_set_content_document_roundtrip():
     assert "some words" in md_doc.txt
     assert "tail content" in md_doc.txt
     assert "abc123" not in md_doc.txt
+
+
+def test_ensure_section_returns_an_existing_section():
+    md = MarkdownDoc("# Title\n\n## Words\n\nhi\n\n## Images\n\n")
+    section = md.ensure_section("Images")
+    assert section is md.get_section_by_title("Images")
+    assert len(md.sections) == 3
+
+
+def test_ensure_section_adds_a_missing_section_after_the_named_one():
+    md = MarkdownDoc("# Title\n\n## Words\n\nhi\n\n## Images\n\n## Spotify tracks\n\n")
+    md.ensure_section("Location", after_title="Images")
+    titles = [s.title for s in md.sections if s.title]
+    assert titles == ["Words", "Images", "Location", "Spotify tracks"]
+    assert "## Location" in md.txt
+
+
+def test_ensure_section_appends_when_the_anchor_is_absent():
+    md = MarkdownDoc("# Title\n\n## Words\n\nhi\n")
+    md.ensure_section("Location", after_title="Images")
+    assert [s.title for s in md.sections if s.title] == ["Words", "Location"]
+
+
+def test_ensure_section_is_case_insensitive():
+    md = MarkdownDoc("# Title\n\n## Location\n\nexisting\n")
+    md.ensure_section("location")
+    assert len([s for s in md.sections if s.title.lower() == "location"]) == 1

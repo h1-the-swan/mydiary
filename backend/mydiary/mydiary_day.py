@@ -14,6 +14,8 @@ from .models import (
     SpotifyTrackHistoryFrozen,
     MyDiaryImage,
     MyDiaryWords,
+    OwnTracksDayMap,
+    OwnTracksLocation,
     PocketArticle,
     GoogleCalendarEvent,
     Tag,
@@ -53,6 +55,10 @@ class MyDiaryDay:
             str, List[PocketArticle]
         ] = {},  # interactions with Pocket articles on this day
         google_calendar_events: List[GoogleCalendarEvent] = [],
+        owntracks_locations: List[
+            OwnTracksLocation
+        ] = [],  # location fixes recorded on this day
+        owntracks_day_map: Optional[OwnTracksDayMap] = None,
         rating: Optional[
             int
         ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
@@ -69,6 +75,8 @@ class MyDiaryDay:
         self.spotify_tracks = spotify_tracks
         self.pocket_articles = pocket_articles
         self.google_calendar_events = google_calendar_events
+        self.owntracks_locations = owntracks_locations
+        self.owntracks_day_map = owntracks_day_map
         self.rating = rating
         self.flagged = flagged
 
@@ -78,6 +86,7 @@ class MyDiaryDay:
         dt: datetime = now().start_of("day"),
         spotify_sync: bool = True,
         gcal_save: bool = True,
+        owntracks_sync: bool = True,
         session: Optional[Session] = None,
         note: Optional[Union[JoplinNote, str]] = None,  # can use note or note_id
         **kwargs,
@@ -85,6 +94,7 @@ class MyDiaryDay:
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
         from .googlecalendar_connector import MyDiaryGCal
+        from .owntracks_connector import MyDiaryOwnTracks
 
         if session is None:
             session = Session(engine)
@@ -131,6 +141,19 @@ class MyDiaryDay:
                 google_calendar_events, session=session
             )
 
+        mydiary_owntracks = MyDiaryOwnTracks()
+        if owntracks_sync is True:
+            # the recorder being unreachable must not break day assembly; fall
+            # back to whatever has already been mirrored into the database
+            try:
+                mydiary_owntracks.save_locations_to_database(session=session)
+            except Exception as e:
+                logger.warning(f"skipping OwnTracks sync during day assembly: {e}")
+        owntracks_locations = mydiary_owntracks.get_locations_for_day(
+            dt, session=session
+        )
+        owntracks_day_map = session.get(OwnTracksDayMap, dt.date())
+
         return cls(
             dt=dt,
             words=words,
@@ -138,6 +161,8 @@ class MyDiaryDay:
             pocket_articles=pocket_articles,
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
+            owntracks_locations=owntracks_locations,
+            owntracks_day_map=owntracks_day_map,
             joplin_note_id=getattr(note, "id", None),
             **kwargs,
         )
@@ -168,6 +193,10 @@ class MyDiaryDay:
         md += f"## Images\n\n"
         if self.images:
             md += f"{self.images_markdown()}\n\n"
+        # only days with location data get a Location section, the same way the
+        # Pocket section is omitted once there is nothing to put in it
+        if self.owntracks_locations:
+            md += f"## Location\n\n{self.owntracks_markdown()}\n\n"
         md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
         # Pocket is defunct: entries after the latest Pocket item in the
         # database no longer get a Pocket articles section
@@ -185,6 +214,32 @@ class MyDiaryDay:
             if image.joplin_resource_id:
                 resource_ids_md.append(f"![](:/{image.joplin_resource_id})")
         return "\n\n".join(resource_ids_md)
+
+    def build_owntracks_track(self, params=None):
+        """The day's processed track, in the day's own timezone.
+
+        Using self.dt's timezone matters: a day spent in Ghent must be binned
+        into morning/afternoon/evening by Belgian time, not by the diary's
+        default zone.
+        """
+        from .owntracks_track import build_track, points_from_locations
+
+        points = points_from_locations(
+            self.owntracks_locations, timezone=self.dt.timezone_name
+        )
+        return build_track(points, params)
+
+    def owntracks_markdown(self) -> str:
+        # lazily imported: owntracks_maps imports this module
+        from .owntracks_maps import section_content
+
+        if not self.owntracks_locations:
+            return "None"
+        track = self.build_owntracks_track()
+        if track.is_empty():
+            return "None"
+        resource_id = getattr(self.owntracks_day_map, "joplin_resource_id", None)
+        return section_content(resource_id, track)
 
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:

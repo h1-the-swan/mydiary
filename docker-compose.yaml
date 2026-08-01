@@ -31,6 +31,8 @@ services:
       # no port: the backend scans Joplin's port range (41184-41194) and
       # finds the data API wherever it landed
       - JOPLIN_BASE_URL=http://host.docker.internal
+      # the owntracks recorder runs in its own compose project on the host
+      - OWNTRACKS_RECORDER_URL=http://host.docker.internal:8083
     extra_hosts:
       # Docker Desktop provides this name automatically; a native Linux Docker
       # Engine does not, so map it explicitly for JOPLIN_BASE_URL above.

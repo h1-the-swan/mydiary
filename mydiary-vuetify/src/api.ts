@@ -295,6 +295,41 @@ export type NextcloudThumbnailImgParams = {
 url: string;
 };
 
+export type OwntracksLocationsForDayParams = {
+tz?: string;
+};
+
+export type OwntracksTrackForDayParams = {
+tz?: string;
+max_acc?: number;
+stay_radius_m?: number;
+stay_minutes?: number;
+gap_minutes?: number;
+gap_metres?: number;
+dwell_max_kmh?: number;
+};
+
+export type OwntracksDayMapImageParams = {
+tz?: string;
+width?: number;
+height?: number;
+max_acc?: number;
+stay_radius_m?: number;
+stay_minutes?: number;
+gap_minutes?: number;
+gap_metres?: number;
+dwell_max_kmh?: number;
+};
+
+export type OwntracksSyncLocationsParams = {
+days_back?: number;
+};
+
+export type OwntracksMapToNoteParams = {
+tz?: string;
+force?: boolean;
+};
+
 export type UploadImagesToNoteParams = {
 dt: string;
 };
@@ -632,6 +667,84 @@ export const nextcloudThumbnailImg = (
   }
 
 /**
+ * The day's raw location fixes, before any smoothing.
+ * @summary Owntracks Locations For Day
+ */
+export const owntracksLocationsForDay = (
+    dt: string,
+    params?: OwntracksLocationsForDayParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.get(
+      `/owntracks/locations/${dt}`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * The processed day: stays and links, as GeoJSON.
+ *
+ * The frontend map draws this, so the interactive view and the rendered PNG
+ * always agree.
+ * @summary Owntracks Track For Day
+ */
+export const owntracksTrackForDay = (
+    dt: string,
+    params?: OwntracksTrackForDayParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.get(
+      `/owntracks/track/${dt}`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Owntracks Day Map Image
+ */
+export const owntracksDayMapImage = (
+    dt: string,
+    params?: OwntracksDayMapImageParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown | Blob>> => {
+    return axios.get(
+      `/owntracks/map/${dt}.png`,{
+        responseType: 'blob',
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Owntracks Sync Locations
+ */
+export const owntracksSyncLocations = (
+    params?: OwntracksSyncLocationsParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/owntracks/sync`,
+      undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * Render the day's map and write it into the note's Location section.
+ * @summary Owntracks Map To Note
+ */
+export const owntracksMapToNote = (
+    dt: string,
+    params?: OwntracksMapToNoteParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.post(
+      `/owntracks/map/${dt}/to_note`,
+      undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
  * Store uploaded originals in Nextcloud (mydiary_uploads/{YYYY}/{MM}/), then
  * run them through the same shrink/database/Joplin pipeline as iPhone photos.
  * @summary Upload Images To Note
@@ -945,6 +1058,11 @@ export type JoplinUpdateNoteResult = AxiosResponse<unknown>
 export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown[]>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>
 export type NextcloudThumbnailImgResult = AxiosResponse<unknown | Blob>
+export type OwntracksLocationsForDayResult = AxiosResponse<unknown>
+export type OwntracksTrackForDayResult = AxiosResponse<unknown>
+export type OwntracksDayMapImageResult = AxiosResponse<unknown | Blob>
+export type OwntracksSyncLocationsResult = AxiosResponse<unknown>
+export type OwntracksMapToNoteResult = AxiosResponse<unknown>
 export type UploadImagesToNoteResult = AxiosResponse<MyDiaryImageRead[]>
 export type UploadedImagesForDayResult = AxiosResponse<MyDiaryImageRead[]>
 export type SyncNoteImagesResult = AxiosResponse<SyncNoteImages200>

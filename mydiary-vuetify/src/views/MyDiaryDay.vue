@@ -63,6 +63,7 @@
         </v-expansion-panel>
     </v-expansion-panels>
     <photos-section :dt="getDateStr" :joplin-note-id="joplinNoteId" />
+    <map-section :dt="getDateStr" :joplin-note-id="joplinNoteId" />
 </template>
 
 <script setup lang="ts">
@@ -89,6 +90,7 @@ import GCalAuth from '@/components/GCalAuth.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
 // import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
 import PhotosSection from '@/components/PhotosSection.vue'
+import MapSection from '@/components/MapSection.vue'
 import { useAppStore } from '@/store/app'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
