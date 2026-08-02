@@ -1,14 +1,16 @@
 <template>
-<v-row justify="start">
-<v-col cols="2">
+<div class="d-flex align-center ga-3">
   <v-btn @click="$router.push(`/performSongs/${randomPerformSong()}`)">
     Random song
   </v-btn>
-</v-col>
-<v-col>
-  <v-switch v-model="includeUnlearned" label="Include unlearned" color="primary"/>
-</v-col>
-</v-row>
+  <v-switch
+    v-model="includeUnlearned"
+    label="Include unlearned"
+    color="primary"
+    density="compact"
+    hide-details
+  />
+</div>
 </template>
 
 <script lang="ts" setup>

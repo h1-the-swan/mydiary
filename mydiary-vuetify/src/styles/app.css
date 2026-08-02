@@ -1,0 +1,118 @@
+/**
+ * Global, framework-level styles. Vuetify component styling belongs in the
+ * `defaults` block in plugins/vuetify.ts; this file is for the page-shell
+ * layout rule and the prose treatment for rendered Markdown.
+ */
+
+/* ---- page shell -------------------------------------------------------- */
+
+/* Wide content (photo grids, maps, data tables) fills the shell. Text and
+   controls sit in the narrower reading column so lines stay readable. */
+.mydiary-page {
+    max-width: 1160px;
+}
+
+.reading {
+    max-width: 900px;
+}
+
+/* ---- prose ------------------------------------------------------------- */
+
+/* Applied to containers holding markdown-it output (diary notes, lyrics).
+   markdown-it emits block HTML, so no white-space hacks are needed. */
+.prose {
+    line-height: 1.65;
+    overflow-wrap: break-word;
+}
+
+.prose > :first-child {
+    margin-top: 0;
+}
+
+.prose > :last-child {
+    margin-bottom: 0;
+}
+
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote,
+.prose pre,
+.prose table {
+    margin: 0 0 1em;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+    margin: 1.6em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.prose h1 {
+    font-size: 1.5rem;
+}
+
+.prose h2 {
+    font-size: 1.25rem;
+}
+
+.prose h3 {
+    font-size: 1.0625rem;
+}
+
+.prose h4,
+.prose h5,
+.prose h6 {
+    font-size: 1rem;
+}
+
+.prose ul,
+.prose ol {
+    padding-left: 1.5em;
+}
+
+.prose li + li {
+    margin-top: 0.25em;
+}
+
+.prose a {
+    color: rgb(var(--v-theme-primary));
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+.prose blockquote {
+    padding-left: 1em;
+    border-left: 3px solid rgba(var(--v-border-color), 0.24);
+    color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+
+.prose code {
+    padding: 0.15em 0.35em;
+    border-radius: 4px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    font-size: 0.9em;
+}
+
+.prose pre {
+    padding: 0.75em 1em;
+    border-radius: 8px;
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    overflow-x: auto;
+}
+
+.prose pre code {
+    padding: 0;
+    background: none;
+}
+
+.prose img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}

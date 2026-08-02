@@ -1,10 +1,11 @@
 <template>
-    <div class="mt-4">
+    <section>
+        <section-header label="Photos" :meta="photoCountLabel" />
         <v-tabs v-model="tab" density="compact">
             <v-tab value="iphone">iPhone photos</v-tab>
             <v-tab value="uploads">Uploads</v-tab>
         </v-tabs>
-        <v-window v-model="tab" class="mt-2">
+        <v-window v-model="tab" class="mt-4">
             <v-window-item value="iphone">
                 <photo-grid
                     :items="iphone.items.value"
@@ -29,7 +30,7 @@
         </v-window>
         <v-btn
             class="mt-4"
-            block
+            color="primary"
             :loading="syncing"
             :disabled="syncDisabled"
             @click="onSync"
@@ -45,7 +46,7 @@
         >
             {{ syncError }}
         </v-alert>
-    </div>
+    </section>
 </template>
 
 <script setup lang="ts">
@@ -64,6 +65,7 @@ import {
     usePhotoSelection,
 } from '@/composables/usePhotoSelection'
 import PhotoGrid from '@/components/PhotoGrid.vue'
+import SectionHeader from '@/components/SectionHeader.vue'
 import UploadsPhotoTab from '@/components/UploadsPhotoTab.vue'
 import { useAppStore } from '@/store/app'
 
@@ -86,6 +88,13 @@ const noteExists = computed<boolean>(() => {
 })
 const syncDisabled = computed<boolean>(() => {
     return !noteExists.value || !(iphone.dirty.value || uploads.dirty.value)
+})
+const photoCountLabel = computed<string>(() => {
+    const total = iphone.items.value.length + uploads.items.value.length
+    if (!total) return ''
+    const selected =
+        iphone.selectedPaths.value.length + uploads.selectedPaths.value.length
+    return selected ? `${total} · ${selected} selected` : `${total}`
 })
 
 async function fetchIphonePhotos() {

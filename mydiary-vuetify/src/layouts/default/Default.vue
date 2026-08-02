@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-layout class="rounded rounded-md">
+    <v-layout>
       <default-bar />
 
       <default-view />

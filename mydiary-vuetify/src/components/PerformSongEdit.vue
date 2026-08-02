@@ -2,11 +2,11 @@
     <v-card>
         <v-form>
             <v-card-title>
-                <span class="text-h5">{{ formTitle }}</span>
+                <span class="text-h6">{{ formTitle }}</span>
             </v-card-title>
 
             <v-card-text>
-                <v-container>
+                <v-container class="pa-0">
                     <v-row>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
@@ -17,7 +17,7 @@
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.artist_name"
-                                label="Artist Name"
+                                label="Artist"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
@@ -35,61 +35,68 @@
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.notes"
-                                label="notes"
+                                label="Notes"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.perform_url"
-                                label="perform_url"
+                                label="Performance URL"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.created_at"
-                                label="created_at"
+                                label="Added"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.key"
-                                label="key"
+                                label="Key"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.capo"
-                                label="capo"
+                                label="Capo"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.lyrics"
-                                label="lyrics"
+                                label="Lyrics"
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.learned_dt"
-                                label="learned_dt"
+                                label="Learned on"
                             ></v-text-field>
                         </v-col>
                     </v-row>
                 </v-container>
             </v-card-text>
             <v-card-actions>
-                <v-btn color="primary" variant="elevated" @click="onSave"
-                    >Save</v-btn
+                <v-btn color="primary" variant="elevated" @click="onSave">
+                    Save
+                </v-btn>
+                <v-spacer />
+                <v-btn
+                    color="error"
+                    variant="text"
+                    disabled
+                    title="Deleting songs is not enabled"
+                    @click="onDelete"
                 >
-                <v-btn color="red" disabled variant="elevated" @click="onDelete"
-                    >Delete</v-btn
-                >
+                    Delete
+                </v-btn>
             </v-card-actions>
         </v-form>
         <v-snackbar v-if="submitted" v-model="snackbar">
-            PerformSong saved. ID: {{ submitted.id }}
+            Saved “{{ submitted.name }}”.
             <template v-slot:actions>
-                <v-btn color="green" variant="text" @click="snackbar = false">
+                <v-btn variant="text" @click="snackbar = false">
                     Close
                 </v-btn>
             </template>
@@ -123,9 +130,9 @@ const submitted = ref<PerformSongRead>()
 const snackbar = ref(false)
 const formTitle = computed(() => {
     if (props.performSong) {
-        return `Edit PerformSong (ID: ${props.performSong.id})`
+        return 'Edit song'
     } else {
-        return 'Submit a new PerformSong'
+        return 'Add a song'
     }
 })
 function dateFmt(dateStr: string | null | undefined) {
@@ -169,7 +176,6 @@ async function onSave() {
         ).data
     }
     snackbar.value = true
-    console.log(submitted.value)
     app.loadPerformSongs()
     router.push({ name: 'performSong', params: { id: submitted.value.id } })
 }
@@ -196,5 +202,4 @@ watchEffect(() => {
         )
     }
 })
-watchEffect(() => console.log(submitPerformSong.value))
 </script>

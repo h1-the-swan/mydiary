@@ -1,11 +1,7 @@
 <template>
-    <div class="mt-4">
-        <div class="d-flex align-center justify-space-between flex-wrap ga-2">
-            <div class="text-medium-emphasis text-body-2">
-                <span v-if="summary">{{ summary }}</span>
-                <span v-else-if="!loading">No location data for this day.</span>
-            </div>
-            <div class="d-flex align-center ga-2">
+    <section>
+        <section-header label="Location" :meta="headerMeta">
+            <template #actions>
                 <v-btn
                     size="small"
                     variant="text"
@@ -22,8 +18,8 @@
                 >
                     Add map to note
                 </v-btn>
-            </div>
-        </div>
+            </template>
+        </section-header>
 
         <v-expand-transition>
             <v-card v-if="showTuning" variant="tonal" class="mt-2 pa-3">
@@ -74,7 +70,7 @@
         >
             {{ error }}
         </v-alert>
-    </div>
+    </section>
 </template>
 
 <script setup lang="ts">
@@ -82,6 +78,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { owntracksMapToNote, owntracksTrackForDay } from '@/api'
+import SectionHeader from '@/components/SectionHeader.vue'
 
 const props = defineProps<{
     dt: string
@@ -133,6 +130,11 @@ const hasTrack = ref(false)
 const hasNote = computed<boolean>(
     () => !!props.joplinNoteId && props.joplinNoteId !== 'does_not_exist',
 )
+
+const headerMeta = computed<string>(() => {
+    if (summary.value) return summary.value
+    return loading.value ? '' : 'No location data for this day'
+})
 
 const mapEl = ref<HTMLElement | null>(null)
 let map: L.Map | null = null
@@ -263,7 +265,7 @@ watch(params, loadTrack, { deep: true })
 .mydiary-map {
     height: 420px;
     width: 100%;
-    border-radius: 4px;
+    border-radius: 8px;
     z-index: 0;
 }
 

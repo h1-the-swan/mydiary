@@ -6,8 +6,14 @@
         :attributes="attributes"
         expanded
     />
-    <v-btn @click="app.calendarShouldUpdate = true">
-        refresh diary details for calendar
+    <v-btn
+        class="mt-2"
+        size="small"
+        variant="text"
+        prepend-icon="mdi-refresh"
+        @click="app.calendarShouldUpdate = true"
+    >
+        Refresh calendar
     </v-btn>
 </template>
 
