@@ -116,6 +116,99 @@ def validate_words(words: Iterable[str]) -> Tuple[List[str], List[str]]:
     return valid, invalid
 
 
+@dataclass(frozen=True)
+class Consistency:
+    """Whether a set of words could all come from one day's puzzle."""
+
+    ok: bool
+    letters: Tuple[str, ...]
+    center_candidates: Tuple[str, ...]
+    problems: Tuple[str, ...]
+
+
+def check_consistency(
+    words: Sequence[str],
+    center_letter: Optional[str] = None,
+    outer_letters: Optional[str] = None,
+) -> Consistency:
+    """Could these words all be answers to the same puzzle?
+
+    A day has exactly seven letters and one of them is in every answer, so two
+    puzzles' answers filed under one date show up as either too many distinct
+    letters or no letter shared by all of them. Catching that is what keeps the
+    per-date grouping -- and the hive built from it -- meaningful.
+    """
+    words = [w for w in (normalize_word(w) for w in words or []) if w]
+    if not words:
+        return Consistency(ok=True, letters=(), center_candidates=(), problems=())
+
+    letters: Set[str] = set().union(*(set(w) for w in words))
+    common: Set[str] = set(words[0])
+    for word in words[1:]:
+        common &= set(word)
+
+    problems: List[str] = []
+    if len(letters) > HIVE_SIZE:
+        problems.append(
+            f"These words use {len(letters)} different letters "
+            f"({''.join(sorted(letters))}), but a puzzle only has {HIVE_SIZE}."
+        )
+    if not common:
+        problems.append(
+            "No single letter appears in every word, but a puzzle's centre "
+            "letter has to be in all of them."
+        )
+
+    stored = _stored_letters(center_letter, outer_letters)
+    if stored:
+        outside = sorted(letters - stored)
+        if outside:
+            problems.append(
+                f"{', '.join(outside)} {'is' if len(outside) == 1 else 'are'} not "
+                f"among the letters recorded for this puzzle."
+            )
+        stored_center = normalize_word(center_letter or "")
+        missing = [w for w in words if stored_center not in w]
+        if missing:
+            problems.append(
+                f"{len(missing)} word{'s' if len(missing) > 1 else ''} "
+                f"({', '.join(missing[:3])}{'…' if len(missing) > 3 else ''}) "
+                f"do not use the centre letter {stored_center}."
+            )
+
+    return Consistency(
+        ok=not problems,
+        letters=tuple(sorted(letters)),
+        center_candidates=tuple(sorted(common)),
+        problems=tuple(problems),
+    )
+
+
+def split_by_puzzle(words: Sequence[str]) -> List[List[str]]:
+    """Best-effort split of a mixed pile of words into per-puzzle groups.
+
+    Only used to explain a conflict -- grouping greedily by the seven-letter
+    rule is enough to show which words look like they belong together.
+    """
+    remaining = [w for w in (normalize_word(w) for w in words or []) if w]
+    groups: List[List[str]] = []
+    while remaining:
+        group = [remaining[0]]
+        letters = set(remaining[0])
+        rest = []
+        for word in remaining[1:]:
+            merged = letters | set(word)
+            common = set.intersection(*(set(w) for w in group + [word]))
+            if len(merged) <= HIVE_SIZE and common:
+                group.append(word)
+                letters = merged
+            else:
+                rest.append(word)
+        groups.append(group)
+        remaining = rest
+    return groups
+
+
 def _deterministic_order(items: Iterable[str], seed: str) -> List[str]:
     """Shuffle stably from a seed.
 

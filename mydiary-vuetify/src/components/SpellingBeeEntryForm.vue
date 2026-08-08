@@ -13,6 +13,22 @@
                     ></v-date-input>
                 </div>
 
+                <!-- a date is one puzzle, so anything already there matters -->
+                <v-alert
+                    v-if="alreadyRecorded.length"
+                    class="mb-4"
+                    type="warning"
+                    variant="tonal"
+                    density="comfortable"
+                >
+                    This date already has {{ alreadyRecorded.length }}
+                    {{ alreadyRecorded.length === 1 ? 'word' : 'words' }} recorded.
+                    Anything you add has to be from the same puzzle.
+                    <div class="text-body-2 mt-2">
+                        {{ alreadyRecorded.join(', ') }}
+                    </div>
+                </v-alert>
+
                 <v-textarea
                     v-model="raw"
                     label="Missed words"
@@ -113,13 +129,92 @@
                     variant="elevated"
                     type="submit"
                     :disabled="!parsed.length || saving || !!letterError"
-                    :loading="saving"
+                    :loading="saving || checking"
                 >
                     Add {{ parsed.length || '' }}
                     {{ parsed.length === 1 ? 'word' : 'words' }}
                 </v-btn>
             </v-card-actions>
         </v-form>
+
+        <v-dialog v-model="confirmDialog" max-width="560">
+            <v-card v-if="preview">
+                <v-card-title>
+                    {{ preview.conflict ? 'These words disagree' : 'Add to a date that already has words?' }}
+                </v-card-title>
+
+                <v-card-text>
+                    <template v-if="preview.conflict">
+                        <p
+                            v-for="problem in preview.problems"
+                            :key="problem"
+                            class="text-body-2 mb-2"
+                        >
+                            {{ problem }}
+                        </p>
+                        <p class="text-body-2 text-medium-emphasis mb-4">
+                            One date is one puzzle. These look like
+                            {{ preview.groups.length }} different puzzles:
+                        </p>
+                        <div
+                            v-for="(group, i) in preview.groups"
+                            :key="i"
+                            class="mb-3"
+                        >
+                            <div class="text-overline text-medium-emphasis">
+                                {{ groupLabel(group) }}
+                            </div>
+                            <div class="text-body-2">{{ group.join(', ') }}</div>
+                        </div>
+                        <p class="text-body-2 text-medium-emphasis mb-0">
+                            Put one of them on its own date, or remove the words
+                            that don't belong here first.
+                        </p>
+                    </template>
+
+                    <template v-else>
+                        <p class="text-body-2 mb-3">
+                            {{ formatDate(preview.puzzle_date) }} already has
+                            {{ preview.existing_words.length }}
+                            {{ preview.existing_words.length === 1 ? 'word' : 'words' }}
+                            recorded.
+                        </p>
+                        <div class="text-overline text-medium-emphasis">Already there</div>
+                        <p class="text-body-2 mb-3">
+                            {{ preview.existing_words.join(', ') }}
+                        </p>
+                        <div class="text-overline text-medium-emphasis">
+                            Adding {{ preview.new_words.length }}
+                        </div>
+                        <p class="text-body-2 mb-3">
+                            {{ preview.new_words.join(', ') || '—' }}
+                        </p>
+                        <p
+                            v-if="preview.duplicate_words.length"
+                            class="text-body-2 text-medium-emphasis mb-0"
+                        >
+                            {{ preview.duplicate_words.length }} already recorded and
+                            will be skipped.
+                        </p>
+                    </template>
+                </v-card-text>
+
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="confirmDialog = false">Cancel</v-btn>
+                    <v-btn
+                        v-if="!preview.conflict"
+                        color="primary"
+                        variant="elevated"
+                        :loading="saving"
+                        :disabled="!preview.new_words.length"
+                        @click="save"
+                    >
+                        Add {{ preview.new_words.length }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
 
         <v-snackbar v-model="snackbar" :timeout="4000">
             {{ snackbarText }}
@@ -135,7 +230,9 @@ import { computed, ref, watch } from 'vue'
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
 import {
+    SpellingBeeAddPreview,
     createSpellingBeeMisses,
+    previewSpellingBeeMisses,
     readSpellingBeeMissesList,
     upsertSpellingBeePuzzle,
 } from '@/api'
@@ -143,6 +240,7 @@ import {
     HIVE_SIZE,
     MIN_WORD_LEN,
     distinctLetters,
+    formatDate,
     isPangram,
     isoDate,
     normalizeWord,
@@ -157,6 +255,10 @@ const raw = ref('')
 // all seven at once, center letter first
 const letterInput = ref('')
 const saving = ref(false)
+const checking = ref(false)
+// what the backend says this add would do, fetched before writing anything
+const preview = ref<SpellingBeeAddPreview>()
+const confirmDialog = ref(false)
 const snackbar = ref(false)
 const snackbarText = ref('')
 // what's already stored for the selected date, so the form can say so up front
@@ -222,8 +324,45 @@ async function loadExisting() {
 }
 watch(puzzleDate, loadExisting, { immediate: true })
 
+function groupLabel(group: string[]) {
+    const letters = [...new Set(group.join(''))].sort().join('')
+    const common = group
+        .slice(1)
+        .reduce(
+            (acc, word) => acc.filter((c) => word.includes(c)),
+            [...new Set(group[0])]
+        )
+    const centre = common.length ? ` · centre ${common.join('/')}` : ''
+    return `${group.length} words · ${letters}${centre}`
+}
+
+/**
+ * Ask the backend what this add would do before doing it. A date that already
+ * has words gets a confirmation; words that can't be one puzzle get refused.
+ */
 async function onSave() {
     if (!parsed.value.length) return
+    checking.value = true
+    preview.value = (
+        await previewSpellingBeeMisses({
+            puzzle_date: isoDate(puzzleDate.value),
+            words: parsed.value,
+            center_letter: lettersReady.value ? puzzleLetters.value[0] : undefined,
+            outer_letters: lettersReady.value
+                ? puzzleLetters.value.slice(1)
+                : undefined,
+        })
+    ).data
+    checking.value = false
+
+    if (preview.value.conflict || preview.value.existing_words.length) {
+        confirmDialog.value = true
+        return
+    }
+    await save()
+}
+
+async function save() {
     saving.value = true
     const dt = isoDate(puzzleDate.value)
     const result = (
@@ -250,6 +389,7 @@ async function onSave() {
     raw.value = ''
     letterInput.value = ''
     saving.value = false
+    confirmDialog.value = false
     await loadExisting()
     emit('saved')
 }

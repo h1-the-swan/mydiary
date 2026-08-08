@@ -204,6 +204,25 @@ export interface RecipeRead {
   id: number;
 }
 
+/**
+ * What would happen if these words were added to this date.
+ *
+ * The entry form asks for this before writing, so it can warn about a date
+ * that already has words and refuse a set that can't be one puzzle.
+ */
+export interface SpellingBeeAddPreview {
+  puzzle_date: string;
+  existing_words: string[];
+  new_words: string[];
+  duplicate_words: string[];
+  invalid_words: string[];
+  conflict: boolean;
+  problems: string[];
+  combined_letters: string[];
+  center_candidates: string[];
+  groups: string[][];
+}
+
 export interface SpellingBeeDefinitionRead {
   definition?: string | null;
   part_of_speech?: string | null;
@@ -1106,6 +1125,19 @@ export const readSpellingBeeMissesList = (
   }
 
 /**
+ * Dry run of an add, so the form can warn before it writes anything.
+ * @summary Preview Spelling Bee Misses
+ */
+export const previewSpellingBeeMisses = (
+    spellingBeeMissBulkCreate: SpellingBeeMissBulkCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeAddPreview>> => {
+    return axios.post(
+      `/spellingbee/misses/check`,
+      spellingBeeMissBulkCreate,options
+    );
+  }
+
+/**
  * Every distinct word, rolled up across the days it was missed.
  *
  * Aggregated in Python rather than SQL: the volume is a handful of words a
@@ -1310,6 +1342,7 @@ export type ReadTimeZoneChangeListResult = AxiosResponse<TimeZoneChange[]>
 export type CreateTimeZoneChangeResult = AxiosResponse<TimeZoneChange>
 export type CreateSpellingBeeMissesResult = AxiosResponse<SpellingBeeMissBulkResult>
 export type ReadSpellingBeeMissesListResult = AxiosResponse<SpellingBeeMissRead[]>
+export type PreviewSpellingBeeMissesResult = AxiosResponse<SpellingBeeAddPreview>
 export type ReadSpellingBeeWordsListResult = AxiosResponse<SpellingBeeWordRead[]>
 export type ReadSpellingBeeHivesListResult = AxiosResponse<SpellingBeeHiveRead[]>
 export type ReadSpellingBeePuzzlesListResult = AxiosResponse<SpellingBeePuzzleRead[]>

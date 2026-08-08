@@ -666,6 +666,77 @@ class TestSpellingBee:
         words = client.get("/spellingbee/words/").json()
         assert words[0]["definition"] == "Frank and outspoken."
 
+    def test_second_puzzle_on_same_date_is_refused(
+        self, session: Session, client: TestClient
+    ):
+        # the real mistake: two days' answers filed under one date
+        self._post(client, "2026-07-28", ["DENIM", "DIME", "EMEND", "GIMME"])
+        response = self._post(client, "2026-07-28", ["ABROAD", "BAOBAB", "TABOO"])
+        assert response.status_code == 409
+        assert "can't all be from the puzzle" in response.json()["detail"]
+        # and nothing was written
+        words = [m.word for m in session.exec(select(SpellingBeeMiss)).all()]
+        assert "ABROAD" not in words
+
+    def test_same_puzzle_added_in_two_goes_is_fine(
+        self, session: Session, client: TestClient
+    ):
+        self._post(client, "2026-07-28", ["DENIM", "DIME", "EMEND"])
+        response = self._post(client, "2026-07-28", ["GIMME", "MIDGE"])
+        assert response.status_code == 200
+        assert len(response.json()["created"]) == 2
+
+    def test_words_outside_recorded_letters_are_refused(
+        self, session: Session, client: TestClient
+    ):
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        response = self._post(client, "2026-08-07", ["CANDID", "MUFFIN"])
+        assert response.status_code == 409
+
+    def test_preview_reports_existing_words(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        response = client.post(
+            "/spellingbee/misses/check",
+            json={"puzzle_date": "2026-08-07", "words": ["CANDID", "DYADIC", "CAD"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["existing_words"] == ["CADDY", "CANDID"]
+        assert data["new_words"] == ["DYADIC"]
+        assert data["duplicate_words"] == ["CANDID"]
+        assert data["invalid_words"] == ["CAD"]
+        assert data["conflict"] is False
+
+    def test_preview_flags_a_conflict_and_groups_the_puzzles(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-07-28", ["DENIM", "DIME", "EMEND", "GIMME"])
+        response = client.post(
+            "/spellingbee/misses/check",
+            json={
+                "puzzle_date": "2026-07-28",
+                "words": ["ABROAD", "BAOBAB", "TABOO"],
+            },
+        )
+        data = response.json()
+        assert data["conflict"] is True
+        assert data["problems"]
+        # the two puzzles are separated so the UI can show what went wrong
+        assert len(data["groups"]) == 2
+        assert {"ABROAD", "BAOBAB", "TABOO"} in [set(g) for g in data["groups"]]
+
+    def test_preview_writes_nothing(self, session: Session, client: TestClient):
+        client.post(
+            "/spellingbee/misses/check",
+            json={"puzzle_date": "2026-08-07", "words": ["CANDID"]},
+        )
+        assert session.exec(select(SpellingBeeMiss)).all() == []
+
     def test_empty_database_returns_empty_lists(
         self, session: Session, client: TestClient
     ):

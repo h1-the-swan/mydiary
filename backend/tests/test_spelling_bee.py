@@ -7,12 +7,18 @@ import pytest
 from mydiary.spelling_bee import (
     HIVE_SIZE,
     VOWELS,
+    check_consistency,
     derive_hive,
     is_pangram,
     normalize_word,
     parse_words,
+    split_by_puzzle,
     validate_words,
 )
+
+# the two puzzles that actually got filed under one date
+M_PUZZLE = ["DENIM", "DIME", "DIMMED", "EMEND", "GIMME", "MIDGE", "IMPEND"]
+B_PUZZLE = ["ABROAD", "BAOBAB", "BURBOT", "DARTBOARD", "TABOO", "DOUBT"]
 
 DT = date(2026, 8, 7)
 
@@ -132,3 +138,61 @@ class TestDeriveHive:
         hive = derive_hive(DT, ["CANDID", "CADDY", "DYADIC"])
         assert hive.center_letter not in hive.outer_letters
         assert len(set(hive.outer_letters)) == HIVE_SIZE - 1
+
+
+class TestConsistency:
+    def test_one_puzzle_is_consistent(self):
+        result = check_consistency(M_PUZZLE)
+        assert result.ok
+        assert result.problems == ()
+        assert "M" in result.center_candidates
+
+    def test_empty_is_consistent(self):
+        assert check_consistency([]).ok
+
+    def test_two_puzzles_under_one_date_is_caught(self):
+        # the real mistake: two days' answers filed under one date
+        result = check_consistency(M_PUZZLE + B_PUZZLE)
+        assert not result.ok
+        assert any("different letters" in p for p in result.problems)
+        assert any("centre letter" in p for p in result.problems)
+
+    def test_too_many_letters_alone_is_caught(self):
+        result = check_consistency(["CANDID", "MURKY", "FLIGHT"])
+        assert not result.ok
+        assert any("different letters" in p for p in result.problems)
+
+    def test_no_common_letter_alone_is_caught(self):
+        # few enough letters to pass the count rule, but nothing shared
+        result = check_consistency(["MEND", "ROTS"])
+        assert not result.ok
+        assert any("centre letter" in p for p in result.problems)
+
+    def test_word_outside_recorded_letters_is_caught(self):
+        result = check_consistency(
+            ["CANDID", "MUFFIN"], center_letter="D", outer_letters="CANIYL"
+        )
+        assert not result.ok
+        assert any("not among the letters" in p for p in result.problems)
+
+    def test_word_missing_recorded_center_is_caught(self):
+        result = check_consistency(
+            ["CANDID", "CLAY"], center_letter="D", outer_letters="CANIYL"
+        )
+        assert not result.ok
+        assert any("centre letter D" in p for p in result.problems)
+
+    def test_consistent_with_recorded_letters(self):
+        result = check_consistency(
+            ["CANDID", "CANDY"], center_letter="D", outer_letters="CANIYL"
+        )
+        assert result.ok
+
+    def test_split_separates_the_two_puzzles(self):
+        groups = split_by_puzzle(M_PUZZLE + B_PUZZLE)
+        assert len(groups) == 2
+        assert set(groups[0]) == set(M_PUZZLE)
+        assert set(groups[1]) == set(B_PUZZLE)
+
+    def test_split_leaves_one_puzzle_whole(self):
+        assert split_by_puzzle(M_PUZZLE) == [M_PUZZLE]

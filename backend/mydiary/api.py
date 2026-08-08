@@ -190,6 +190,25 @@ class SpellingBeeMissBulkResult(SQLModel):
     invalid: List[str]  # too short to be a Bee answer
 
 
+class SpellingBeeAddPreview(SQLModel):
+    """What would happen if these words were added to this date.
+
+    The entry form asks for this before writing, so it can warn about a date
+    that already has words and refuse a set that can't be one puzzle.
+    """
+
+    puzzle_date: date
+    existing_words: List[str]  # already recorded for this date
+    new_words: List[str]  # would be added
+    duplicate_words: List[str]  # already recorded, would be skipped
+    invalid_words: List[str]  # too short to be a Bee answer
+    conflict: bool  # existing + new can't be one puzzle
+    problems: List[str]
+    combined_letters: List[str]
+    center_candidates: List[str]
+    groups: List[List[str]]  # words split into the puzzles they look like
+
+
 class SpellingBeePuzzleRead(SpellingBeePuzzleBase):
     puzzle_date: date
 
@@ -1267,6 +1286,27 @@ def _miss_read(miss: SpellingBeeMiss) -> SpellingBeeMissRead:
     )
 
 
+def _date_consistency(
+    session: Session,
+    puzzle_date: date,
+    existing: Set[str],
+    incoming: List[str],
+    payload: Optional[SpellingBeeMissBulkCreate] = None,
+) -> spelling_bee.Consistency:
+    """Check a date's whole word list, existing plus incoming, as one puzzle."""
+    center = payload.center_letter if payload else None
+    outer = payload.outer_letters if payload else None
+    if not center or not outer:
+        puzzle = session.get(SpellingBeePuzzle, puzzle_date)
+        if puzzle:
+            center, outer = puzzle.center_letter, puzzle.outer_letters
+    return spelling_bee.check_consistency(
+        sorted(existing) + [w for w in incoming if w not in existing],
+        center_letter=center,
+        outer_letters=outer,
+    )
+
+
 @app.post(
     "/spellingbee/misses/",
     operation_id="createSpellingBeeMisses",
@@ -1284,6 +1324,20 @@ def create_spelling_bee_misses(
             )
         ).all()
     )
+
+    # a date is one puzzle. filing a second day's answers under it silently
+    # breaks the hive and the letter counts, so refuse rather than warn.
+    consistency = _date_consistency(
+        session, payload.puzzle_date, existing, valid, payload
+    )
+    if not consistency.ok:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "These words can't all be from the puzzle already recorded for "
+                f"{payload.puzzle_date}. " + " ".join(consistency.problems)
+            ),
+        )
     now = pendulum.now().in_timezone("UTC")
     created = []
     skipped = []
@@ -1312,6 +1366,45 @@ def create_spelling_bee_misses(
         created=[_miss_read(m) for m in created],
         skipped=skipped,
         invalid=invalid,
+    )
+
+
+@app.post(
+    "/spellingbee/misses/check",
+    operation_id="previewSpellingBeeMisses",
+    response_model=SpellingBeeAddPreview,
+)
+def preview_spelling_bee_misses(
+    *, session: Session = Depends(get_session), payload: SpellingBeeMissBulkCreate
+):
+    """Dry run of an add, so the form can warn before it writes anything."""
+    valid, invalid = spelling_bee.validate_words(payload.words)
+    existing = set(
+        session.exec(
+            select(SpellingBeeMiss.word).where(
+                SpellingBeeMiss.puzzle_date == payload.puzzle_date
+            )
+        ).all()
+    )
+    new_words = [w for w in valid if w not in existing]
+    duplicates = [w for w in valid if w in existing]
+
+    consistency = _date_consistency(
+        session, payload.puzzle_date, existing, valid, payload
+    )
+    combined = sorted(existing) + new_words
+
+    return SpellingBeeAddPreview(
+        puzzle_date=payload.puzzle_date,
+        existing_words=sorted(existing),
+        new_words=new_words,
+        duplicate_words=duplicates,
+        invalid_words=invalid,
+        conflict=not consistency.ok,
+        problems=list(consistency.problems),
+        combined_letters=list(consistency.letters),
+        center_candidates=list(consistency.center_candidates),
+        groups=spelling_bee.split_by_puzzle(combined) if not consistency.ok else [],
     )
 
 
