@@ -203,13 +203,20 @@ class SpellingBeeDefinitionRead(SpellingBeeDefinitionBase):
     word: str
 
 
+class SpellingBeeWordMiss(SQLModel):
+    # one occurrence behind a rolled-up word. carries the id so a single day
+    # can be removed without deleting the whole word's history.
+    id: int
+    puzzle_date: date
+
+
 class SpellingBeeWordRead(SQLModel):
     # one row per distinct word, rolled up across every day you missed it
     word: str
     times_missed: int
     first_missed: date
     last_missed: date
-    dates: List[date]
+    misses: List[SpellingBeeWordMiss]
     is_pangram: bool
     definition: Optional[str] = None
     part_of_speech: Optional[str] = None
@@ -1350,23 +1357,26 @@ def read_spelling_bee_words(
         d.word: d for d in session.exec(select(SpellingBeeDefinition)).all()
     }
 
-    by_word: Dict[str, List[date]] = {}
+    by_word: Dict[str, List[SpellingBeeMiss]] = {}
     for miss in misses:
-        by_word.setdefault(miss.word, []).append(miss.puzzle_date)
+        by_word.setdefault(miss.word, []).append(miss)
 
     words = []
-    for word, dates in by_word.items():
-        if len(dates) < min_misses:
+    for word, word_misses in by_word.items():
+        if len(word_misses) < min_misses:
             continue
-        dates = sorted(dates)
+        word_misses = sorted(word_misses, key=lambda m: m.puzzle_date)
         definition = definitions.get(word)
         words.append(
             SpellingBeeWordRead(
                 word=word,
-                times_missed=len(dates),
-                first_missed=dates[0],
-                last_missed=dates[-1],
-                dates=dates,
+                times_missed=len(word_misses),
+                first_missed=word_misses[0].puzzle_date,
+                last_missed=word_misses[-1].puzzle_date,
+                misses=[
+                    SpellingBeeWordMiss(id=m.id, puzzle_date=m.puzzle_date)
+                    for m in word_misses
+                ],
                 is_pangram=spelling_bee.is_pangram(word),
                 definition=definition.definition if definition else None,
                 part_of_speech=definition.part_of_speech if definition else None,

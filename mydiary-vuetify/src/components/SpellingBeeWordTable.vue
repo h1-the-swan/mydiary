@@ -72,6 +72,16 @@
                             Look up
                         </v-btn>
                     </td>
+                    <td class="text-right">
+                        <v-btn
+                            icon="mdi-close"
+                            size="small"
+                            variant="text"
+                            density="comfortable"
+                            :aria-label="`Remove ${item.word}`"
+                            @click="startRemove(item)"
+                        ></v-btn>
+                    </td>
                 </tr>
             </template>
 
@@ -81,6 +91,59 @@
                 </div>
             </template>
         </v-data-table>
+
+        <!-- a word missed on several days needs to say WHICH day to forget -->
+        <v-dialog v-model="removeDialog" max-width="460">
+            <v-card v-if="removing">
+                <v-card-title>Remove {{ removing.word }}?</v-card-title>
+
+                <!-- one occurrence is unambiguous, so just confirm it -->
+                <v-card-text v-if="removing.times_missed === 1">
+                    <p class="text-body-2 text-medium-emphasis">
+                        Missed on {{ formatDate(removing.misses[0].puzzle_date) }}.
+                        This takes it off your list.
+                    </p>
+                </v-card-text>
+
+                <!-- several means the word has a history: ask which day to forget -->
+                <v-card-text v-else>
+                    <p class="text-body-2 text-medium-emphasis mb-4">
+                        You missed this on {{ removing.times_missed }} days. Pick the
+                        ones to forget.
+                    </p>
+                    <v-checkbox
+                        v-for="miss in removing.misses"
+                        :key="miss.id"
+                        v-model="selectedIds"
+                        :value="miss.id"
+                        :label="formatDate(miss.puzzle_date)"
+                        density="compact"
+                        hide-details
+                    ></v-checkbox>
+                </v-card-text>
+
+                <v-card-actions>
+                    <v-btn
+                        v-if="removing.times_missed > 1"
+                        variant="text"
+                        @click="selectedIds = allIds"
+                    >
+                        Select all
+                    </v-btn>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="removeDialog = false">Cancel</v-btn>
+                    <v-btn
+                        color="error"
+                        variant="elevated"
+                        :disabled="!selectedIds.length"
+                        :loading="deleting"
+                        @click="confirmRemove"
+                    >
+                        {{ removeLabel }}
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </div>
 </template>
 
@@ -88,10 +151,15 @@
 import { computed, ref } from 'vue'
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
-import { SpellingBeeWordRead, fetchSpellingBeeDefinition } from '@/api'
+import {
+    SpellingBeeWordRead,
+    deleteSpellingBeeMiss,
+    fetchSpellingBeeDefinition,
+} from '@/api'
 import { formatDate } from '@/spellingBee'
 
 const props = defineProps<{ words?: SpellingBeeWordRead[] }>()
+const emit = defineEmits<{ removed: [] }>()
 
 const search = ref('')
 const minMisses = ref(1)
@@ -105,7 +173,44 @@ const displayCols = ref([
     { key: 'first_missed', title: 'First missed' },
     { key: 'last_missed', title: 'Last missed' },
     { key: 'definition', title: 'Meaning', sortable: false },
+    { key: 'remove', title: '', sortable: false, width: 56 },
 ])
+
+const removeDialog = ref(false)
+const removing = ref<SpellingBeeWordRead>()
+const selectedIds = ref<number[]>([])
+const deleting = ref(false)
+
+const allIds = computed(() => removing.value?.misses.map((m) => m.id) ?? [])
+
+const removeLabel = computed(() => {
+    if (removing.value?.times_missed === 1) return 'Remove'
+    return selectedIds.value.length
+        ? `Remove ${selectedIds.value.length}`
+        : 'Remove'
+})
+
+/**
+ * Always confirm -- a removal isn't undoable. A word missed once just needs a
+ * yes; several means the word has a history, and forgetting the wrong day
+ * would quietly corrupt the counts, so ask which.
+ */
+function startRemove(word: SpellingBeeWordRead) {
+    removing.value = word
+    // a single occurrence has nothing to choose between, so it's pre-selected
+    selectedIds.value = word.times_missed === 1 ? [word.misses[0].id] : []
+    removeDialog.value = true
+}
+
+async function confirmRemove() {
+    deleting.value = true
+    for (const id of selectedIds.value) {
+        await deleteSpellingBeeMiss(id)
+    }
+    deleting.value = false
+    removeDialog.value = false
+    emit('removed')
+}
 
 const filtered = computed(() =>
     (props.words ?? []).filter((w) => w.times_missed >= minMisses.value)

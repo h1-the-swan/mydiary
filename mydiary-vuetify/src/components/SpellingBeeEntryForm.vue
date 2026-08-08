@@ -63,24 +63,40 @@
                         </v-expansion-panel-title>
                         <v-expansion-panel-text>
                             <p class="text-body-2 text-medium-emphasis mb-4">
-                                Without these the hive is worked out from your words,
-                                which is usually right. Record them to make it exact.
+                                Type all seven letters, <strong>center letter
+                                first</strong>. Without them the hive is worked out
+                                from your words, which is usually right — recording
+                                them makes it exact.
                             </p>
-                            <div class="d-flex flex-wrap ga-4">
+                            <div class="d-flex flex-wrap align-center ga-4">
                                 <v-text-field
-                                    v-model="centerLetter"
-                                    class="letter-field"
-                                    label="Center letter"
-                                    maxlength="1"
+                                    v-model="letterInput"
+                                    class="letters-field"
+                                    label="Seven letters"
+                                    maxlength="7"
                                     hide-details
                                 ></v-text-field>
-                                <v-text-field
-                                    v-model="outerLetters"
-                                    class="outer-field"
-                                    label="Other six letters"
-                                    maxlength="6"
-                                    hide-details
-                                ></v-text-field>
+                                <!-- an <input> can't bold one character, so the
+                                     parsed letters are echoed back instead -->
+                                <div v-if="puzzleLetters" class="letter-preview">
+                                    <span class="letter-preview__center">
+                                        {{ puzzleLetters[0] }}
+                                    </span>
+                                    <span
+                                        v-for="(letter, i) in puzzleLetters.slice(1)"
+                                        :key="`${letter}-${i}`"
+                                    >
+                                        {{ letter }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div
+                                v-if="puzzleLetters"
+                                class="text-body-2 text-medium-emphasis mt-2"
+                            >
+                                Center letter
+                                <strong>{{ puzzleLetters[0] }}</strong> — every
+                                answer has to use it.
                             </div>
                             <div v-if="letterError" class="text-body-2 text-warning mt-2">
                                 {{ letterError }}
@@ -138,8 +154,8 @@ const emit = defineEmits<{ saved: [] }>()
 
 const puzzleDate = ref<Date>(yesterday())
 const raw = ref('')
-const centerLetter = ref('')
-const outerLetters = ref('')
+// all seven at once, center letter first
+const letterInput = ref('')
 const saving = ref(false)
 const snackbar = ref(false)
 const snackbarText = ref('')
@@ -170,19 +186,23 @@ const summary = computed(() => {
     return parts.join(' · ')
 })
 
+const puzzleLetters = computed(() => normalizeWord(letterInput.value))
+
 const letterError = computed(() => {
-    const center = normalizeWord(centerLetter.value)
-    const outer = normalizeWord(outerLetters.value)
-    if (!center && !outer) return ''
-    if (center.length !== 1) return 'Give exactly one center letter.'
-    if (outer.length !== HIVE_SIZE - 1) {
-        return `Give the other ${HIVE_SIZE - 1} letters.`
+    const value = puzzleLetters.value
+    if (!value) return ''
+    if (value.length !== HIVE_SIZE) {
+        return `Give all ${HIVE_SIZE} letters, center letter first.`
     }
-    if (new Set(center + outer).size !== HIVE_SIZE) {
+    if (new Set(value).size !== HIVE_SIZE) {
         return 'The seven letters must all be different.'
     }
     return ''
 })
+
+const lettersReady = computed(
+    () => puzzleLetters.value.length === HIVE_SIZE && !letterError.value
+)
 
 function chipColor(word: string) {
     if (word.length < MIN_WORD_LEN) return 'warning'
@@ -213,10 +233,11 @@ async function onSave() {
         })
     ).data
 
-    if (!letterError.value && normalizeWord(centerLetter.value)) {
+    // the first letter typed is the center one; the rest are the outer six
+    if (lettersReady.value) {
         await upsertSpellingBeePuzzle(dt, {
-            center_letter: normalizeWord(centerLetter.value),
-            outer_letters: normalizeWord(outerLetters.value),
+            center_letter: puzzleLetters.value[0],
+            outer_letters: puzzleLetters.value.slice(1),
         })
     }
 
@@ -227,8 +248,7 @@ async function onSave() {
     snackbar.value = true
 
     raw.value = ''
-    centerLetter.value = ''
-    outerLetters.value = ''
+    letterInput.value = ''
     saving.value = false
     await loadExisting()
     emit('saved')
@@ -240,12 +260,22 @@ async function onSave() {
     min-width: 220px;
 }
 
-/* a single letter needs no more room than a single letter */
-.letter-field {
-    max-width: 140px;
+.letters-field {
+    max-width: 220px;
 }
 
-.outer-field {
-    max-width: 220px;
+/* echoes back what was typed, so the center letter is visibly the first one */
+.letter-preview {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+
+.letter-preview__center {
+    font-weight: 800;
+    color: rgb(var(--v-theme-primary));
 }
 </style>

@@ -260,12 +260,17 @@ export interface SpellingBeePuzzleUpsert {
   outer_letters: string;
 }
 
+export interface SpellingBeeWordMiss {
+  id: number;
+  puzzle_date: string;
+}
+
 export interface SpellingBeeWordRead {
   word: string;
   times_missed: number;
   first_missed: string;
   last_missed: string;
-  dates: string[];
+  misses: SpellingBeeWordMiss[];
   is_pangram: boolean;
   definition?: string | null;
   part_of_speech?: string | null;

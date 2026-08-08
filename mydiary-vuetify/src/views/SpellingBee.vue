@@ -16,7 +16,10 @@
 
         <section>
             <section-header label="Words you keep missing" :meta="wordCountLabel" />
-            <spelling-bee-word-table :words="app.spellingBeeWords" />
+            <spelling-bee-word-table
+                :words="app.spellingBeeWords"
+                @removed="app.loadSpellingBeeWords()"
+            />
         </section>
     </page-shell>
 </template>

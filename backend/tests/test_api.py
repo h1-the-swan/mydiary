@@ -465,10 +465,28 @@ class TestSpellingBee:
         assert response.status_code == 200
         words = {w["word"]: w for w in response.json()}
         assert words["CANDID"]["times_missed"] == 2
-        assert words["CANDID"]["dates"] == ["2026-08-07", "2026-08-08"]
+        assert [m["puzzle_date"] for m in words["CANDID"]["misses"]] == [
+            "2026-08-07",
+            "2026-08-08",
+        ]
         assert words["CANDID"]["first_missed"] == "2026-08-07"
         assert words["CANDID"]["last_missed"] == "2026-08-08"
         assert words["CADDY"]["times_missed"] == 1
+
+    def test_words_rollup_carries_miss_ids_for_deletion(
+        self, session: Session, client: TestClient
+    ):
+        # removing one day of a repeatedly-missed word needs its row id
+        self._seed(session, "2026-08-07", ["CANDID"])
+        self._seed(session, "2026-08-08", ["CANDID"])
+        word = client.get("/spellingbee/words/").json()[0]
+        ids = [m["id"] for m in word["misses"]]
+        assert len(ids) == 2 and all(isinstance(i, int) for i in ids)
+
+        client.delete(f"/spellingbee/misses/{ids[0]}")
+        after = client.get("/spellingbee/words/").json()[0]
+        assert after["times_missed"] == 1
+        assert [m["puzzle_date"] for m in after["misses"]] == ["2026-08-08"]
 
     def test_words_rollup_sorts_most_missed_first(
         self, session: Session, client: TestClient
