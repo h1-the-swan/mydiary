@@ -9,6 +9,10 @@ import {
     joplinGetInfoAllDays,
     TimeZoneChange,
     readTimeZoneChangeList,
+    SpellingBeeWordRead,
+    SpellingBeeHiveRead,
+    readSpellingBeeWordsList,
+    readSpellingBeeHivesList,
 } from '@/api'
 
 // export const useAppStore = defineStore('app', {
@@ -52,6 +56,25 @@ export const useAppStore = defineStore('app', () => {
         })
     }
 
+    // the backend already sorts these most-missed first
+    const spellingBeeWords = ref<SpellingBeeWordRead[]>()
+    async function loadSpellingBeeWords() {
+        spellingBeeWords.value = await readSpellingBeeWordsList({
+            limit: 5000,
+        }).then((res) => {
+            return res.data
+        })
+    }
+
+    const spellingBeeHives = ref<SpellingBeeHiveRead[]>()
+    async function loadSpellingBeeHives() {
+        spellingBeeHives.value = await readSpellingBeeHivesList({
+            limit: 5000,
+        }).then((res) => {
+            return res.data
+        })
+    }
+
     return {
         performSongs,
         loadPerformSongs,
@@ -61,5 +84,9 @@ export const useAppStore = defineStore('app', () => {
         calendarShouldUpdate,
         timeZoneChanges,
         loadTimeZoneChanges,
+        spellingBeeWords,
+        loadSpellingBeeWords,
+        spellingBeeHives,
+        loadSpellingBeeHives,
     }
 })

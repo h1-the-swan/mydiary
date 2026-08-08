@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, date
 import re
 import requests
 import io
@@ -45,8 +45,16 @@ from .models import (
     MyDiaryImageBase,
     MyDiaryImage,
     TimeZoneChange,
+    SpellingBeeMiss,
+    SpellingBeeMissBase,
+    SpellingBeePuzzle,
+    SpellingBeePuzzleBase,
+    SpellingBeeDefinition,
+    SpellingBeeDefinitionBase,
 )
 from .nextcloud_connector import MyDiaryNextcloud
+from . import spelling_bee
+from .dictionary_connector import fetch_definition
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
@@ -151,6 +159,70 @@ class RecipeEventUpdate(SQLModel):
     timestamp: Optional[int] = None
     notes: Optional[str] = None
     recipe_id: Optional[int] = None
+
+
+class SpellingBeeMissRead(SpellingBeeMissBase):
+    id: int
+    # derived, not stored: a puzzle has exactly seven letters, so any valid
+    # word with seven distinct ones is necessarily a pangram
+    is_pangram: bool
+
+
+class SpellingBeeMissUpdate(SQLModel):
+    puzzle_date: Optional[date] = None
+    word: Optional[str] = None
+
+
+class SpellingBeeMissBulkCreate(SQLModel):
+    # you miss a handful of words per puzzle, so entry is bulk by default
+    puzzle_date: date
+    words: List[str]
+    center_letter: Optional[str] = None
+    outer_letters: Optional[str] = None
+
+
+class SpellingBeeMissBulkResult(SQLModel):
+    # these are always sent, so they're required -- an optional list would make
+    # every caller in the frontend guard against an undefined that never comes
+    puzzle_date: date
+    created: List[SpellingBeeMissRead]
+    skipped: List[str]  # already recorded for this date
+    invalid: List[str]  # too short to be a Bee answer
+
+
+class SpellingBeePuzzleRead(SpellingBeePuzzleBase):
+    puzzle_date: date
+
+
+class SpellingBeePuzzleUpsert(SQLModel):
+    center_letter: str
+    outer_letters: str
+
+
+class SpellingBeeDefinitionRead(SpellingBeeDefinitionBase):
+    word: str
+
+
+class SpellingBeeWordRead(SQLModel):
+    # one row per distinct word, rolled up across every day you missed it
+    word: str
+    times_missed: int
+    first_missed: date
+    last_missed: date
+    dates: List[date]
+    is_pangram: bool
+    definition: Optional[str] = None
+    part_of_speech: Optional[str] = None
+
+
+class SpellingBeeHiveRead(SQLModel):
+    puzzle_date: date
+    center_letter: str
+    outer_letters: List[str]
+    exact: bool  # False == letters worked out from the words, not recorded
+    words: List[str]
+    pangrams: List[str]
+    warnings: List[str]
 
 
 def get_session():
@@ -1180,6 +1252,319 @@ def create_timezonechange(
     session.commit()
     session.refresh(tz_change)
     return tz_change
+
+
+def _miss_read(miss: SpellingBeeMiss) -> SpellingBeeMissRead:
+    return SpellingBeeMissRead(
+        **miss.model_dump(), is_pangram=spelling_bee.is_pangram(miss.word)
+    )
+
+
+@app.post(
+    "/spellingbee/misses/",
+    operation_id="createSpellingBeeMisses",
+    response_model=SpellingBeeMissBulkResult,
+)
+def create_spelling_bee_misses(
+    *, session: Session = Depends(get_session), payload: SpellingBeeMissBulkCreate
+):
+    valid, invalid = spelling_bee.validate_words(payload.words)
+
+    existing = set(
+        session.exec(
+            select(SpellingBeeMiss.word).where(
+                SpellingBeeMiss.puzzle_date == payload.puzzle_date
+            )
+        ).all()
+    )
+    now = pendulum.now().in_timezone("UTC")
+    created = []
+    skipped = []
+    for word in valid:
+        if word in existing:
+            skipped.append(word)
+            continue
+        miss = SpellingBeeMiss(
+            puzzle_date=payload.puzzle_date, word=word, created_at=now
+        )
+        session.add(miss)
+        created.append(miss)
+
+    # letters are optional, and only recorded when the caller bothered to
+    if payload.center_letter and payload.outer_letters:
+        _upsert_puzzle(
+            session, payload.puzzle_date, payload.center_letter, payload.outer_letters
+        )
+
+    session.commit()
+    for miss in created:
+        session.refresh(miss)
+
+    return SpellingBeeMissBulkResult(
+        puzzle_date=payload.puzzle_date,
+        created=[_miss_read(m) for m in created],
+        skipped=skipped,
+        invalid=invalid,
+    )
+
+
+@app.get(
+    "/spellingbee/misses/",
+    operation_id="readSpellingBeeMissesList",
+    response_model=List[SpellingBeeMissRead],
+)
+def read_spelling_bee_misses(
+    *,
+    session: Session = Depends(get_session),
+    puzzle_date: Optional[date] = None,
+    offset: int = 0,
+    limit: int = Query(default=500, lte=5000),
+):
+    stmt = select(SpellingBeeMiss)
+    if puzzle_date:
+        stmt = stmt.where(SpellingBeeMiss.puzzle_date == puzzle_date)
+    misses = session.exec(stmt.offset(offset).limit(limit)).all()
+    return [_miss_read(m) for m in misses]
+
+
+@app.get(
+    "/spellingbee/words/",
+    operation_id="readSpellingBeeWordsList",
+    response_model=List[SpellingBeeWordRead],
+)
+def read_spelling_bee_words(
+    *,
+    session: Session = Depends(get_session),
+    min_misses: int = Query(default=1, ge=1),
+    offset: int = 0,
+    limit: int = Query(default=1000, lte=5000),
+):
+    """Every distinct word, rolled up across the days it was missed.
+
+    Aggregated in Python rather than SQL: the volume is a handful of words a
+    day, and the per-word list of dates would need group_concat and
+    string-splitting to come back out of a GROUP BY.
+    """
+    misses = session.exec(select(SpellingBeeMiss)).all()
+    definitions = {
+        d.word: d for d in session.exec(select(SpellingBeeDefinition)).all()
+    }
+
+    by_word: Dict[str, List[date]] = {}
+    for miss in misses:
+        by_word.setdefault(miss.word, []).append(miss.puzzle_date)
+
+    words = []
+    for word, dates in by_word.items():
+        if len(dates) < min_misses:
+            continue
+        dates = sorted(dates)
+        definition = definitions.get(word)
+        words.append(
+            SpellingBeeWordRead(
+                word=word,
+                times_missed=len(dates),
+                first_missed=dates[0],
+                last_missed=dates[-1],
+                dates=dates,
+                is_pangram=spelling_bee.is_pangram(word),
+                definition=definition.definition if definition else None,
+                part_of_speech=definition.part_of_speech if definition else None,
+            )
+        )
+
+    # most-missed first -- those are the ones worth practising
+    words.sort(key=lambda w: (-w.times_missed, w.word))
+    return words[offset : offset + limit]
+
+
+@app.get(
+    "/spellingbee/hives/",
+    operation_id="readSpellingBeeHivesList",
+    response_model=List[SpellingBeeHiveRead],
+)
+def read_spelling_bee_hives(
+    *,
+    session: Session = Depends(get_session),
+    min_words: int = Query(default=3, ge=1),
+    limit: int = Query(default=500, lte=5000),
+):
+    """One playable board per recorded day, newest first."""
+    misses = session.exec(select(SpellingBeeMiss)).all()
+    puzzles = {p.puzzle_date: p for p in session.exec(select(SpellingBeePuzzle)).all()}
+
+    by_date: Dict[date, List[str]] = {}
+    for miss in misses:
+        by_date.setdefault(miss.puzzle_date, []).append(miss.word)
+
+    hives = []
+    for puzzle_date, words in by_date.items():
+        if len(words) < min_words:
+            continue
+        puzzle = puzzles.get(puzzle_date)
+        hive = spelling_bee.derive_hive(
+            puzzle_date,
+            words,
+            center_letter=puzzle.center_letter if puzzle else None,
+            outer_letters=puzzle.outer_letters if puzzle else None,
+        )
+        if not hive.words:
+            continue
+        hives.append(
+            SpellingBeeHiveRead(
+                puzzle_date=hive.puzzle_date,
+                center_letter=hive.center_letter,
+                outer_letters=list(hive.outer_letters),
+                exact=hive.exact,
+                words=list(hive.words),
+                pangrams=list(hive.pangrams),
+                warnings=list(hive.warnings),
+            )
+        )
+
+    hives.sort(key=lambda h: h.puzzle_date, reverse=True)
+    return hives[:limit]
+
+
+@app.get(
+    "/spellingbee/puzzles/",
+    operation_id="readSpellingBeePuzzlesList",
+    response_model=List[SpellingBeePuzzleRead],
+)
+def read_spelling_bee_puzzles(
+    *,
+    session: Session = Depends(get_session),
+    offset: int = 0,
+    limit: int = Query(default=500, lte=5000),
+):
+    puzzles = session.exec(select(SpellingBeePuzzle).offset(offset).limit(limit)).all()
+    return sorted(puzzles, key=lambda p: p.puzzle_date, reverse=True)
+
+
+@app.patch(
+    "/spellingbee/misses/{miss_id}",
+    operation_id="updateSpellingBeeMiss",
+    response_model=SpellingBeeMissRead,
+)
+def update_spelling_bee_miss(
+    *,
+    session: Session = Depends(get_session),
+    miss_id: int,
+    miss: SpellingBeeMissUpdate,
+):
+    db_miss = session.get(SpellingBeeMiss, miss_id)
+    if not db_miss:
+        raise HTTPException(status_code=404, detail="SpellingBeeMiss not found")
+    miss_data = miss.model_dump(exclude_unset=True)
+    if miss_data.get("word"):
+        miss_data["word"] = spelling_bee.normalize_word(miss_data["word"])
+    db_miss.sqlmodel_update(miss_data)
+    session.add(db_miss)
+    session.commit()
+    session.refresh(db_miss)
+    return _miss_read(db_miss)
+
+
+@app.delete("/spellingbee/misses/{miss_id}", operation_id="deleteSpellingBeeMiss")
+def delete_spelling_bee_miss(
+    *, session: Session = Depends(get_session), miss_id: int
+):
+    db_miss = session.get(SpellingBeeMiss, miss_id)
+    if not db_miss:
+        raise HTTPException(status_code=404, detail="SpellingBeeMiss not found")
+    session.delete(db_miss)
+    session.commit()
+    return {"ok": True}
+
+
+def _upsert_puzzle(
+    session: Session, puzzle_date: date, center_letter: str, outer_letters: str
+) -> SpellingBeePuzzle:
+    center = spelling_bee.normalize_word(center_letter)
+    outer = spelling_bee.normalize_word(outer_letters)
+    # note that S is perfectly legal here. it's rare in real puzzles, which is
+    # why it's never *guessed* when deriving a hive, but a recorded S puzzle
+    # must be storable.
+    if len(center) != 1 or len(outer) != spelling_bee.HIVE_SIZE - 1:
+        raise HTTPException(
+            status_code=422,
+            detail="A puzzle needs one center letter and six outer letters",
+        )
+    if len({center} | set(outer)) != spelling_bee.HIVE_SIZE:
+        raise HTTPException(
+            status_code=422, detail="The seven letters must all be different"
+        )
+
+    db_puzzle = session.get(SpellingBeePuzzle, puzzle_date)
+    if db_puzzle:
+        db_puzzle.center_letter = center
+        db_puzzle.outer_letters = outer
+    else:
+        db_puzzle = SpellingBeePuzzle(
+            puzzle_date=puzzle_date,
+            center_letter=center,
+            outer_letters=outer,
+            created_at=pendulum.now().in_timezone("UTC"),
+        )
+    session.add(db_puzzle)
+    return db_puzzle
+
+
+@app.put(
+    "/spellingbee/puzzles/{puzzle_date}",
+    operation_id="upsertSpellingBeePuzzle",
+    response_model=SpellingBeePuzzleRead,
+)
+def upsert_spelling_bee_puzzle(
+    *,
+    session: Session = Depends(get_session),
+    puzzle_date: date,
+    puzzle: SpellingBeePuzzleUpsert,
+):
+    db_puzzle = _upsert_puzzle(
+        session, puzzle_date, puzzle.center_letter, puzzle.outer_letters
+    )
+    session.commit()
+    session.refresh(db_puzzle)
+    return db_puzzle
+
+
+@app.post(
+    "/spellingbee/definitions/{word}",
+    operation_id="fetchSpellingBeeDefinition",
+    response_model=SpellingBeeDefinitionRead,
+)
+def fetch_spelling_bee_definition(
+    *,
+    session: Session = Depends(get_session),
+    word: str,
+    refresh: bool = False,
+):
+    """Look a word up, caching the answer -- including "not found"."""
+    word = spelling_bee.normalize_word(word)
+    if not word:
+        raise HTTPException(status_code=422, detail="No word given")
+
+    db_definition = session.get(SpellingBeeDefinition, word)
+    if db_definition and not refresh:
+        return db_definition
+
+    definition, part_of_speech = fetch_definition(word)
+    if db_definition:
+        db_definition.definition = definition
+        db_definition.part_of_speech = part_of_speech
+        db_definition.fetched_at = pendulum.now().in_timezone("UTC")
+    else:
+        db_definition = SpellingBeeDefinition(
+            word=word,
+            definition=definition,
+            part_of_speech=part_of_speech,
+            fetched_at=pendulum.now().in_timezone("UTC"),
+        )
+    session.add(db_definition)
+    session.commit()
+    session.refresh(db_definition)
+    return db_definition
 
 
 @app.get("/generate_openapi_json")

@@ -62,6 +62,18 @@ const links = [
     subtitle: 'Record a time zone change',
     icon: 'mdi-earth',
   },
+  {
+    name: 'spellingBee',
+    title: 'Spelling Bee',
+    subtitle: 'Track the words you missed',
+    icon: 'mdi-bee',
+  },
+  {
+    name: 'spellingBeePractice',
+    title: 'Spelling Bee Practice',
+    subtitle: 'Drill the words you keep missing',
+    icon: 'mdi-hexagon-multiple',
+  },
 ]
 
 async function getDBStatus() {

@@ -26,8 +26,9 @@ Pocket and Google Photos were formerly data sources. The Google Photos integrati
 | `mydiary_day.py` | `MyDiaryDay` class — assembles a day's data from all sources and generates Markdown |
 | `core.py` | Shared utilities: image resize, timezone inference, hash helpers |
 | `markdown_edits.py` | `MarkdownDoc` class for parsing and editing structured diary Markdown |
-| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down |
+| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down; `dictionary_connector.py` is a single function over dictionaryapi.dev |
 | `owntracks_track.py` | Pure functions turning raw location fixes into stays and links (no I/O) |
+| `spelling_bee.py` | Pure functions rebuilding a NYT Spelling Bee hive from the words missed that day (no I/O) |
 | `map_render.py` | Renders the daily location map to PNG (py-staticmaps + Pillow) |
 | `owntracks_maps.py` | Puts a rendered map into its Joplin note's Location section |
 
@@ -39,7 +40,9 @@ The location workflow (OwnTracks recorder → database → smoothed track → re
 
 ### Frontend (`mydiary-vuetify/src/`)
 
-Vue 3 SPA using Vuetify 4 and Pinia for state. Key views: `MyDiaryDay.vue` (main diary view), `PerformSongs.vue` (guitar songs tracker), `Pocket.vue` (saved articles browser).
+Vue 3 SPA using Vuetify 4 and Pinia for state. Key views: `MyDiaryDay.vue` (main diary view), `PerformSongs.vue` (guitar songs tracker), `Pocket.vue` (saved articles browser), `SpellingBee.vue` / `SpellingBeePractice.vue` (Spelling Bee misses and the two practice games).
+
+The Spelling Bee tracker records words missed in the NYT puzzle, entered by hand. Its one non-obvious idea: every word in a puzzle is built from the same seven letters and every word contains the centre letter, so a playable hive can be reconstructed from the words alone — recording the letters (`SpellingBeePuzzle`, optional, one row per date) only makes it exact. `spelling_bee.py` owns that derivation; `SpellingBeeHive.vue` is a dumb renderer. Word helpers are mirrored in `src/spellingBee.ts` so the entry form can validate a paste as it is typed.
 
 `MapSection.vue` draws the day's location track with Leaflet, from the same `/owntracks/track/{dt}` endpoint the PNG renderer uses, and exposes the smoothing thresholds as sliders for tuning.
 
