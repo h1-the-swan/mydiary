@@ -693,3 +693,47 @@ class OwnTracksDayMap(SQLModel, table=True):
     num_stays: int
     distance_m: int
     created_at: datetime  # stored in the database in UTC timezone
+
+
+class SpellingBeeMissBase(SQLModel):
+    # a word from the NYT Spelling Bee that wasn't found on the day it ran.
+    # entered by hand -- there's no API for the puzzle.
+    puzzle_date: date = Field(index=True)
+    word: str = Field(index=True)  # normalized to uppercase on write
+    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+
+
+class SpellingBeeMiss(SpellingBeeMissBase, table=True):
+    # the same word missed on two different days is two rows -- that repetition
+    # is the whole point of the feature
+    __table_args__ = (
+        UniqueConstraint("puzzle_date", "word", name="uix_spellingbee_miss"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class SpellingBeePuzzleBase(SQLModel):
+    # the day's seven letters. entirely optional -- recorded only when known.
+    # without it the hive is worked out from the words themselves, since every
+    # word in a puzzle is built from the same seven (see spelling_bee.py).
+    center_letter: str  # the mandatory one
+    outer_letters: str  # the other six, as one string
+    created_at: datetime  # stored in the database in UTC timezone
+
+
+class SpellingBeePuzzle(SpellingBeePuzzleBase, table=True):
+    puzzle_date: date = Field(primary_key=True)
+
+
+class SpellingBeeDefinitionBase(SQLModel):
+    # cached dictionaryapi.dev lookup, keyed by word rather than by the miss
+    # that triggered it -- a word missed five times needs one definition, not
+    # five copies. a row with a null definition means "looked up and not
+    # found", which is common for Bee words and shouldn't be retried.
+    definition: Optional[str] = Field(default=None)
+    part_of_speech: Optional[str] = Field(default=None)
+    fetched_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+
+
+class SpellingBeeDefinition(SpellingBeeDefinitionBase, table=True):
+    word: str = Field(primary_key=True)

@@ -79,6 +79,22 @@ const routes = [
                         /* webpackChunkName: "pocket" */ '@/views/TimeZoneChange.vue'
                     ),
             },
+            {
+                path: '/spellingbee',
+                name: 'spellingBee',
+                component: () =>
+                    import(
+                        /* webpackChunkName: "spellingbee" */ '@/views/SpellingBee.vue'
+                    ),
+            },
+            {
+                path: '/spellingbee/practice',
+                name: 'spellingBeePractice',
+                component: () =>
+                    import(
+                        /* webpackChunkName: "spellingbee" */ '@/views/SpellingBeePractice.vue'
+                    ),
+            },
         ],
     },
 ]

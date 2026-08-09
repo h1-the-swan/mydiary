@@ -4,10 +4,19 @@ import pendulum
 import pytest
 from pathlib import Path
 from fastapi.testclient import TestClient
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import SQLModel, create_engine, Session, select
 from sqlmodel.pool import StaticPool
 
-from mydiary.models import Dog, PerformSong, PocketArticle, PocketStatusEnum, TimeZoneChange
+from mydiary.models import (
+    Dog,
+    PerformSong,
+    PocketArticle,
+    PocketStatusEnum,
+    TimeZoneChange,
+    SpellingBeeDefinition,
+    SpellingBeeMiss,
+    SpellingBeePuzzle,
+)
 from mydiary.api import app, get_session
 
 
@@ -376,6 +385,380 @@ class TestPerformSong:
         perform_song_id = 11
         response = client.delete(f"/performsongs/{perform_song_id}")
         assert response.status_code == 404
+
+
+class TestSpellingBee:
+    def _post(self, client: TestClient, puzzle_date: str, words, **kwargs):
+        body = {"puzzle_date": puzzle_date, "words": words, **kwargs}
+        return client.post("/spellingbee/misses/", json=body)
+
+    def _seed(self, session: Session, puzzle_date: str, words):
+        for word in words:
+            session.add(
+                SpellingBeeMiss(
+                    puzzle_date=pendulum.parse(puzzle_date).date(),
+                    word=word,
+                    created_at=pendulum.now("UTC"),
+                )
+            )
+        session.commit()
+
+    def test_create_misses(self, session: Session, client: TestClient):
+        response = self._post(
+            client, "2026-08-07", ["candid", "CADDY", "dyadic", "indicia"]
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert [m["word"] for m in data["created"]] == [
+            "CANDID",
+            "CADDY",
+            "DYADIC",
+            "INDICIA",
+        ]
+        assert data["skipped"] == []
+        assert data["invalid"] == []
+
+    def test_create_misses_is_idempotent(self, session: Session, client: TestClient):
+        self._post(client, "2026-08-07", ["CANDID", "CADDY"])
+        response = self._post(client, "2026-08-07", ["CANDID", "CADDY", "DYADIC"])
+        assert response.status_code == 200
+        data = response.json()
+        assert sorted(data["skipped"]) == ["CADDY", "CANDID"]
+        assert [m["word"] for m in data["created"]] == ["DYADIC"]
+        # no duplicate rows
+        misses = session.exec(select(SpellingBeeMiss)).all()
+        assert len(misses) == 3
+
+    def test_create_misses_rejects_short_words(
+        self, session: Session, client: TestClient
+    ):
+        response = self._post(client, "2026-08-07", ["CANDID", "CAD"])
+        data = response.json()
+        assert data["invalid"] == ["CAD"]
+        assert [m["word"] for m in data["created"]] == ["CANDID"]
+
+    def test_same_word_on_two_dates_is_two_rows(
+        self, session: Session, client: TestClient
+    ):
+        self._post(client, "2026-08-07", ["CANDID", "CADDY"])
+        self._post(client, "2026-08-08", ["CANDID", "DYADIC"])
+        misses = session.exec(select(SpellingBeeMiss)).all()
+        assert len(misses) == 4
+
+    def test_pangram_is_derived_not_stored(self, session: Session, client: TestClient):
+        response = self._post(client, "2026-08-07", ["CANDIDLY", "CADDY"])
+        by_word = {m["word"]: m for m in response.json()["created"]}
+        assert by_word["CANDIDLY"]["is_pangram"] is True
+        assert by_word["CADDY"]["is_pangram"] is False
+
+    def test_read_misses_filtered_by_date(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        self._seed(session, "2026-08-08", ["DYADIC"])
+        response = client.get("/spellingbee/misses/", params={"puzzle_date": "2026-08-08"})
+        assert response.status_code == 200
+        assert [m["word"] for m in response.json()] == ["DYADIC"]
+
+    def test_words_rollup(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        self._seed(session, "2026-08-08", ["CANDID"])
+        response = client.get("/spellingbee/words/")
+        assert response.status_code == 200
+        words = {w["word"]: w for w in response.json()}
+        assert words["CANDID"]["times_missed"] == 2
+        assert [m["puzzle_date"] for m in words["CANDID"]["misses"]] == [
+            "2026-08-07",
+            "2026-08-08",
+        ]
+        assert words["CANDID"]["first_missed"] == "2026-08-07"
+        assert words["CANDID"]["last_missed"] == "2026-08-08"
+        assert words["CADDY"]["times_missed"] == 1
+
+    def test_words_rollup_carries_miss_ids_for_deletion(
+        self, session: Session, client: TestClient
+    ):
+        # removing one day of a repeatedly-missed word needs its row id
+        self._seed(session, "2026-08-07", ["CANDID"])
+        self._seed(session, "2026-08-08", ["CANDID"])
+        word = client.get("/spellingbee/words/").json()[0]
+        ids = [m["id"] for m in word["misses"]]
+        assert len(ids) == 2 and all(isinstance(i, int) for i in ids)
+
+        client.delete(f"/spellingbee/misses/{ids[0]}")
+        after = client.get("/spellingbee/words/").json()[0]
+        assert after["times_missed"] == 1
+        assert [m["puzzle_date"] for m in after["misses"]] == ["2026-08-08"]
+
+    def test_words_rollup_sorts_most_missed_first(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        self._seed(session, "2026-08-08", ["CANDID"])
+        response = client.get("/spellingbee/words/")
+        assert [w["word"] for w in response.json()] == ["CANDID", "CADDY"]
+
+    def test_words_rollup_min_misses(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        self._seed(session, "2026-08-08", ["CANDID"])
+        response = client.get("/spellingbee/words/", params={"min_misses": 2})
+        assert [w["word"] for w in response.json()] == ["CANDID"]
+
+    def test_hive_center_is_in_every_word(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY", "DYADIC", "INDICIA"])
+        response = client.get("/spellingbee/hives/")
+        assert response.status_code == 200
+        hive = response.json()[0]
+        assert len(hive["outer_letters"]) == 6
+        assert hive["center_letter"] not in hive["outer_letters"]
+        assert all(hive["center_letter"] in word for word in hive["words"])
+        assert hive["exact"] is False
+
+    def test_thin_date_is_skipped_unless_its_letters_are_recorded(
+        self, session: Session, client: TestClient
+    ):
+        # two words alone would give a board that is mostly invented padding
+        self._seed(session, "2026-08-07", ["CANDID", "CANDY"])
+        assert client.get("/spellingbee/hives/").json() == []
+
+        # recorded letters are exact however few words there are
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        hives = client.get("/spellingbee/hives/").json()
+        assert len(hives) == 1
+        assert hives[0]["exact"] is True
+
+    def test_hive_uses_recorded_letters_when_present(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY", "DYADIC"])
+        response = client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        assert response.status_code == 200
+        hive = client.get("/spellingbee/hives/").json()[0]
+        assert hive["exact"] is True
+        assert hive["center_letter"] == "D"
+        assert sorted(hive["outer_letters"]) == list("ACILNY")
+
+    def test_puzzle_upsert_accepts_s(self, session: Session, client: TestClient):
+        # S is rare in real puzzles but it does happen -- never reject it
+        response = client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "S", "outer_letters": "ANDIER"},
+        )
+        assert response.status_code == 200
+        assert response.json()["center_letter"] == "S"
+
+    def test_puzzle_upsert_rejects_wrong_letter_count(
+        self, session: Session, client: TestClient
+    ):
+        response = client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CAN"},
+        )
+        assert response.status_code == 422
+
+    def test_puzzle_upsert_rejects_duplicate_letters(
+        self, session: Session, client: TestClient
+    ):
+        response = client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYD"},
+        )
+        assert response.status_code == 422
+
+    def test_puzzle_upsert_replaces_existing(self, session: Session, client: TestClient):
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "C", "outer_letters": "ANDIYL"},
+        )
+        puzzles = session.exec(select(SpellingBeePuzzle)).all()
+        assert len(puzzles) == 1
+        assert puzzles[0].center_letter == "C"
+
+    def test_update_miss(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID"])
+        miss = session.exec(select(SpellingBeeMiss)).one()
+        response = client.patch(
+            f"/spellingbee/misses/{miss.id}", json={"word": "candied"}
+        )
+        assert response.status_code == 200
+        assert response.json()["word"] == "CANDIED"
+        # the untouched field survives
+        assert response.json()["puzzle_date"] == "2026-08-07"
+
+    def test_update_miss_missing(self, session: Session, client: TestClient):
+        response = client.patch("/spellingbee/misses/999", json={"word": "CANDID"})
+        assert response.status_code == 404
+
+    def test_delete_miss(self, session: Session, client: TestClient):
+        self._seed(session, "2026-08-07", ["CANDID"])
+        miss = session.exec(select(SpellingBeeMiss)).one()
+        response = client.delete(f"/spellingbee/misses/{miss.id}")
+        assert response.status_code == 200
+        assert session.get(SpellingBeeMiss, miss.id) is None
+
+    def test_delete_miss_missing(self, session: Session, client: TestClient):
+        response = client.delete("/spellingbee/misses/999")
+        assert response.status_code == 404
+
+    def test_definition_is_cached_after_first_lookup(
+        self, session: Session, client: TestClient, monkeypatch
+    ):
+        calls = []
+
+        def fake_fetch(word, timeout=10):
+            calls.append(word)
+            return "Frank and outspoken.", "adjective"
+
+        monkeypatch.setattr("mydiary.api.fetch_definition", fake_fetch)
+
+        first = client.post("/spellingbee/definitions/candid")
+        assert first.status_code == 200
+        assert first.json()["definition"] == "Frank and outspoken."
+        assert first.json()["part_of_speech"] == "adjective"
+
+        second = client.post("/spellingbee/definitions/CANDID")
+        assert second.json()["definition"] == "Frank and outspoken."
+        # the whole point of the cache: one lookup, not two
+        assert calls == ["CANDID"]
+
+    def test_definition_not_found_is_cached_too(
+        self, session: Session, client: TestClient, monkeypatch
+    ):
+        calls = []
+
+        def fake_fetch(word, timeout=10):
+            calls.append(word)
+            return None, None
+
+        monkeypatch.setattr("mydiary.api.fetch_definition", fake_fetch)
+
+        client.post("/spellingbee/definitions/DYADIC")
+        client.post("/spellingbee/definitions/DYADIC")
+        # a missing definition is an answer worth remembering
+        assert calls == ["DYADIC"]
+        row = session.get(SpellingBeeDefinition, "DYADIC")
+        assert row is not None
+        assert row.definition is None
+
+    def test_definition_refresh_forces_a_new_lookup(
+        self, session: Session, client: TestClient, monkeypatch
+    ):
+        calls = []
+
+        def fake_fetch(word, timeout=10):
+            calls.append(word)
+            return f"sense {len(calls)}", "noun"
+
+        monkeypatch.setattr("mydiary.api.fetch_definition", fake_fetch)
+
+        client.post("/spellingbee/definitions/CANDID")
+        response = client.post(
+            "/spellingbee/definitions/CANDID", params={"refresh": True}
+        )
+        assert calls == ["CANDID", "CANDID"]
+        assert response.json()["definition"] == "sense 2"
+
+    def test_words_rollup_includes_cached_definition(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-08-07", ["CANDID"])
+        session.add(
+            SpellingBeeDefinition(
+                word="CANDID",
+                definition="Frank and outspoken.",
+                part_of_speech="adjective",
+                fetched_at=pendulum.now("UTC"),
+            )
+        )
+        session.commit()
+        words = client.get("/spellingbee/words/").json()
+        assert words[0]["definition"] == "Frank and outspoken."
+
+    def test_second_puzzle_on_same_date_is_refused(
+        self, session: Session, client: TestClient
+    ):
+        # the real mistake: two days' answers filed under one date
+        self._post(client, "2026-07-28", ["DENIM", "DIME", "EMEND", "GIMME"])
+        response = self._post(client, "2026-07-28", ["ABROAD", "BAOBAB", "TABOO"])
+        assert response.status_code == 409
+        assert "can't all be from the puzzle" in response.json()["detail"]
+        # and nothing was written
+        words = [m.word for m in session.exec(select(SpellingBeeMiss)).all()]
+        assert "ABROAD" not in words
+
+    def test_same_puzzle_added_in_two_goes_is_fine(
+        self, session: Session, client: TestClient
+    ):
+        self._post(client, "2026-07-28", ["DENIM", "DIME", "EMEND"])
+        response = self._post(client, "2026-07-28", ["GIMME", "MIDGE"])
+        assert response.status_code == 200
+        assert len(response.json()["created"]) == 2
+
+    def test_words_outside_recorded_letters_are_refused(
+        self, session: Session, client: TestClient
+    ):
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        response = self._post(client, "2026-08-07", ["CANDID", "MUFFIN"])
+        assert response.status_code == 409
+
+    def test_preview_reports_existing_words(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-08-07", ["CANDID", "CADDY"])
+        response = client.post(
+            "/spellingbee/misses/check",
+            json={"puzzle_date": "2026-08-07", "words": ["CANDID", "DYADIC", "CAD"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["existing_words"] == ["CADDY", "CANDID"]
+        assert data["new_words"] == ["DYADIC"]
+        assert data["duplicate_words"] == ["CANDID"]
+        assert data["invalid_words"] == ["CAD"]
+        assert data["conflict"] is False
+
+    def test_preview_flags_a_conflict_and_groups_the_puzzles(
+        self, session: Session, client: TestClient
+    ):
+        self._seed(session, "2026-07-28", ["DENIM", "DIME", "EMEND", "GIMME"])
+        response = client.post(
+            "/spellingbee/misses/check",
+            json={
+                "puzzle_date": "2026-07-28",
+                "words": ["ABROAD", "BAOBAB", "TABOO"],
+            },
+        )
+        data = response.json()
+        assert data["conflict"] is True
+        assert data["problems"]
+        # the two puzzles are separated so the UI can show what went wrong
+        assert len(data["groups"]) == 2
+        assert {"ABROAD", "BAOBAB", "TABOO"} in [set(g) for g in data["groups"]]
+
+    def test_preview_writes_nothing(self, session: Session, client: TestClient):
+        client.post(
+            "/spellingbee/misses/check",
+            json={"puzzle_date": "2026-08-07", "words": ["CANDID"]},
+        )
+        assert session.exec(select(SpellingBeeMiss)).all() == []
+
+    def test_empty_database_returns_empty_lists(
+        self, session: Session, client: TestClient
+    ):
+        assert client.get("/spellingbee/words/").json() == []
+        assert client.get("/spellingbee/hives/").json() == []
+        assert client.get("/spellingbee/misses/").json() == []
 
 
 class TestDog:

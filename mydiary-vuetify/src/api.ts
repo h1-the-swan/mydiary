@@ -204,6 +204,97 @@ export interface RecipeRead {
   id: number;
 }
 
+/**
+ * What would happen if these words were added to this date.
+ *
+ * The entry form asks for this before writing, so it can warn about a date
+ * that already has words and refuse a set that can't be one puzzle.
+ */
+export interface SpellingBeeAddPreview {
+  puzzle_date: string;
+  existing_words: string[];
+  new_words: string[];
+  duplicate_words: string[];
+  invalid_words: string[];
+  conflict: boolean;
+  problems: string[];
+  combined_letters: string[];
+  center_candidates: string[];
+  groups: string[][];
+}
+
+export interface SpellingBeeDefinitionRead {
+  definition?: string | null;
+  part_of_speech?: string | null;
+  fetched_at: string;
+  word: string;
+}
+
+export interface SpellingBeeHiveRead {
+  puzzle_date: string;
+  center_letter: string;
+  outer_letters: string[];
+  exact: boolean;
+  words: string[];
+  pangrams: string[];
+  warnings: string[];
+}
+
+export interface SpellingBeeMissBulkCreate {
+  puzzle_date: string;
+  words: string[];
+  center_letter?: string | null;
+  outer_letters?: string | null;
+}
+
+export interface SpellingBeeMissRead {
+  puzzle_date: string;
+  word: string;
+  created_at: string;
+  id: number;
+  is_pangram: boolean;
+}
+
+export interface SpellingBeeMissBulkResult {
+  puzzle_date: string;
+  created: SpellingBeeMissRead[];
+  skipped: string[];
+  invalid: string[];
+}
+
+export interface SpellingBeeMissUpdate {
+  puzzle_date?: string | null;
+  word?: string | null;
+}
+
+export interface SpellingBeePuzzleRead {
+  center_letter: string;
+  outer_letters: string;
+  created_at: string;
+  puzzle_date: string;
+}
+
+export interface SpellingBeePuzzleUpsert {
+  center_letter: string;
+  outer_letters: string;
+}
+
+export interface SpellingBeeWordMiss {
+  id: number;
+  puzzle_date: string;
+}
+
+export interface SpellingBeeWordRead {
+  word: string;
+  times_missed: number;
+  first_missed: string;
+  last_missed: string;
+  misses: SpellingBeeWordMiss[];
+  is_pangram: boolean;
+  definition?: string | null;
+  part_of_speech?: string | null;
+}
+
 export interface SpotifyTrackBase {
   spotify_id: string;
   name: string;
@@ -364,6 +455,38 @@ export type CreateTimeZoneChangeParams = {
 dt: string;
 tz_before: string;
 tz_after: string;
+};
+
+export type ReadSpellingBeeMissesListParams = {
+puzzle_date?: string | null;
+offset?: number;
+limit?: number;
+};
+
+export type ReadSpellingBeeWordsListParams = {
+/**
+ * @minimum 1
+ */
+min_misses?: number;
+offset?: number;
+limit?: number;
+};
+
+export type ReadSpellingBeeHivesListParams = {
+/**
+ * @minimum 1
+ */
+min_words?: number;
+limit?: number;
+};
+
+export type ReadSpellingBeePuzzlesListParams = {
+offset?: number;
+limit?: number;
+};
+
+export type FetchSpellingBeeDefinitionParams = {
+refresh?: boolean;
 };
 
 export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetParams = {
@@ -977,6 +1100,142 @@ export const createTimeZoneChange = (
   }
 
 /**
+ * @summary Create Spelling Bee Misses
+ */
+export const createSpellingBeeMisses = (
+    spellingBeeMissBulkCreate: SpellingBeeMissBulkCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeMissBulkResult>> => {
+    return axios.post(
+      `/spellingbee/misses/`,
+      spellingBeeMissBulkCreate,options
+    );
+  }
+
+/**
+ * @summary Read Spelling Bee Misses
+ */
+export const readSpellingBeeMissesList = (
+    params?: ReadSpellingBeeMissesListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeMissRead[]>> => {
+    return axios.get(
+      `/spellingbee/misses/`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * Dry run of an add, so the form can warn before it writes anything.
+ * @summary Preview Spelling Bee Misses
+ */
+export const previewSpellingBeeMisses = (
+    spellingBeeMissBulkCreate: SpellingBeeMissBulkCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeAddPreview>> => {
+    return axios.post(
+      `/spellingbee/misses/check`,
+      spellingBeeMissBulkCreate,options
+    );
+  }
+
+/**
+ * Every distinct word, rolled up across the days it was missed.
+ *
+ * Aggregated in Python rather than SQL: the volume is a handful of words a
+ * day, and the per-word list of dates would need group_concat and
+ * string-splitting to come back out of a GROUP BY.
+ * @summary Read Spelling Bee Words
+ */
+export const readSpellingBeeWordsList = (
+    params?: ReadSpellingBeeWordsListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeWordRead[]>> => {
+    return axios.get(
+      `/spellingbee/words/`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * One playable board per recorded day, newest first.
+ * @summary Read Spelling Bee Hives
+ */
+export const readSpellingBeeHivesList = (
+    params?: ReadSpellingBeeHivesListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeHiveRead[]>> => {
+    return axios.get(
+      `/spellingbee/hives/`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Read Spelling Bee Puzzles
+ */
+export const readSpellingBeePuzzlesList = (
+    params?: ReadSpellingBeePuzzlesListParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeePuzzleRead[]>> => {
+    return axios.get(
+      `/spellingbee/puzzles/`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Update Spelling Bee Miss
+ */
+export const updateSpellingBeeMiss = (
+    missId: number,
+    spellingBeeMissUpdate: SpellingBeeMissUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeMissRead>> => {
+    return axios.patch(
+      `/spellingbee/misses/${missId}`,
+      spellingBeeMissUpdate,options
+    );
+  }
+
+/**
+ * @summary Delete Spelling Bee Miss
+ */
+export const deleteSpellingBeeMiss = (
+    missId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.delete(
+      `/spellingbee/misses/${missId}`,options
+    );
+  }
+
+/**
+ * @summary Upsert Spelling Bee Puzzle
+ */
+export const upsertSpellingBeePuzzle = (
+    puzzleDate: string,
+    spellingBeePuzzleUpsert: SpellingBeePuzzleUpsert, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeePuzzleRead>> => {
+    return axios.put(
+      `/spellingbee/puzzles/${puzzleDate}`,
+      spellingBeePuzzleUpsert,options
+    );
+  }
+
+/**
+ * Look a word up, caching the answer -- including "not found".
+ * @summary Fetch Spelling Bee Definition
+ */
+export const fetchSpellingBeeDefinition = (
+    word: string,
+    params?: FetchSpellingBeeDefinitionParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SpellingBeeDefinitionRead>> => {
+    return axios.post(
+      `/spellingbee/definitions/${word}`,
+      undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
  * @summary Send Api Json
  */
 export const sendApiJsonGenerateOpenapiJsonGet = (
@@ -1081,6 +1340,16 @@ export type CreateRecipeResult = AxiosResponse<RecipeRead>
 export type ReadRecipesListResult = AxiosResponse<RecipeRead>
 export type ReadTimeZoneChangeListResult = AxiosResponse<TimeZoneChange[]>
 export type CreateTimeZoneChangeResult = AxiosResponse<TimeZoneChange>
+export type CreateSpellingBeeMissesResult = AxiosResponse<SpellingBeeMissBulkResult>
+export type ReadSpellingBeeMissesListResult = AxiosResponse<SpellingBeeMissRead[]>
+export type PreviewSpellingBeeMissesResult = AxiosResponse<SpellingBeeAddPreview>
+export type ReadSpellingBeeWordsListResult = AxiosResponse<SpellingBeeWordRead[]>
+export type ReadSpellingBeeHivesListResult = AxiosResponse<SpellingBeeHiveRead[]>
+export type ReadSpellingBeePuzzlesListResult = AxiosResponse<SpellingBeePuzzleRead[]>
+export type UpdateSpellingBeeMissResult = AxiosResponse<SpellingBeeMissRead>
+export type DeleteSpellingBeeMissResult = AxiosResponse<unknown>
+export type UpsertSpellingBeePuzzleResult = AxiosResponse<SpellingBeePuzzleRead>
+export type FetchSpellingBeeDefinitionResult = AxiosResponse<SpellingBeeDefinitionRead>
 export type SendApiJsonGenerateOpenapiJsonGetResult = AxiosResponse<unknown>
 export type ExperimentalGetSpotifyPlaylistExperimentalGetSpotifyPlaylistGetResult = AxiosResponse<unknown>
 export type ExperimentalGetSpotifyAudioFeaturesExperimentalGetSpotifyAudioFeaturesGetResult = AxiosResponse<unknown>
