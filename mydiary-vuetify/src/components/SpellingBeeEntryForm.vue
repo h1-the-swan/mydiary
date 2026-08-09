@@ -404,6 +404,14 @@ async function save() {
     max-width: 220px;
 }
 
+/* words and letters are stored uppercase, so type them that way rather than
+   quietly changing what you wrote when it saves. the date field is left
+   alone. */
+:deep(textarea),
+:deep(.letters-field input) {
+    text-transform: uppercase;
+}
+
 /* echoes back what was typed, so the center letter is visibly the first one */
 .letter-preview {
     display: flex;

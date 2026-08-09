@@ -243,4 +243,9 @@ async function lookUp(word: SpellingBeeWordRead) {
 .search-field {
     min-width: 240px;
 }
+
+/* the words it searches are all uppercase, so the query looks like them */
+:deep(.search-field input) {
+    text-transform: uppercase;
+}
 </style>

@@ -400,6 +400,11 @@ watch(() => props.words, nextWord, { immediate: true })
     content: '\00a0';
 }
 
+/* the answer is checked uppercase, and the blanks above it are uppercase */
+:deep(input) {
+    text-transform: uppercase;
+}
+
 /* wide enough for the board at its largest, so the blanks beside it don't
    reflow as the drill moves between words with one board and several */
 .hives {
