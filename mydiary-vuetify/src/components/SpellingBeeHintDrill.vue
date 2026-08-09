@@ -13,30 +13,44 @@
 
             <div class="d-flex flex-column flex-sm-row ga-6">
                 <div class="flex-grow-1">
-                    <div class="mask mb-4">{{ mask }}</div>
+                    <div class="mask mb-2">
+                        <span
+                            v-for="(letter, i) in maskChars"
+                            :key="i"
+                            class="slot"
+                            :class="{ 'slot--blank': !letter }"
+                        >
+                            {{ letter }}
+                        </span>
+                    </div>
+                    <div class="text-body-2 text-medium-emphasis mb-1">
+                        {{ current.word.length }} letters
+                    </div>
 
-                    <div v-if="hintsShown >= 1" class="text-body-2 mb-1">
-                        {{ current.word.length }} letters ·
-                        {{ distinctCount }} distinct letters
-                        <span v-if="current.is_pangram">· it's a pangram</span>
+                    <div v-if="shown.distinct" class="text-body-2 mb-1">
+                        {{ distinctCount }} distinct letters<span
+                            v-if="current.is_pangram"
+                        >
+                            — it's a pangram, so it uses all seven</span
+                        >
                     </div>
-                    <div v-if="hintsShown >= 4" class="text-body-2 mb-1">
-                        Letters: {{ scrambled }}
+                    <div v-if="shown.scrambled" class="text-body-2 mb-1">
+                        Its letters: {{ scrambled }}
                     </div>
-                    <div v-if="hintsShown >= 3" class="text-body-2 mb-1">
-                        <span v-if="definition">
+                    <div v-if="shown.partOfSpeech || shown.definition" class="text-body-2 mb-1">
+                        <span v-if="definitionPending" class="text-medium-emphasis">
+                            Looking it up…
+                        </span>
+                        <template v-else-if="definition || partOfSpeech">
                             <span
                                 v-if="partOfSpeech"
                                 class="text-medium-emphasis font-italic"
                             >
-                                {{ partOfSpeech }} —
+                                {{ partOfSpeech }}{{ shown.definition ? ' —' : '' }}
                             </span>
-                            {{ definition }}
-                        </span>
-                        <span v-else-if="definitionPending" class="text-medium-emphasis">
-                            Looking it up…
-                        </span>
-                        <span v-else class="text-disabled">No definition found</span>
+                            <span v-if="shown.definition">{{ definition }}</span>
+                        </template>
+                        <span v-else class="text-disabled">Nothing in the dictionary</span>
                     </div>
 
                     <v-text-field
@@ -50,6 +64,20 @@
                         autocapitalize="characters"
                         @keyup.enter="check"
                     ></v-text-field>
+
+                    <div class="text-overline text-medium-emphasis">Hints</div>
+                    <div class="d-flex flex-wrap ga-2">
+                        <v-btn
+                            v-for="hint in hintButtons"
+                            :key="hint.label"
+                            size="small"
+                            :prepend-icon="hint.icon"
+                            :disabled="hint.done || solved || gaveUp"
+                            @click="hint.reveal"
+                        >
+                            {{ hint.label }}
+                        </v-btn>
+                    </div>
                 </div>
 
                 <!-- the board the word came from. a word missed on more than one
@@ -78,7 +106,7 @@
 
             <div v-if="solved" class="text-body-2 text-success mb-2">
                 {{ current.word }} — got it
-                {{ hintsShown ? `with ${hintsShown} hint${hintsShown > 1 ? 's' : ''}` : 'with no hints' }}.
+                {{ hintsUsed ? `with ${hintsUsed} hint${hintsUsed > 1 ? 's' : ''}` : 'with no hints' }}.
             </div>
             <div v-else-if="gaveUp" class="text-body-2 text-medium-emphasis mb-2">
                 It was <strong>{{ current.word }}</strong>.
@@ -86,13 +114,6 @@
         </v-card-text>
 
         <v-card-actions>
-            <v-btn
-                :disabled="hintsShown >= MAX_HINTS || solved || gaveUp"
-                prepend-icon="mdi-lightbulb-outline"
-                @click="nextHint"
-            >
-                Hint
-            </v-btn>
             <v-btn :disabled="solved || gaveUp" @click="reveal">Give up</v-btn>
             <v-spacer></v-spacer>
             <v-btn
@@ -141,14 +162,20 @@ const { smAndDown } = useDisplay()
 // small enough to sit beside the blanks rather than dominate them
 const hiveSize = computed(() => (smAndDown.value ? 46 : 56))
 
-// length/distinct, first letter, first two, definition, scrambled letters
-const MAX_HINTS = 5
 // don't ask the same handful of words over and over
 const RECENT_MEMORY = 5
 
 const current = ref<SpellingBeeWordRead>()
 const answer = ref('')
-const hintsShown = ref(0)
+// the first letter is free -- a bare row of blanks is a guess, not recall
+const revealedFromStart = ref(1)
+const shown = ref({
+    lastLetter: false,
+    distinct: false,
+    partOfSpeech: false,
+    definition: false,
+    scrambled: false,
+})
 const solved = ref(false)
 const gaveUp = ref(false)
 const wrong = ref(false)
@@ -199,58 +226,123 @@ function appendLetter(letter: string) {
     answer.value += letter
 }
 
-const mask = computed(() => {
-    if (!current.value) return ''
+/** One slot per letter; an empty string is a blank still to be worked out. */
+const maskChars = computed(() => {
+    if (!current.value) return []
     const word = current.value.word
-    if (solved.value || gaveUp.value) return word.split('').join(' ')
-    // hint 2 reveals the first letter, hint 3 the first two
-    const revealCount = hintsShown.value >= 3 ? 2 : hintsShown.value >= 2 ? 1 : 0
-    return word
-        .split('')
-        .map((c, i) => (i < revealCount ? c : '_'))
-        .join(' ')
+    if (solved.value || gaveUp.value) return word.split('')
+    const last = word.length - 1
+    return word.split('').map((c, i) => {
+        if (i < revealedFromStart.value) return c
+        if (shown.value.lastLetter && i === last) return c
+        return ''
+    })
 })
 
-const scrambled = computed(() => {
-    if (!current.value) return ''
-    const letters = current.value.word.split('')
+// shuffled once per word rather than per render, so it doesn't dance about
+const scrambled = ref('')
+function scramble(word: string) {
+    const letters = word.split('')
     for (let i = letters.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))
         ;[letters[i], letters[j]] = [letters[j], letters[i]]
     }
     return letters.join(' ')
-})
+}
+
+const hintsUsed = computed(
+    () =>
+        revealedFromStart.value -
+        1 +
+        Object.values(shown.value).filter(Boolean).length
+)
+
+/** Letters revealed from the left can't finish the word off by themselves. */
+const canRevealAnother = computed(
+    () => !!current.value && revealedFromStart.value < current.value.word.length - 1
+)
+
+const hintButtons = computed(() => [
+    {
+        label: 'Next letter',
+        icon: 'mdi-form-textbox',
+        done: !canRevealAnother.value,
+        reveal: () => (revealedFromStart.value += 1),
+    },
+    {
+        label: 'Last letter',
+        icon: 'mdi-ray-end',
+        done: shown.value.lastLetter,
+        reveal: () => (shown.value.lastLetter = true),
+    },
+    {
+        label: 'Distinct letters',
+        icon: 'mdi-counter',
+        done: shown.value.distinct,
+        reveal: () => (shown.value.distinct = true),
+    },
+    {
+        label: 'Part of speech',
+        icon: 'mdi-tag-outline',
+        done: shown.value.partOfSpeech,
+        reveal: () => {
+            shown.value.partOfSpeech = true
+            loadDefinition()
+        },
+    },
+    {
+        label: 'Definition',
+        icon: 'mdi-book-open-variant',
+        done: shown.value.definition,
+        reveal: () => {
+            shown.value.definition = true
+            loadDefinition()
+        },
+    },
+    {
+        label: 'Scrambled letters',
+        icon: 'mdi-shuffle-variant',
+        done: shown.value.scrambled,
+        reveal: () => (shown.value.scrambled = true),
+    },
+])
 
 function nextWord() {
     current.value = pickWord()
     answer.value = ''
-    hintsShown.value = 0
+    revealedFromStart.value = 1
+    shown.value = {
+        lastLetter: false,
+        distinct: false,
+        partOfSpeech: false,
+        definition: false,
+        scrambled: false,
+    }
     solved.value = false
     gaveUp.value = false
     wrong.value = false
     definition.value = null
     partOfSpeech.value = null
     if (current.value) {
+        scrambled.value = scramble(current.value.word)
         recent.value = [current.value.word, ...recent.value].slice(0, RECENT_MEMORY)
     }
     nextTick(() => answerField.value?.focus?.())
 }
 
-async function nextHint() {
-    hintsShown.value += 1
-    // the definition hint is the one that needs fetching
-    if (hintsShown.value === 3 && current.value && definition.value === null) {
-        if (current.value.definition) {
-            definition.value = current.value.definition
-            partOfSpeech.value = current.value.part_of_speech ?? null
-            return
-        }
-        definitionPending.value = true
-        const result = (await fetchSpellingBeeDefinition(current.value.word)).data
-        definition.value = result.definition ?? null
-        partOfSpeech.value = result.part_of_speech ?? null
-        definitionPending.value = false
+/** Part of speech and definition come from one lookup, so fetch it once. */
+async function loadDefinition() {
+    if (!current.value || definition.value !== null || definitionPending.value) return
+    if (current.value.definition) {
+        definition.value = current.value.definition
+        partOfSpeech.value = current.value.part_of_speech ?? null
+        return
     }
+    definitionPending.value = true
+    const result = (await fetchSpellingBeeDefinition(current.value.word)).data
+    definition.value = result.definition ?? null
+    partOfSpeech.value = result.part_of_speech ?? null
+    definitionPending.value = false
 }
 
 function check() {
@@ -281,9 +373,31 @@ watch(() => props.words, nextWord, { immediate: true })
 
 <style scoped>
 .mask {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
     font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    /* hug the glyphs, so a blank's rule sits just under the baseline of the
+       letters beside it rather than a descender's depth below them */
+    line-height: 1;
+}
+
+/* fixed-width slots, so the word doesn't shift as letters are filled in */
+.slot {
+    min-width: 1.1em;
+    padding-bottom: 3px;
+    border-bottom: 3px solid transparent;
+    text-align: center;
+}
+
+.slot--blank {
+    border-bottom-color: rgba(var(--v-theme-on-surface), 0.3);
+}
+
+/* an empty slot has no line box of its own to set the rule's height */
+.slot--blank::after {
+    content: '\00a0';
 }
 
 /* wide enough for the board at its largest, so the blanks beside it don't
