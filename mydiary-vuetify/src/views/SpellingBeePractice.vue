@@ -33,7 +33,7 @@
                 </v-card>
             </template>
 
-            <spelling-bee-hint-drill v-else :words="words" />
+            <spelling-bee-hint-drill v-else :words="words" :hives="hives" />
         </div>
     </page-shell>
 </template>

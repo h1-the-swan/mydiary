@@ -1502,8 +1502,6 @@ def read_spelling_bee_hives(
 
     hives = []
     for puzzle_date, words in by_date.items():
-        if len(words) < min_words:
-            continue
         puzzle = puzzles.get(puzzle_date)
         hive = spelling_bee.derive_hive(
             puzzle_date,
@@ -1512,6 +1510,11 @@ def read_spelling_bee_hives(
             outer_letters=puzzle.outer_letters if puzzle else None,
         )
         if not hive.words:
+            continue
+        # min_words guards against a board that is mostly invented padding.
+        # recorded letters are exact however few words there are, so they're
+        # trustworthy regardless.
+        if len(words) < min_words and not hive.exact:
             continue
         hives.append(
             SpellingBeeHiveRead(

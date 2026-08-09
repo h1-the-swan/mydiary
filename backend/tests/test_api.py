@@ -512,6 +512,22 @@ class TestSpellingBee:
         assert all(hive["center_letter"] in word for word in hive["words"])
         assert hive["exact"] is False
 
+    def test_thin_date_is_skipped_unless_its_letters_are_recorded(
+        self, session: Session, client: TestClient
+    ):
+        # two words alone would give a board that is mostly invented padding
+        self._seed(session, "2026-08-07", ["CANDID", "CANDY"])
+        assert client.get("/spellingbee/hives/").json() == []
+
+        # recorded letters are exact however few words there are
+        client.put(
+            "/spellingbee/puzzles/2026-08-07",
+            json={"center_letter": "D", "outer_letters": "CANIYL"},
+        )
+        hives = client.get("/spellingbee/hives/").json()
+        assert len(hives) == 1
+        assert hives[0]["exact"] is True
+
     def test_hive_uses_recorded_letters_when_present(
         self, session: Session, client: TestClient
     ):

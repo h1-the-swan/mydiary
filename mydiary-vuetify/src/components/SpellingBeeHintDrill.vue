@@ -11,40 +11,70 @@
                 </span>
             </div>
 
-            <div class="mask mb-4">{{ mask }}</div>
+            <div class="d-flex flex-column flex-sm-row ga-6">
+                <div class="flex-grow-1">
+                    <div class="mask mb-4">{{ mask }}</div>
 
-            <div v-if="hintsShown >= 1" class="text-body-2 mb-1">
-                {{ current.word.length }} letters ·
-                {{ distinctCount }} distinct letters
-                <span v-if="current.is_pangram">· it's a pangram</span>
-            </div>
-            <div v-if="hintsShown >= 4" class="text-body-2 mb-1">
-                Letters: {{ scrambled }}
-            </div>
-            <div v-if="hintsShown >= 3" class="text-body-2 mb-1">
-                <span v-if="definition">
-                    <span v-if="partOfSpeech" class="text-medium-emphasis font-italic">
-                        {{ partOfSpeech }} —
-                    </span>
-                    {{ definition }}
-                </span>
-                <span v-else-if="definitionPending" class="text-medium-emphasis">
-                    Looking it up…
-                </span>
-                <span v-else class="text-disabled">No definition found</span>
-            </div>
+                    <div v-if="hintsShown >= 1" class="text-body-2 mb-1">
+                        {{ current.word.length }} letters ·
+                        {{ distinctCount }} distinct letters
+                        <span v-if="current.is_pangram">· it's a pangram</span>
+                    </div>
+                    <div v-if="hintsShown >= 4" class="text-body-2 mb-1">
+                        Letters: {{ scrambled }}
+                    </div>
+                    <div v-if="hintsShown >= 3" class="text-body-2 mb-1">
+                        <span v-if="definition">
+                            <span
+                                v-if="partOfSpeech"
+                                class="text-medium-emphasis font-italic"
+                            >
+                                {{ partOfSpeech }} —
+                            </span>
+                            {{ definition }}
+                        </span>
+                        <span v-else-if="definitionPending" class="text-medium-emphasis">
+                            Looking it up…
+                        </span>
+                        <span v-else class="text-disabled">No definition found</span>
+                    </div>
 
-            <v-text-field
-                ref="answerField"
-                v-model="answer"
-                class="mt-4"
-                label="Your answer"
-                :error-messages="wrong ? 'Not it — try again' : undefined"
-                :success="solved"
-                autocomplete="off"
-                autocapitalize="characters"
-                @keyup.enter="check"
-            ></v-text-field>
+                    <v-text-field
+                        ref="answerField"
+                        v-model="answer"
+                        class="mt-4"
+                        label="Your answer"
+                        :error-messages="wrong ? 'Not it — try again' : undefined"
+                        :success="solved"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        @keyup.enter="check"
+                    ></v-text-field>
+                </div>
+
+                <!-- the board the word came from. a word missed on more than one
+                     day has more than one, so show each with its date. -->
+                <div v-if="currentHives.length" class="hives flex-shrink-0">
+                    <div
+                        v-for="hive in currentHives"
+                        :key="hive.puzzle_date"
+                        class="mb-4"
+                    >
+                        <spelling-bee-hive
+                            :center-letter="hive.center_letter"
+                            :outer-letters="hive.outer_letters"
+                            :size="hiveSize"
+                            @letter="appendLetter"
+                        />
+                        <div class="text-caption text-medium-emphasis text-center mt-1">
+                            {{ formatDate(hive.puzzle_date) }}
+                            <span v-if="!hive.exact" title="Letters inferred from your words">
+                                ·&nbsp;approx
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div v-if="solved" class="text-body-2 text-success mb-2">
                 {{ current.word }} — got it
@@ -90,10 +120,26 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
-import { SpellingBeeWordRead, fetchSpellingBeeDefinition } from '@/api'
+import SpellingBeeHive from '@/components/SpellingBeeHive.vue'
+import {
+    SpellingBeeHiveRead,
+    SpellingBeeWordRead,
+    fetchSpellingBeeDefinition,
+} from '@/api'
 import { formatDate } from '@/spellingBee'
+import { useDisplay } from 'vuetify'
 
-const props = defineProps<{ words: SpellingBeeWordRead[] }>()
+const props = withDefaults(
+    defineProps<{
+        words: SpellingBeeWordRead[]
+        hives?: SpellingBeeHiveRead[]
+    }>(),
+    { hives: () => [] }
+)
+
+const { smAndDown } = useDisplay()
+// small enough to sit beside the blanks rather than dominate them
+const hiveSize = computed(() => (smAndDown.value ? 46 : 56))
 
 // length/distinct, first letter, first two, definition, scrambled letters
 const MAX_HINTS = 5
@@ -136,6 +182,22 @@ function pickWord(): SpellingBeeWordRead | undefined {
 const distinctCount = computed(() =>
     current.value ? new Set(current.value.word).size : 0
 )
+
+/**
+ * The board(s) this word was missed on. Seeing the seven letters is the real
+ * game's starting position, so it makes the drill a recall exercise rather
+ * than a guess. A word missed on several days has several boards.
+ */
+const currentHives = computed(() => {
+    if (!current.value) return []
+    const dates = new Set(current.value.misses.map((m) => m.puzzle_date))
+    return props.hives.filter((h) => dates.has(h.puzzle_date))
+})
+
+function appendLetter(letter: string) {
+    if (solved.value || gaveUp.value) return
+    answer.value += letter
+}
 
 const mask = computed(() => {
     if (!current.value) return ''
@@ -222,5 +284,17 @@ watch(() => props.words, nextWord, { immediate: true })
     font-size: 1.75rem;
     font-weight: 700;
     letter-spacing: 0.12em;
+}
+
+/* wide enough for the board at its largest, so the blanks beside it don't
+   reflow as the drill moves between words with one board and several */
+.hives {
+    width: 188px;
+}
+
+@media (max-width: 599px) {
+    .hives {
+        width: 100%;
+    }
 }
 </style>
