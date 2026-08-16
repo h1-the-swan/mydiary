@@ -404,6 +404,8 @@ export type OwntracksDayMapImageParams = {
 tz?: string;
 width?: number;
 height?: number;
+fmt?: string;
+quality?: number;
 max_acc?: number;
 stay_radius_m?: number;
 stay_minutes?: number;
@@ -830,7 +832,7 @@ export const owntracksDayMapImage = (
     params?: OwntracksDayMapImageParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<unknown | Blob>> => {
     return axios.get(
-      `/owntracks/map/${dt}.png`,{
+      `/owntracks/map/${dt}`,{
         responseType: 'blob',
     ...options,
         params: {...params, ...options?.params},}

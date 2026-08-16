@@ -8,9 +8,10 @@ from PIL import Image
 from sqlmodel import Session, select
 
 from mydiary import owntracks_maps
+from mydiary.map_render import RenderParams
 from mydiary.markdown_edits import MarkdownDoc
 from mydiary.models import JoplinNote, OwnTracksDayMap, OwnTracksLocation
-from mydiary.owntracks_maps import section_content, sync_day_map_to_note
+from mydiary.owntracks_maps import render_for_day, section_content, sync_day_map_to_note
 
 TZ = "America/New_York"
 DAY = "2026-07-01"
@@ -56,6 +57,7 @@ class FakeJoplin:
         self.resources = {}
         self.deleted = []
         self.update_count = 0
+        self.exts = []
 
     def get_note_id_by_date(self, dt):
         return self.note.id
@@ -68,6 +70,7 @@ class FakeJoplin:
 
         resource_id = hashlib.md5(data).hexdigest()
         self.resources[resource_id] = title
+        self.exts.append(ext)
         return FakeResponse({"id": resource_id})
 
     def resource_exists(self, resource_id):
@@ -106,13 +109,9 @@ def offline_tiles(monkeypatch):
     """Render without the network."""
     real_render = owntracks_maps.render_day_map
 
-    def _render(track, params=None, width=1200, height=900, tile_downloader=None):
+    def _render(track, params=None, render=None, tile_downloader=None):
         return real_render(
-            track,
-            params,
-            width=width,
-            height=height,
-            tile_downloader=FakeTileDownloader(),
+            track, params, render, tile_downloader=FakeTileDownloader()
         )
 
     monkeypatch.setattr(owntracks_maps, "render_day_map", _render)
@@ -189,6 +188,24 @@ def test_records_bookkeeping_row(db_with_locations, dt):
     assert row.num_points == 17
 
 
+def test_resource_is_uploaded_as_a_jpeg(db_with_locations, dt):
+    # Joplin takes the resource's mime type from this extension, so it is what
+    # decides whether the note renders the map at all
+    joplin = FakeJoplin()
+    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+    assert joplin.exts == ["jpg"]
+
+
+def test_changing_only_the_render_params_changes_the_content_hash(db_with_locations, dt):
+    # the whole re-encode backfill rides on this: without the render params in
+    # the hash, every already-stored day would look up to date and be skipped
+    _, _, as_jpeg = render_for_day(dt, db_with_locations)
+    _, _, as_png = render_for_day(
+        dt, db_with_locations, render=RenderParams(fmt="PNG")
+    )
+    assert as_jpeg != as_png
+
+
 def test_rerunning_an_unchanged_day_is_a_noop(db_with_locations, dt):
     joplin = FakeJoplin()
     sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
@@ -212,8 +229,8 @@ def test_force_replaces_the_resource_and_deletes_the_old_one(
     # a different render produces different bytes, hence a different resource
     real_render = owntracks_maps.render_day_map
 
-    def _bigger(track, params=None, width=1200, height=900, tile_downloader=None):
-        return real_render(track, params, width=640, height=480)
+    def _bigger(track, params=None, render=None, tile_downloader=None):
+        return real_render(track, params, RenderParams(width=640, height=480))
 
     monkeypatch.setattr(owntracks_maps, "render_day_map", _bigger)
     result = sync_day_map_to_note(
@@ -227,6 +244,17 @@ def test_force_replaces_the_resource_and_deletes_the_old_one(
 def test_missing_location_data_raises_lookup_error(db_session, dt):
     with pytest.raises(LookupError):
         sync_day_map_to_note(dt, session=db_session, mydiary_joplin=FakeJoplin())
+
+
+def test_a_day_with_no_note_raises_lookup_error(db_with_locations, dt):
+    # get_note_id_by_date returns the string "does_not_exist", never None, so
+    # a None-only check let this fall through into the Joplin calls instead --
+    # which the re-encode backfill catches per day and would have died on
+    joplin = FakeJoplin()
+    joplin.get_note_id_by_date = lambda _dt: "does_not_exist"
+    with pytest.raises(LookupError):
+        sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+    assert not joplin.resources  # and no orphan resource was uploaded first
 
 
 def test_backfills_the_section_into_a_note_that_lacks_it(db_with_locations, dt):

@@ -7,6 +7,7 @@ MyDiaryImage and the photo grid: it lives in its own Location section and its
 own bookkeeping table. That table exists so a re-render of an unchanged day
 reuses its Joplin resource rather than orphaning one."""
 
+import hashlib
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -15,7 +16,7 @@ from sqlmodel import Session, select
 
 from .db import engine
 from .joplin_connector import MyDiaryJoplin
-from .map_render import render_day_map
+from .map_render import RenderParams, render_day_map
 from .markdown_edits import MarkdownDoc
 from .models import OwnTracksDayMap
 from .mydiary_day import MyDiaryDay
@@ -36,11 +37,17 @@ def render_for_day(
     dt: datetime,
     session: Session,
     params: Optional[TrackParams] = None,
-    width: int = 1200,
-    height: int = 900,
+    render: Optional[RenderParams] = None,
 ) -> Tuple[bytes, DayTrack, str]:
-    """Render the map for a day. Returns (png, track, content_hash)."""
+    """Render the map for a day. Returns (image bytes, track, content_hash).
+
+    The hash covers the render parameters as well as the track, so changing the
+    size or the encoding invalidates a stored map the same way new location
+    data does. It is composed here rather than in owntracks_track, which is
+    pure track maths and has no business knowing about image encoding.
+    """
     params = params or TrackParams()
+    render = render or RenderParams()
     mydiary_owntracks = MyDiaryOwnTracks()
     locations = mydiary_owntracks.get_locations_for_day(dt, session=session)
     if not locations:
@@ -56,8 +63,11 @@ def render_for_day(
             f"no usable location data for {dt.to_date_string()} "
             f"({len(locations)} fixes, all filtered out)"
         )
-    png = render_day_map(track, params, width=width, height=height)
-    return png, track, track.content_hash(params)
+    data = render_day_map(track, params, render)
+    content_hash = hashlib.sha256(
+        f"{track.content_hash(params)}|{render.cache_key()}".encode()
+    ).hexdigest()
+    return data, track, content_hash
 
 
 def sync_day_map_to_note(
@@ -66,6 +76,7 @@ def sync_day_map_to_note(
     mydiary_joplin: Optional[MyDiaryJoplin] = None,
     params: Optional[TrackParams] = None,
     force: bool = False,
+    render: Optional[RenderParams] = None,
 ) -> str:
     """Render the day's map, upload it to Joplin, and write the Location section.
 
@@ -80,7 +91,7 @@ def sync_day_map_to_note(
         mydiary_joplin = MyDiaryJoplin(init_config=False)
         mydiary_joplin.__enter__()
     try:
-        return _sync_day_map_to_note(dt, session, mydiary_joplin, params, force)
+        return _sync_day_map_to_note(dt, session, mydiary_joplin, params, force, render)
     finally:
         if close_joplin:
             mydiary_joplin.__exit__(None, None, None)
@@ -94,10 +105,12 @@ def _sync_day_map_to_note(
     mydiary_joplin: MyDiaryJoplin,
     params: Optional[TrackParams],
     force: bool,
+    render: Optional[RenderParams] = None,
 ) -> str:
     dt = pendulum.instance(dt)
     diary_date = dt.date()
-    png, track, content_hash = render_for_day(dt, session, params)
+    render = render or RenderParams()
+    data, track, content_hash = render_for_day(dt, session, params, render)
 
     existing = session.get(OwnTracksDayMap, diary_date)
     if (
@@ -110,11 +123,13 @@ def _sync_day_map_to_note(
         return "no update"
 
     note_id = mydiary_joplin.get_note_id_by_date(dt)
-    if note_id is None:
+    if note_id is None or note_id == "does_not_exist":
         raise LookupError(f"no Joplin note for {diary_date}")
 
+    # Joplin takes the resource's mime from this extension, so it is the only
+    # thing the note needs in order to render a non-PNG map
     r = mydiary_joplin.create_resource(
-        data=png, title=f"map-{diary_date}", ext="png"
+        data=data, title=f"map-{diary_date}", ext=render.ext
     )
     r.raise_for_status()
     resource_id = r.json()["id"]
@@ -163,7 +178,7 @@ def section_content(resource_id: Optional[str], track: DayTrack) -> str:
     """The Location section body: the map, then a searchable itinerary.
 
     The itinerary is the part that keeps working -- Joplin can search text, but
-    it cannot search a PNG.
+    it cannot search an image.
     """
     from .owntracks_track import summary_label
     from .models import make_markdown_table_header

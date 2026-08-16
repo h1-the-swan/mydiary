@@ -890,9 +890,9 @@ def owntracks_track_for_day(
 
 
 @app.get(
-    "/owntracks/map/{dt}.png",
+    "/owntracks/map/{dt}",
     operation_id="owntracksDayMapImage",
-    responses={200: {"content": {"image/png": {}}}},
+    responses={200: {"content": {"image/jpeg": {}}}},
 )
 def owntracks_day_map_image(
     dt: str,
@@ -900,6 +900,8 @@ def owntracks_day_map_image(
     tz: str = "infer",
     width: int = 1200,
     height: int = 900,
+    fmt: str = "JPEG",
+    quality: int = 85,
     max_acc: int = 100,
     stay_radius_m: float = 150.0,
     stay_minutes: float = 20.0,
@@ -908,24 +910,29 @@ def owntracks_day_map_image(
     dwell_max_kmh: float = 1.0,
     session: Session = Depends(get_session),
 ):
+    from .map_render import RenderParams
     from .owntracks_maps import render_for_day
 
     dt_obj = _owntracks_day(dt, tz, session)
     params = _track_params(
         max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
     )
+    render = RenderParams(width=width, height=height, fmt=fmt, quality=quality)
     try:
-        png, _, content_hash = render_for_day(
-            dt_obj, session, params, width=width, height=height
-        )
+        media_type = render.media_type
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        data, _, content_hash = render_for_day(dt_obj, session, params, render)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    etag = f'"{content_hash}-{width}x{height}"'
+    # the content hash covers geometry and encoding on its own
+    etag = f'"{content_hash}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304)
     return Response(
-        content=png,
-        media_type="image/png",
+        content=data,
+        media_type=media_type,
         headers={"ETag": etag, "Cache-Control": "private, max-age=3600"},
     )
 

@@ -31,7 +31,7 @@ everything downstream:
 
 ```
 recorder ──> OwnTracksLocation ──> owntracks_track ──> map_render ──> Joplin
-  (API)         (SQLite)            (stays/links)        (PNG)      (Location §)
+  (API)         (SQLite)            (stays/links)       (JPEG)      (Location §)
                                           │
                                           └──> /owntracks/track/{dt} ──> MapSection.vue
 ```
@@ -96,6 +96,40 @@ Details worth knowing:
   Pillow ≥ 10.1, so nothing needs vendoring into the fontless base image.
 - The bundled Carto providers use `http://`; ours override to https.
 
+### Encoding
+
+`RenderParams` (size + format + quality) is the second half of the render
+config, alongside `TrackParams`. The default is **JPEG q85 at 4:4:4, 1200×900**.
+
+The output was PNG until 2026-08, which cost about 5× the bytes for no visible
+gain — a tile basemap is photographic, and PNG only pays off for the flat colour
+and text in the footer strip. Measured at 1200×900 on two real days:
+
+| Encoding | 2026-07-01 | 2026-07-30 |
+|---|---|---|
+| PNG `optimize=True` | 996 KB | 1290 KB |
+| PNG, 64-colour palette | 367 KB | 500 KB |
+| **JPEG q85, 4:4:4** | **219 KB** | **235 KB** |
+| WebP q80 | 107 KB | 125 KB |
+
+Side-by-side 1:1 crops of the footer legend and of street labels over the track
+were indistinguishable across all three. JPEG rather than the smaller WebP
+because these images are meant to still open in thirty years. Size was kept at
+1200×900: once the format changed, pixels stopped being the expensive part, and
+street labels need them.
+
+Two things that are easy to get wrong here:
+
+- **`subsampling=0` (4:4:4) is not the default and is load-bearing.** The track
+  is thin saturated colour over a near-grey basemap, which is precisely what
+  4:2:0 chroma subsampling smears.
+- **`compress_level` is a dead end for PNG.** Pillow's `optimize=True` already
+  implies level 9; 6 and 9 produce byte-identical output.
+
+`RenderParams(fmt="PNG")` and `fmt="WEBP"` still work — the escape hatch is one
+query parameter — and `cache_key()` normalises the format name so `jpg` and
+`JPEG` do not hash as two different encodings.
+
 ### Visual encoding
 
 Time of day is **four labelled periods, not a continuous gradient** — on a map
@@ -131,14 +165,22 @@ beneath. Only stays over an hour get a duration label.
 - Uploads via `create_resource`, **not** `create_thumbnail` — the latter's 60KB
   ceiling would destroy the map. No `MyDiaryImage` row is created either, or the
   map would leak into the photo grid and the Images section.
-- `OwnTracksDayMap` records `content_hash` (the processed track plus render
-  params). An unchanged re-run is a no-op; a changed one creates the new
+- `OwnTracksDayMap` records `content_hash` — `sha256` over the track's own hash
+  plus `RenderParams.cache_key()`, composed in `render_for_day` rather than in
+  `owntracks_track`, which is pure track maths and should not know about image
+  encoding. An unchanged re-run is a no-op; a changed one creates the new
   resource and deletes the old, so re-rendering never orphans resources.
+  Because the render params are in the hash, changing the size or the format is
+  enough on its own to invalidate every stored day — which is what makes
+  `scripts/owntracks_reencode_maps.py` work without `force`, and makes it
+  resumable: a day already re-encoded hashes equal and is skipped.
+- `create_resource(ext=render.ext)` is what makes a non-PNG map render in the
+  note at all: Joplin derives the resource's mime type from that extension.
 - Old notes predating this feature have no Location section, and
   `update_joplin_note` skips sections it does not find. `MarkdownDoc.ensure_section`
   is what backfills it.
 - The section holds the map **and** a text itinerary. The itinerary is the part
-  that keeps working: Joplin can search text, it cannot search a PNG.
+  that keeps working: Joplin can search text, it cannot search an image.
 
 ## Routes
 
@@ -146,7 +188,7 @@ beneath. Only stays over an hour get a duration label.
 |---|---|
 | `GET /owntracks/locations/{dt}` | `owntracksLocationsForDay` — raw fixes |
 | `GET /owntracks/track/{dt}` | `owntracksTrackForDay` — processed stays + links |
-| `GET /owntracks/map/{dt}.png` | `owntracksDayMapImage` |
+| `GET /owntracks/map/{dt}` | `owntracksDayMapImage` — JPEG by default; `fmt` / `quality` / `width` / `height` |
 | `POST /owntracks/sync` | `owntracksSyncLocations` |
 | `POST /owntracks/map/{dt}/to_note` | `owntracksMapToNote` |
 
