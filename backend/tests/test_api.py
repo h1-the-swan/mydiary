@@ -9,6 +9,7 @@ from sqlmodel.pool import StaticPool
 
 from mydiary.models import (
     Dog,
+    MyDiaryImage,
     PerformSong,
     PocketArticle,
     PocketStatusEnum,
@@ -1097,3 +1098,142 @@ class TestImages:
         )
         assert r3.status_code == 304
         assert len(calls) == 1
+
+
+class TestIPhoneCaptureTimes:
+    """GET /images/iphone_captures -- feeds the Diary -> Photos Album Shortcut.
+
+    See notes/iphone-photos-album-plan.md.
+    """
+
+    TOKEN = "test-token-abc123"
+
+    @pytest.fixture(autouse=True)
+    def _token(self, monkeypatch):
+        monkeypatch.setenv("MYDIARY_API_TOKEN", self.TOKEN)
+
+    @property
+    def auth(self):
+        return {"X-API-Key": self.TOKEN}
+
+    @staticmethod
+    def _img(session: Session, path, created_at, resource_id="res1", **kw):
+        img = MyDiaryImage(
+            hash=f"h{created_at}",
+            nextcloud_path=path,
+            created_at=pendulum.parse(created_at).naive(),
+            thumbnail_size=1234,
+            joplin_resource_id=resource_id,
+            **kw,
+        )
+        session.add(img)
+        session.commit()
+        return img
+
+    def test_requires_api_key(self, client: TestClient):
+        assert client.get("/images/iphone_captures").status_code == 401
+        r = client.get(
+            "/images/iphone_captures", headers={"X-API-Key": "wrong"}
+        )
+        assert r.status_code == 401
+
+    def test_unset_token_fails_closed(self, client: TestClient, monkeypatch):
+        # a missing MYDIARY_API_TOKEN must deny, not allow
+        monkeypatch.delenv("MYDIARY_API_TOKEN", raising=False)
+        r = client.get("/images/iphone_captures", headers={"X-API-Key": ""})
+        assert r.status_code == 401
+
+    def test_capture_local_preserves_filename_wall_clock(
+        self, session: Session, client: TestClient
+    ):
+        """The format is a contract with the Shortcut: naive, to the second.
+
+        No UTC conversion, no offset, and no microseconds -- created_at's
+        microseconds hold the camera counter, not sub-second precision.
+        """
+        self._img(
+            session,
+            "H1phone_sync/2026/07/26-07-28%2009-56-03%200045.jpg",
+            "2026-07-28T09:56:03.004500",
+        )
+        r = client.get(
+            "/images/iphone_captures",
+            params={"since": "2026-07-01"},
+            headers=self.auth,
+        )
+        assert r.status_code == 200
+        assert r.json()[0]["capture_local"] == "2026-07-28T09:56:03"
+
+    def test_shortcut_contains_match_works(self, session: Session, client: TestClient):
+        """Regression guard for the actual matching mechanism.
+
+        Shortcuts formats a photo's date as ISO 8601 with an offset; the
+        Shortcut then tests `contains` against capture_local. Verified on
+        device 2026-08-09 with exactly these two strings.
+        """
+        self._img(
+            session,
+            "H1phone_sync/2026/07/26-07-28%2009-56-03%200045.jpg",
+            "2026-07-28T09:56:03.004500",
+        )
+        r = client.get(
+            "/images/iphone_captures",
+            params={"since": "2026-07-01"},
+            headers=self.auth,
+        )
+        shortcuts_iso = "2026-07-28T09:56:03-04:00"
+        assert r.json()[0]["capture_local"] in shortcuts_iso
+
+    def test_excludes_uploads_and_unsynced(self, session: Session, client: TestClient):
+        self._img(
+            session, "H1phone_sync/2026/07/26-07-10%2010-00-00%200001.jpg",
+            "2026-07-10T10:00:00",
+        )
+        # manual upload -- may not exist in the phone's library at all
+        self._img(
+            session, "mydiary_uploads/2026/07/scan.jpg", "2026-07-11T10:00:00",
+        )
+        # not currently in a note
+        self._img(
+            session, "H1phone_sync/2026/07/26-07-12%2010-00-00%200003.jpg",
+            "2026-07-12T10:00:00", resource_id=None,
+        )
+        r = client.get(
+            "/images/iphone_captures",
+            params={"since": "2026-07-01"},
+            headers=self.auth,
+        )
+        paths = [i["nextcloud_path"] for i in r.json()]
+        assert paths == ["H1phone_sync/2026/07/26-07-10%2010-00-00%200001.jpg"]
+
+    def test_since_filters_and_orders(self, session: Session, client: TestClient):
+        for day, n in [("05", "0001"), ("10", "0002"), ("20", "0003")]:
+            self._img(
+                session,
+                f"H1phone_sync/2026/07/26-07-{day}%2010-00-00%20{n}.jpg",
+                f"2026-07-{day}T10:00:00",
+            )
+        r = client.get(
+            "/images/iphone_captures",
+            params={"since": "2026-07-10"},
+            headers=self.auth,
+        )
+        times = [i["capture_local"] for i in r.json()]
+        assert times == ["2026-07-10T10:00:00", "2026-07-20T10:00:00"]
+
+    def test_img_number(self, session: Session, client: TestClient):
+        self._img(
+            session, "H1phone_sync/2026/07/26-07-15%2018-33-23%204230.jpg",
+            "2026-07-15T18:33:23.423000",
+        )
+        # the "zed_" style filename really occurs; must be null, not "0000"
+        self._img(
+            session, "H1phone_sync/2026/07/26-07-16%2011-38-04%20zed_.jpg",
+            "2026-07-16T11:38:04",
+        )
+        r = client.get(
+            "/images/iphone_captures",
+            params={"since": "2026-07-01"},
+            headers=self.auth,
+        )
+        assert [i["img_number"] for i in r.json()] == ["4230", None]

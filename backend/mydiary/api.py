@@ -4,10 +4,20 @@ import re
 import requests
 import io
 import json
+import secrets
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import pydantic
@@ -113,6 +123,31 @@ class PerformSongUpdate(SQLModel):
 
 class MyDiaryImageRead(MyDiaryImageBase):
     id: int
+
+
+class IPhoneCaptureRead(SQLModel):
+    """One diary photo, identified the way the iPhone Photos library sees it.
+
+    Consumed by the "Diary -> Photos Album" Shortcut, not by the frontend.
+    See notes/iphone-photos-album-plan.md.
+    """
+
+    # Naive local wall-clock capture time, seconds precision, NO offset and NO
+    # microseconds -- e.g. "2026-07-28T09:56:03". This exact string is what the
+    # Shortcut matches against, so the format is a contract, not a detail:
+    #
+    #   Shortcuts `Format Date` (ISO 8601)  ->  "2026-07-28T09:56:03-04:00"
+    #   this field                          ->  "2026-07-28T09:56:03"
+    #
+    # and the Shortcut tests `contains`. Appending an offset, converting to
+    # UTC, or leaving the microseconds on (they hold the camera counter, see
+    # below) would each break every match.
+    capture_local: str
+    # The 4-digit counter the Nextcloud filename ends with, e.g. "4230" from
+    # IMG_4230. A hint for debugging only -- it is not monotonic and not unique
+    # across sources -- and None when the filename doesn't end in digits.
+    img_number: Optional[str] = None
+    nextcloud_path: str
 
 
 class DogRead(DogBase):
@@ -254,6 +289,32 @@ class SpellingBeeHiveRead(SQLModel):
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def img_number_from_nextcloud_path(nextcloud_path: str) -> Optional[str]:
+    """Trailing camera counter from a Nextcloud auto-upload filename.
+
+    "H1phone_sync/2026/07/26-07-15%2018-33-23%204230.jpg" -> "4230".
+    None when the stem doesn't end in four digits -- filenames like
+    "23-12-10 11-38-04 zed_" do occur (see
+    MyDiaryNextcloud.parse_datetime_from_filepath, which pads them to 0000).
+    """
+    stem = Path(requests.utils.unquote(nextcloud_path)).stem
+    tail = stem[-4:]
+    return tail if tail.isnumeric() else None
+
+
+def require_api_token(x_api_key: str = Header(default="")):
+    """Gate a single route with the static API token.
+
+    Deliberately a per-route dependency rather than global middleware: the app
+    has no login flow yet, so a global gate would lock the browser out of the
+    whole UI. See notes/iphone-photos-album-plan.md.
+    """
+    expected = os.environ.get("MYDIARY_API_TOKEN", "")
+    # fail closed: an unset token denies everything rather than allowing it
+    if not expected or not secrets.compare_digest(x_api_key, expected):
+        raise HTTPException(status_code=401, detail="invalid or missing API key")
 
 
 def get_joplin_client():
@@ -1045,6 +1106,52 @@ def uploaded_images_for_day(dt: str, session: Session = Depends(get_session)):
         .where(MyDiaryImage.diary_date == diary_date)
         .order_by(MyDiaryImage.created_at)
     ).all()
+
+
+@app.get(
+    "/images/iphone_captures",
+    operation_id="iphoneCaptureTimes",
+    response_model=List[IPhoneCaptureRead],
+    dependencies=[Depends(require_api_token)],
+)
+def iphone_capture_times(
+    *,
+    session: Session = Depends(get_session),
+    since: Optional[str] = None,
+):
+    """Capture times of diary photos, for filing into an iPhone Photos album.
+
+    Returns iPhone-sync photos currently referenced by a Joplin note, newest
+    last. `since` defaults to 14 days ago -- a rolling window rather than a
+    high-water mark, because Shortcuts has no durable cross-run state. Re-runs
+    are cheap: the Shortcut's `Album is not Diary` filter makes an already-filed
+    photo a no-op.
+
+    Manual uploads are excluded on purpose: they may not exist in the phone's
+    library at all.
+    """
+    if since is None:
+        since_dt = pendulum.now().subtract(days=14).start_of("day").naive()
+    else:
+        since_dt = pendulum.parse(since).start_of("day").naive()
+    images = session.exec(
+        select(MyDiaryImage)
+        .where(MyDiaryImage.nextcloud_path.like("H1phone_sync/%"))
+        .where(MyDiaryImage.joplin_resource_id != None)  # noqa: E711
+        .where(MyDiaryImage.created_at >= since_dt)
+        .order_by(MyDiaryImage.created_at)
+    ).all()
+    return [
+        IPhoneCaptureRead(
+            # strftime, not .isoformat(): isoformat() would emit the
+            # microseconds, which hold the camera counter rather than real
+            # sub-second precision and would break the Shortcut's match.
+            capture_local=img.created_at.strftime("%Y-%m-%dT%H:%M:%S"),
+            img_number=img_number_from_nextcloud_path(img.nextcloud_path),
+            nextcloud_path=img.nextcloud_path,
+        )
+        for img in images
+    ]
 
 
 @app.post(

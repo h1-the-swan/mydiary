@@ -68,6 +68,18 @@ export interface HTTPValidationError {
   detail?: ValidationError[];
 }
 
+/**
+ * One diary photo, identified the way the iPhone Photos library sees it.
+ *
+ * Consumed by the "Diary -> Photos Album" Shortcut, not by the frontend.
+ * See notes/iphone-photos-album-plan.md.
+ */
+export interface IPhoneCaptureRead {
+  capture_local: string;
+  img_number?: string | null;
+  nextcloud_path: string;
+}
+
 export interface JoplinNote {
   id: string;
   parent_id: string;
@@ -423,6 +435,10 @@ force?: boolean;
 
 export type UploadImagesToNoteParams = {
 dt: string;
+};
+
+export type IphoneCaptureTimesParams = {
+since?: string | null;
 };
 
 export type SyncNoteImagesParams = {
@@ -899,6 +915,29 @@ export const uploadedImagesForDay = (
   }
 
 /**
+ * Capture times of diary photos, for filing into an iPhone Photos album.
+ *
+ * Returns iPhone-sync photos currently referenced by a Joplin note, newest
+ * last. `since` defaults to 14 days ago -- a rolling window rather than a
+ * high-water mark, because Shortcuts has no durable cross-run state. Re-runs
+ * are cheap: the Shortcut's `Album is not Diary` filter makes an already-filed
+ * photo a no-op.
+ *
+ * Manual uploads are excluded on purpose: they may not exist in the phone's
+ * library at all.
+ * @summary Iphone Capture Times
+ */
+export const iphoneCaptureTimes = (
+    params?: IphoneCaptureTimesParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<IPhoneCaptureRead[]>> => {
+    return axios.get(
+      `/images/iphone_captures`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
  * Two-way sync: make the note's images section match `photos` (the full
  * desired list of nextcloud paths, in display order).
  * @summary Sync Note Images Route
@@ -1324,6 +1363,7 @@ export type OwntracksSyncLocationsResult = AxiosResponse<unknown>
 export type OwntracksMapToNoteResult = AxiosResponse<unknown>
 export type UploadImagesToNoteResult = AxiosResponse<MyDiaryImageRead[]>
 export type UploadedImagesForDayResult = AxiosResponse<MyDiaryImageRead[]>
+export type IphoneCaptureTimesResult = AxiosResponse<IPhoneCaptureRead[]>
 export type SyncNoteImagesResult = AxiosResponse<SyncNoteImages200>
 export type CreatePerformSongResult = AxiosResponse<PerformSongRead>
 export type ReadPerformSongsListResult = AxiosResponse<PerformSongRead[]>
