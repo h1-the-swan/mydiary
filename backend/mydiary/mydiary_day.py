@@ -58,7 +58,9 @@ class MyDiaryDay:
         owntracks_locations: List[
             OwnTracksLocation
         ] = [],  # location fixes recorded on this day
-        owntracks_day_map: Optional[OwnTracksDayMap] = None,
+        owntracks_day_maps: List[
+            OwnTracksDayMap
+        ] = [],  # the day's rendered maps, ordered by panel
         rating: Optional[
             int
         ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
@@ -76,7 +78,7 @@ class MyDiaryDay:
         self.pocket_articles = pocket_articles
         self.google_calendar_events = google_calendar_events
         self.owntracks_locations = owntracks_locations
-        self.owntracks_day_map = owntracks_day_map
+        self.owntracks_day_maps = owntracks_day_maps
         self.rating = rating
         self.flagged = flagged
 
@@ -152,7 +154,13 @@ class MyDiaryDay:
         owntracks_locations = mydiary_owntracks.get_locations_for_day(
             dt, session=session
         )
-        owntracks_day_map = session.get(OwnTracksDayMap, dt.date())
+        owntracks_day_maps = list(
+            session.exec(
+                select(OwnTracksDayMap)
+                .where(OwnTracksDayMap.diary_date == dt.date())
+                .order_by(OwnTracksDayMap.panel)
+            )
+        )
 
         return cls(
             dt=dt,
@@ -162,7 +170,7 @@ class MyDiaryDay:
             spotify_tracks=spotify_tracks,
             google_calendar_events=google_calendar_events,
             owntracks_locations=owntracks_locations,
-            owntracks_day_map=owntracks_day_map,
+            owntracks_day_maps=owntracks_day_maps,
             joplin_note_id=getattr(note, "id", None),
             **kwargs,
         )
@@ -231,15 +239,21 @@ class MyDiaryDay:
 
     def owntracks_markdown(self) -> str:
         # lazily imported: owntracks_maps imports this module
-        from .owntracks_maps import section_content
+        from .owntracks_maps import panels_for_track, section_content
 
         if not self.owntracks_locations:
             return "None"
         track = self.build_owntracks_track()
         if track.is_empty():
             return "None"
-        resource_id = getattr(self.owntracks_day_map, "joplin_resource_id", None)
-        return section_content(resource_id, track)
+        # re-derive the panels rather than trusting the stored row count: a day
+        # that has already been split into areas must not be flattened back to
+        # one map here, or sync_day_map_to_note would see an unchanged hash and
+        # leave the note that way
+        panels = panels_for_track(track)
+        by_panel = {m.panel: m.joplin_resource_id for m in self.owntracks_day_maps}
+        resource_ids = [by_panel.get(i) for i in range(len(panels))]
+        return section_content(resource_ids, panels)
 
     def spotify_tracks_markdown(self, timezone=None) -> str:
         if not self.spotify_tracks:

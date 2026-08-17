@@ -60,7 +60,17 @@ def start_of_day(diary_date, session: Session) -> pendulum.DateTime:
 
 def main(args):
     with Session(engine) as session, MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        stmt = select(OwnTracksDayMap).order_by(OwnTracksDayMap.diary_date)
+        # this selects the *days* to visit, not the maps to re-encode: one
+        # sync_day_map_to_note re-renders every panel the day has. A day can now
+        # hold several map rows, so filtering to panel 0 -- the overview, the one
+        # row every day has -- is what keeps that one visit per day instead of
+        # one per panel. The sizes reported below are the overview's, so they
+        # stay comparable run to run.
+        stmt = (
+            select(OwnTracksDayMap)
+            .where(OwnTracksDayMap.panel == 0)
+            .order_by(OwnTracksDayMap.diary_date)
+        )
         if args.start:
             stmt = stmt.where(
                 OwnTracksDayMap.diary_date >= pendulum.parse(args.start).date()
@@ -93,7 +103,7 @@ def main(args):
                         continue
                     after = len(data)
                 else:
-                    result = sync_day_map_to_note(
+                    result, _ = sync_day_map_to_note(
                         dt, session=session, mydiary_joplin=mydiary_joplin
                     )
                     if result == "no update":

@@ -156,15 +156,28 @@ def _font(size: int) -> ImageFont.ImageFont:
 
 
 class TrackOverlay(staticmaps.Object):
-    """Draws the day onto the map, in map pixel space."""
+    """Draws the day onto the map, in map pixel space.
 
-    def __init__(self, track: DayTrack, scale: int = SUPERSAMPLE) -> None:
+    What is drawn and what the map is framed on are two different things: an
+    area panel is framed on the places it stopped, and the leg leaving for
+    somewhere else is still drawn, running off the edge. Framing on the contents
+    instead would zoom back out to include that leg, which is the whole thing
+    the panel exists to avoid.
+    """
+
+    def __init__(
+        self,
+        track: DayTrack,
+        scale: int = SUPERSAMPLE,
+        frame: Optional[DayTrack] = None,
+    ) -> None:
         super().__init__()
         self.track = track
         self.scale = scale
+        self.frame = frame if frame is not None else track
 
     def bounds(self) -> s2sphere.LatLngRect:
-        return bounds_for(self.track)
+        return bounds_for(self.frame)
 
     def extra_pixel_bounds(self):
         # keep the biggest dwell circle from being clipped at the edge
@@ -436,13 +449,21 @@ def render_day_map(
     params: Optional[TrackParams] = None,
     render: Optional[RenderParams] = None,
     tile_downloader=None,
+    frame: Optional[DayTrack] = None,
 ) -> bytes:
     """Render a day's track to encoded image bytes.
+
+    frame is what the map is fitted and cropped to, if that should be less than
+    everything drawn -- an area panel frames on its stays so that the leg out of
+    the area does not drag the zoom back to the whole journey. Defaults to the
+    track itself.
 
     tile_downloader is only for tests; leaving it None uses the real, cached one.
     """
     if track.is_empty():
         raise ValueError("cannot render a map for a day with no location data")
+    if frame is not None and frame.is_empty():
+        frame = None
 
     render = render or RenderParams()
     width, height = render.width, render.height
@@ -460,8 +481,10 @@ def render_day_map(
     ctx.set_tile_downloader(downloader)
     ctx.set_background_color(staticmaps.parse_color("#fafaf9"))
 
-    overlay = TrackOverlay(track, scale=SUPERSAMPLE)
-    ctx.add_bounds(bounds_for(track), extra_pixel_bounds=overlay.extra_pixel_bounds())
+    overlay = TrackOverlay(track, scale=SUPERSAMPLE, frame=frame)
+    ctx.add_bounds(
+        bounds_for(overlay.frame), extra_pixel_bounds=overlay.extra_pixel_bounds()
+    )
     ctx.add_object(overlay)
     labels = LabelsOverlay(cache_dir)
     if tile_downloader is not None:
@@ -470,7 +493,7 @@ def render_day_map(
 
     render_w, render_h = width * SUPERSAMPLE, map_height * SUPERSAMPLE
     rendered = ctx.render_pillow(render_w, render_h)
-    box = _crop_box(ctx, track, render_w, render_h, width / map_height)
+    box = _crop_box(ctx, overlay.frame, render_w, render_h, width / map_height)
     if box is not None:
         rendered = rendered.crop(box)
     rendered = rendered.convert("RGB").resize((width, map_height), Image.LANCZOS)

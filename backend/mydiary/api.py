@@ -58,6 +58,10 @@ from .dictionary_connector import fetch_definition
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
+
+# a route default, so it has to be resolved at import time rather than lazily
+# like the rest of the owntracks imports. owntracks_track is pure and cheap.
+from .owntracks_track import AREA_SPLIT_M
 from .mydiary_day import MyDiaryDay
 import uvicorn
 
@@ -864,6 +868,7 @@ def owntracks_locations_for_day(
 def owntracks_track_for_day(
     dt: str,
     tz: str = "infer",
+    area_threshold_m: float = AREA_SPLIT_M,
     max_acc: int = 100,
     stay_radius_m: float = 150.0,
     stay_minutes: float = 20.0,
@@ -874,11 +879,17 @@ def owntracks_track_for_day(
 ):
     """The processed day: stays and links, as GeoJSON.
 
-    The frontend map draws this, so the interactive view and the rendered PNG
-    always agree.
+    The frontend map draws this, so the interactive view and the rendered image
+    always agree -- including how many maps the day is in: every feature carries
+    the index of the area it belongs to, and `properties.areas` describes them.
     """
     from .owntracks_connector import MyDiaryOwnTracks
-    from .owntracks_track import build_track, points_from_locations, track_to_geojson
+    from .owntracks_track import (
+        build_track,
+        points_from_locations,
+        split_into_areas,
+        track_to_geojson,
+    )
 
     dt_obj = _owntracks_day(dt, tz, session)
     params = _track_params(
@@ -886,7 +897,8 @@ def owntracks_track_for_day(
     )
     locations = MyDiaryOwnTracks().get_locations_for_day(dt_obj, session=session)
     points = points_from_locations(locations, timezone=dt_obj.timezone_name)
-    return track_to_geojson(build_track(points, params))
+    track = build_track(points, params)
+    return track_to_geojson(track, split_into_areas(track, area_threshold_m))
 
 
 @app.get(
@@ -902,6 +914,7 @@ def owntracks_day_map_image(
     height: int = 900,
     fmt: str = "JPEG",
     quality: int = 85,
+    panel: int = 0,
     max_acc: int = 100,
     stay_radius_m: float = 150.0,
     stay_minutes: float = 20.0,
@@ -910,6 +923,8 @@ def owntracks_day_map_image(
     dwell_max_kmh: float = 1.0,
     session: Session = Depends(get_session),
 ):
+    """The day's map. Panel 0 is the whole day; on a day spent in two or more
+    distinct areas, higher panels are the per-area maps."""
     from .map_render import RenderParams
     from .owntracks_maps import render_for_day
 
@@ -923,7 +938,7 @@ def owntracks_day_map_image(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     try:
-        data, _, content_hash = render_for_day(dt_obj, session, params, render)
+        data, _, content_hash = render_for_day(dt_obj, session, params, render, panel)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
     # the content hash covers geometry and encoding on its own
@@ -935,6 +950,56 @@ def owntracks_day_map_image(
         media_type=media_type,
         headers={"ETag": etag, "Cache-Control": "private, max-age=3600"},
     )
+
+
+@app.get("/owntracks/areas/{dt}", operation_id="owntracksAreasForDay")
+def owntracks_areas_for_day(
+    dt: str,
+    tz: str = "infer",
+    area_threshold_m: float = AREA_SPLIT_M,
+    max_acc: int = 100,
+    stay_radius_m: float = 150.0,
+    stay_minutes: float = 20.0,
+    gap_minutes: float = 45.0,
+    gap_metres: float = 250.0,
+    dwell_max_kmh: float = 1.0,
+    session: Session = Depends(get_session),
+):
+    """The parts of the day worth framing separately, empty when one map fits.
+
+    Clustering runs on stays only: a road trip's waypoints are each far apart,
+    so clustering every point would report a single drive as dozens of areas.
+    """
+    from .owntracks_maps import day_track
+    from .owntracks_track import split_into_areas
+
+    dt_obj = _owntracks_day(dt, tz, session)
+    params = _track_params(
+        max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
+    )
+    try:
+        track = day_track(dt_obj, session, params)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    areas = split_into_areas(track, area_threshold_m)
+    return {
+        "num_areas": len(areas),
+        # the whole-day overview counts too, so a two-area day is three maps
+        "num_maps": 1 + len(areas),
+        "areas": [
+            {
+                "index": i,
+                "label": area.label(),
+                "t_start": area.t_start.isoformat(),
+                "t_end": area.t_end.isoformat(),
+                "num_stays": len(area.track.stays),
+                "distance_m": round(area.track.distance_m),
+                # the frame, not the contents: what the panel is fitted to
+                "bounds": area.frame.bounds(),
+            }
+            for i, area in enumerate(areas)
+        ],
+    }
 
 
 @app.post("/owntracks/sync", operation_id="owntracksSyncLocations")
@@ -957,17 +1022,17 @@ def owntracks_map_to_note(
     session: Session = Depends(get_session),
     mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
 ):
-    """Render the day's map and write it into the note's Location section."""
+    """Render the day's map(s) and write them into the note's Location section."""
     from .owntracks_maps import sync_day_map_to_note
 
     dt_obj = _owntracks_day(dt, tz, session)
     try:
-        result = sync_day_map_to_note(
+        result, num_maps = sync_day_map_to_note(
             dt_obj, session=session, mydiary_joplin=mydiary_joplin, force=force
         )
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"result": result}
+    return {"result": result, "num_maps": num_maps}
 
 
 @app.post(
