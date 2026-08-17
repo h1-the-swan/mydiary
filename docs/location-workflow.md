@@ -31,8 +31,9 @@ everything downstream:
 
 ```
 recorder ──> OwnTracksLocation ──> owntracks_track ──> map_render ──> Joplin
-  (API)         (SQLite)            (stays/links)       (JPEG)      (Location §)
-                                          │
+  (API)         (SQLite)         (stays/links/areas)    (JPEG)      (Location §)
+                                          │                ^
+                                          │        one panel per area
                                           └──> /owntracks/track/{dt} ──> MapSection.vue
 ```
 
@@ -130,6 +131,69 @@ Two things that are easy to get wrong here:
 query parameter — and `cache_key()` normalises the format name so `jpg` and
 `JPEG` do not hash as two different encodings.
 
+### One map, or several
+
+One bounding box per day fails on a day that spans distant places: the frame is
+sized by the whole journey, so the local detail disappears. A transcontinental
+flight day puts a whole continent in frame, and the five stays at the far end
+collapse into stacked concentric circles; the widest day in the data is 5889km.
+The crop-to-content trick recovers framing *within* one cluster, but nothing can
+make one frame both 4000km wide and street-legible.
+
+So `split_into_areas` clusters the day and each area gets its own panel, with
+the whole-day overview kept as panel 0 — on a flight day "I went from here to
+there" is real information, it just cannot also carry the local detail. Small
+multiples, not either/or. Measured over the 318 days with a drawable track:
+
+| Maps | Days | |
+|---|---|---|
+| 1 | 273 | 85.8% — unchanged, and unchanged *byte for byte* |
+| 2 | 15 | 4.7% |
+| 3 | 28 | 8.8% |
+| 4 | 2 | 0.6% |
+
+Four things about the split are load-bearing:
+
+- **It runs on stays, never on all points.** Consecutive waypoints along a drive
+  are each tens of km apart, so clustering every point counts a chain as a
+  crowd: at a 5km threshold over all points, one road-trip day reports **66**
+  areas for what is a single drive. A "distinct area" has to mean somewhere you actually
+  were, not somewhere you passed. Transit links connect areas; they are never
+  areas themselves, and a link between two areas is drawn on the overview only —
+  putting it on a panel would blow that panel's bounds out to the whole journey.
+- **The number of areas is not on its own what decides the split.** A flight day
+  can have *every* stay at the far end: setting off, the airport and the flight
+  are all transit, and none of them dwells long enough to be a stay. Counted by
+  areas alone that is one area, and the very day this feature exists for would
+  have got one 4000km-wide map. So a single area still earns a
+  panel once anything drawn reaches more than `AREA_SPLIT_M` outside it — the
+  question is whether the overview *frames* the areas or dwarfs them. That case
+  is 15 of the 45 multi-map days, including both flights.
+- **A panel is framed on its stays, not on its contents** — the one thing that
+  makes the panels worth having. An area holds the legs that run within it, and
+  one of those can be 16km long; fitting the map to *that* zooms back out until
+  the panel is the overview again. One day in the data was exactly this — a 16km
+  leg inside the area, a longer one outside it, and two maps that looked
+  identical.
+  Framing on the stays puts the panel where the day actually was and lets the
+  leg run off the edge, which reads correctly as leaving. `render_day_map` takes
+  `frame` separately from `track` for this.
+- **The frame is part of the panel's content hash** (`_area_key`). It decides
+  the zoom, so a change to how panels are framed has to make every stored area
+  panel stale; otherwise a re-sync reports "no update" and leaves the previous
+  picture in the note. The overview's hash is untouched by it, so only the area
+  panels re-render.
+- **`FRAME_GAIN` (0.5) is a floor, not a filter.** If the stays themselves are
+  strung out nearly as wide as the day, framing on them gains nothing and the
+  split is dropped whole — all or nothing, so every stay stays covered by
+  exactly one itinerary. No day in the current data trips it (the loosest panel
+  frames at 0.26 of its day); it exists so a degenerate day cannot produce two
+  copies of the same picture.
+- **`AREA_SPLIT_M` (20km) is not a `TrackParams` field**, deliberately.
+  `TrackParams.cache_key()` feeds the stored content hash, so adding a field
+  there would change the hash of every day in the database and rewrite every
+  note on the next sync.
+
 ### Visual encoding
 
 Time of day is **four labelled periods, not a continuous gradient** — on a map
@@ -165,11 +229,20 @@ beneath. Only stays over an hour get a duration label.
 - Uploads via `create_resource`, **not** `create_thumbnail` — the latter's 60KB
   ceiling would destroy the map. No `MyDiaryImage` row is created either, or the
   map would leak into the photo grid and the Images section.
-- `OwnTracksDayMap` records `content_hash` — `sha256` over the track's own hash
-  plus `RenderParams.cache_key()`, composed in `render_for_day` rather than in
+- `OwnTracksDayMap` is one row **per panel** — `(diary_date, panel)` is the
+  primary key, and panel 0 is the overview every day has. It records
+  `content_hash` — `sha256` over that panel's track hash plus
+  `RenderParams.cache_key()`, composed in `owntracks_maps` rather than in
   `owntracks_track`, which is pure track maths and should not know about image
   encoding. An unchanged re-run is a no-op; a changed one creates the new
   resource and deletes the old, so re-rendering never orphans resources.
+  A panel whose hash is unchanged keeps its resource, so a day that gains areas
+  re-uploads only the new panels.
+
+  **A one-area day's only panel is the whole day**, so it hashes to exactly what
+  a day map hashed to before panels existed — which is why 96% of days were not
+  invalidated when this landed, and why the overview of a multi-area day reuses
+  the resource it already had.
   Because the render params are in the hash, changing the size or the format is
   enough on its own to invalidate every stored day — which is what makes
   `scripts/owntracks_reencode_maps.py` work without `force`, and makes it
@@ -180,17 +253,32 @@ beneath. Only stays over an hour get a duration label.
   `update_joplin_note` skips sections it does not find. `MarkdownDoc.ensure_section`
   is what backfills it.
 - The section holds the map **and** a text itinerary. The itinerary is the part
-  that keeps working: Joplin can search text, it cannot search an image.
+  that keeps working: Joplin can search text, it cannot search an image. A
+  multi-area day leads with the overview and the day summary, then gives each
+  area a `###` heading, its own map and its own itinerary — level 3, because
+  `MarkdownDoc` splits on `## ` and the Location section has to stay one
+  section. There is no day-level table in that case: every stay belongs to
+  exactly one area, so it would only repeat the per-area ones.
+- `MyDiaryDay.owntracks_markdown` re-derives the panels rather than trusting the
+  stored rows, so initialising a note for a day that is already split cannot
+  flatten it back to one map — `sync_day_map_to_note` would then see an
+  unchanged hash and leave the note that way.
+- `MapSection.vue` draws the same set: one Leaflet map for the whole day, then
+  one per area, framed the way the saved panels are. It filters the track
+  GeoJSON on each feature's `area`, which is why that endpoint tags them — a
+  preview showing one map for a day that saves as three is a preview of the
+  wrong thing.
 
 ## Routes
 
 | Route | operation_id |
 |---|---|
 | `GET /owntracks/locations/{dt}` | `owntracksLocationsForDay` — raw fixes |
-| `GET /owntracks/track/{dt}` | `owntracksTrackForDay` — processed stays + links |
-| `GET /owntracks/map/{dt}` | `owntracksDayMapImage` — JPEG by default; `fmt` / `quality` / `width` / `height` |
+| `GET /owntracks/track/{dt}` | `owntracksTrackForDay` — processed stays + links, each tagged with its area, plus `properties.areas` |
+| `GET /owntracks/map/{dt}` | `owntracksDayMapImage` — JPEG by default; `fmt` / `quality` / `width` / `height` / `panel` |
+| `GET /owntracks/areas/{dt}` | `owntracksAreasForDay` — the day's distinct areas, and how many maps it needs |
 | `POST /owntracks/sync` | `owntracksSyncLocations` |
-| `POST /owntracks/map/{dt}/to_note` | `owntracksMapToNote` |
+| `POST /owntracks/map/{dt}/to_note` | `owntracksMapToNote` — returns `num_maps` |
 
 The track and map routes take every `TrackParams` threshold as a query
 parameter, which is what the frontend tuning sliders drive.
