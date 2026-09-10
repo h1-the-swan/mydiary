@@ -46,9 +46,9 @@ I mainly use [Spotify](https://www.spotify.com) to listen to music. Mydiary uses
 
 ## Development
 
-### .env file
+### .env files
 
-Set the following environment variables in a `.env` file:
+Set the following environment variables in `backend/.env`:
 
 ```
 SPOTIPY_CLIENT_ID=
@@ -65,7 +65,37 @@ NEXTCLOUD_USERNAME=
 NEXTCLOUD_PASSWORD=
 OWNTRACKS_RECORDER_URL=
 OWNTRACKS_USER=
+CARTO_BASEMAP_KEY=
 ```
+
+And this one in `mydiary-vuetify/.env`:
+
+```
+VITE_CARTO_BASEMAP_KEY=
+```
+
+That last one is the same value twice, which needs a word of explanation. Both
+maps — the interactive one in the browser and the image the backend renders into
+a Joplin note — draw their background tiles from [CARTO](https://carto.com/),
+and in August 2026 CARTO started stamping `API KEY REQUIRED` across any tile
+fetched without a key. The key is free and takes a minute to request at
+[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey/); you don't need a
+CARTO account. It isn't really a secret, since it goes out with every tile
+request the browser makes, but it's specific to whoever set the thing up, so it
+lives in the environment instead of in the source. It gets declared twice because
+Vite only hands variables to browser code when they start with `VITE_`, and the
+frontend container can't see the backend's `.env`.
+
+Both are optional. Leave them out and the maps still draw perfectly well, just
+with the watermark across them.
+
+After adding them, bring the stack back up with `docker compose up -d`. Note that
+`docker compose restart` is *not* enough for the backend: it reuses the existing
+container, environment and all, so Compose never re-reads `env_file`. The
+frontend is fine with a restart, since Vite reads its `.env` off disk each time
+it starts — which makes for a confusing failure where the browser map comes back
+clean and the rendered map images are still watermarked.
+
 ### Alembic
 
 After making changes or adding or removing any database models (`SQLModel` models with `table=True`), run:

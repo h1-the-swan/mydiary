@@ -15,6 +15,7 @@ PIL.ImageDraw has none of its own."""
 
 import io
 import math
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
@@ -116,6 +117,13 @@ class RenderParams:
         return "|".join(f"{k}={v}" for k, v in sorted(fields.items()))
 
 
+# CARTO watermarks "API KEY REQUIRED" across tiles fetched without one. The key
+# is free (carto.com/basemaps/apikey) and is not a credential -- the browser map
+# sends the same one in plain sight -- but it is per-install, so it comes from
+# the environment rather than being committed.
+CARTO_BASEMAP_KEY = os.environ.get("CARTO_BASEMAP_KEY") or ""
+
+
 class RetinaTileProvider(TileProvider):
     """A CARTO basemap at 2x pixel density.
 
@@ -124,11 +132,16 @@ class RetinaTileProvider(TileProvider):
     """
 
     def __init__(self, name: str, layer: str) -> None:
+        url = "https://$s.basemaps.cartocdn.com/rastertiles/" + layer + "/$z/$x/$y@2x.png"
+        if CARTO_BASEMAP_KEY:
+            url += "?key=" + CARTO_BASEMAP_KEY
+            # tiles are cached on disk under the provider name, so keyed and
+            # unkeyed tiles need separate directories -- otherwise adding the
+            # key leaves the watermarked ones sitting in the cache
+            name += "-keyed"
         super().__init__(
             name=name,
-            url_pattern=(
-                "https://$s.basemaps.cartocdn.com/rastertiles/" + layer + "/$z/$x/$y@2x.png"
-            ),
+            url_pattern=url,
             shards=["a", "b", "c", "d"],
             attribution=None,  # drawn in the footer instead, at a legible size
             max_zoom=20,
