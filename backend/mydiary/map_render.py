@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = """Draw a day's movement as a PNG.
+DESCRIPTION = """Draw a day's movement as an image.
 
 py-staticmaps handles the parts that are the same for any map -- fitting the
 bounds, picking a zoom, fetching and caching tiles -- and this module supplies
@@ -15,6 +15,7 @@ PIL.ImageDraw has none of its own."""
 
 import io
 import math
+from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
 import s2sphere
@@ -61,6 +62,59 @@ DASH_OFF = 6
 LABEL_MIN_MINUTES = 60
 FOOTER_HEIGHT = 34
 
+# fmt -> (file extension, media type)
+FORMATS = {
+    "JPEG": ("jpg", "image/jpeg"),
+    "PNG": ("png", "image/png"),
+    "WEBP": ("webp", "image/webp"),
+}
+_FORMAT_ALIASES = {"JPG": "JPEG"}
+
+
+@dataclass(frozen=True)
+class RenderParams:
+    """Size and encoding of the output image, in one place.
+
+    JPEG rather than PNG: a tile basemap is photographic, so PNG buys nothing
+    and costs ~5x the bytes (996KB vs 219KB on 2026-07-01, 1290KB vs 235KB on
+    2026-07-30), which lands in every diary note forever. At q85 the footer
+    text and street labels are indistinguishable from the PNG at 1:1.
+
+    quality is ignored for PNG. Same cache_key() shape as TrackParams, so the
+    two compose into one content hash.
+    """
+
+    width: int = 1200
+    height: int = 900
+    fmt: str = "JPEG"
+    quality: int = 85
+
+    @property
+    def format(self) -> str:
+        """The Pillow format name, normalised (jpg -> JPEG)."""
+        fmt = self.fmt.upper()
+        fmt = _FORMAT_ALIASES.get(fmt, fmt)
+        if fmt not in FORMATS:
+            raise ValueError(
+                f"unsupported image format {self.fmt!r}; "
+                f"expected one of {', '.join(sorted(FORMATS))}"
+            )
+        return fmt
+
+    @property
+    def ext(self) -> str:
+        return FORMATS[self.format][0]
+
+    @property
+    def media_type(self) -> str:
+        return FORMATS[self.format][1]
+
+    def cache_key(self) -> str:
+        # normalised fmt, so "jpg" and "JPEG" are not two different keys and
+        # do not each trigger a re-render and a fresh Joplin resource
+        fields = dict(self.__dict__, fmt=self.format)
+        return "|".join(f"{k}={v}" for k, v in sorted(fields.items()))
+
 
 class RetinaTileProvider(TileProvider):
     """A CARTO basemap at 2x pixel density.
@@ -102,15 +156,28 @@ def _font(size: int) -> ImageFont.ImageFont:
 
 
 class TrackOverlay(staticmaps.Object):
-    """Draws the day onto the map, in map pixel space."""
+    """Draws the day onto the map, in map pixel space.
 
-    def __init__(self, track: DayTrack, scale: int = SUPERSAMPLE) -> None:
+    What is drawn and what the map is framed on are two different things: an
+    area panel is framed on the places it stopped, and the leg leaving for
+    somewhere else is still drawn, running off the edge. Framing on the contents
+    instead would zoom back out to include that leg, which is the whole thing
+    the panel exists to avoid.
+    """
+
+    def __init__(
+        self,
+        track: DayTrack,
+        scale: int = SUPERSAMPLE,
+        frame: Optional[DayTrack] = None,
+    ) -> None:
         super().__init__()
         self.track = track
         self.scale = scale
+        self.frame = frame if frame is not None else track
 
     def bounds(self) -> s2sphere.LatLngRect:
-        return bounds_for(self.track)
+        return bounds_for(self.frame)
 
     def extra_pixel_bounds(self):
         # keep the biggest dwell circle from being clipped at the edge
@@ -380,17 +447,26 @@ def _draw_footer(image: Image.Image, track: DayTrack, width: int, top: int) -> N
 def render_day_map(
     track: DayTrack,
     params: Optional[TrackParams] = None,
-    width: int = 1200,
-    height: int = 900,
+    render: Optional[RenderParams] = None,
     tile_downloader=None,
+    frame: Optional[DayTrack] = None,
 ) -> bytes:
-    """Render a day's track to PNG bytes.
+    """Render a day's track to encoded image bytes.
+
+    frame is what the map is fitted and cropped to, if that should be less than
+    everything drawn -- an area panel frames on its stays so that the leg out of
+    the area does not drag the zoom back to the whole journey. Defaults to the
+    track itself.
 
     tile_downloader is only for tests; leaving it None uses the real, cached one.
     """
     if track.is_empty():
         raise ValueError("cannot render a map for a day with no location data")
+    if frame is not None and frame.is_empty():
+        frame = None
 
+    render = render or RenderParams()
+    width, height = render.width, render.height
     cache_dir = str(thumbnail_cache.get_cache_dir(subdir="map_tiles"))
     map_height = height - FOOTER_HEIGHT
 
@@ -405,8 +481,10 @@ def render_day_map(
     ctx.set_tile_downloader(downloader)
     ctx.set_background_color(staticmaps.parse_color("#fafaf9"))
 
-    overlay = TrackOverlay(track, scale=SUPERSAMPLE)
-    ctx.add_bounds(bounds_for(track), extra_pixel_bounds=overlay.extra_pixel_bounds())
+    overlay = TrackOverlay(track, scale=SUPERSAMPLE, frame=frame)
+    ctx.add_bounds(
+        bounds_for(overlay.frame), extra_pixel_bounds=overlay.extra_pixel_bounds()
+    )
     ctx.add_object(overlay)
     labels = LabelsOverlay(cache_dir)
     if tile_downloader is not None:
@@ -415,7 +493,7 @@ def render_day_map(
 
     render_w, render_h = width * SUPERSAMPLE, map_height * SUPERSAMPLE
     rendered = ctx.render_pillow(render_w, render_h)
-    box = _crop_box(ctx, track, render_w, render_h, width / map_height)
+    box = _crop_box(ctx, overlay.frame, render_w, render_h, width / map_height)
     if box is not None:
         rendered = rendered.crop(box)
     rendered = rendered.convert("RGB").resize((width, map_height), Image.LANCZOS)
@@ -425,5 +503,14 @@ def render_day_map(
     _draw_footer(canvas, track, width, map_height)
 
     buf = io.BytesIO()
-    canvas.save(buf, format="PNG", optimize=True)
+    fmt = render.format
+    if fmt == "JPEG":
+        # subsampling=0 (4:4:4) is not the default and matters here: the track
+        # is thin saturated colour over a near-grey basemap, which is exactly
+        # what 4:2:0 chroma subsampling smears. canvas is already RGB.
+        canvas.save(buf, format=fmt, quality=render.quality, optimize=True, subsampling=0)
+    elif fmt == "WEBP":
+        canvas.save(buf, format=fmt, quality=render.quality)
+    else:
+        canvas.save(buf, format=fmt, optimize=True)
     return buf.getvalue()

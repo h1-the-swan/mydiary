@@ -404,6 +404,7 @@ tz?: string;
 
 export type OwntracksTrackForDayParams = {
 tz?: string;
+area_threshold_m?: number;
 max_acc?: number;
 stay_radius_m?: number;
 stay_minutes?: number;
@@ -416,6 +417,20 @@ export type OwntracksDayMapImageParams = {
 tz?: string;
 width?: number;
 height?: number;
+fmt?: string;
+quality?: number;
+panel?: number;
+max_acc?: number;
+stay_radius_m?: number;
+stay_minutes?: number;
+gap_minutes?: number;
+gap_metres?: number;
+dwell_max_kmh?: number;
+};
+
+export type OwntracksAreasForDayParams = {
+tz?: string;
+area_threshold_m?: number;
 max_acc?: number;
 stay_radius_m?: number;
 stay_minutes?: number;
@@ -823,8 +838,9 @@ export const owntracksLocationsForDay = (
 /**
  * The processed day: stays and links, as GeoJSON.
  *
- * The frontend map draws this, so the interactive view and the rendered PNG
- * always agree.
+ * The frontend map draws this, so the interactive view and the rendered image
+ * always agree -- including how many maps the day is in: every feature carries
+ * the index of the area it belongs to, and `properties.areas` describes them.
  * @summary Owntracks Track For Day
  */
 export const owntracksTrackForDay = (
@@ -839,6 +855,8 @@ export const owntracksTrackForDay = (
   }
 
 /**
+ * The day's map. Panel 0 is the whole day; on a day spent in two or more
+ * distinct areas, higher panels are the per-area maps.
  * @summary Owntracks Day Map Image
  */
 export const owntracksDayMapImage = (
@@ -846,8 +864,26 @@ export const owntracksDayMapImage = (
     params?: OwntracksDayMapImageParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<unknown | Blob>> => {
     return axios.get(
-      `/owntracks/map/${dt}.png`,{
+      `/owntracks/map/${dt}`,{
         responseType: 'blob',
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * The parts of the day worth framing separately, empty when one map fits.
+ *
+ * Clustering runs on stays only: a road trip's waypoints are each far apart,
+ * so clustering every point would report a single drive as dozens of areas.
+ * @summary Owntracks Areas For Day
+ */
+export const owntracksAreasForDay = (
+    dt: string,
+    params?: OwntracksAreasForDayParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.get(
+      `/owntracks/areas/${dt}`,{
     ...options,
         params: {...params, ...options?.params},}
     );
@@ -868,7 +904,7 @@ export const owntracksSyncLocations = (
   }
 
 /**
- * Render the day's map and write it into the note's Location section.
+ * Render the day's map(s) and write them into the note's Location section.
  * @summary Owntracks Map To Note
  */
 export const owntracksMapToNote = (
@@ -1359,6 +1395,7 @@ export type NextcloudThumbnailImgResult = AxiosResponse<unknown | Blob>
 export type OwntracksLocationsForDayResult = AxiosResponse<unknown>
 export type OwntracksTrackForDayResult = AxiosResponse<unknown>
 export type OwntracksDayMapImageResult = AxiosResponse<unknown | Blob>
+export type OwntracksAreasForDayResult = AxiosResponse<unknown>
 export type OwntracksSyncLocationsResult = AxiosResponse<unknown>
 export type OwntracksMapToNoteResult = AxiosResponse<unknown>
 export type UploadImagesToNoteResult = AxiosResponse<MyDiaryImageRead[]>

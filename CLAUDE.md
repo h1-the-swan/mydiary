@@ -29,7 +29,7 @@ Pocket and Google Photos were formerly data sources. The Google Photos integrati
 | `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down; `dictionary_connector.py` is a single function over dictionaryapi.dev |
 | `owntracks_track.py` | Pure functions turning raw location fixes into stays and links (no I/O) |
 | `spelling_bee.py` | Pure functions rebuilding a NYT Spelling Bee hive from the words missed that day (no I/O) |
-| `map_render.py` | Renders the daily location map to PNG (py-staticmaps + Pillow) |
+| `map_render.py` | Renders the daily location map to an image (py-staticmaps + Pillow); `RenderParams` holds size and encoding, JPEG q85 by default |
 | `owntracks_maps.py` | Puts a rendered map into its Joplin note's Location section |
 
 The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
@@ -44,7 +44,7 @@ Vue 3 SPA using Vuetify 4 and Pinia for state. Key views: `MyDiaryDay.vue` (main
 
 The Spelling Bee tracker records words missed in the NYT puzzle, entered by hand. Its one non-obvious idea: every word in a puzzle is built from the same seven letters and every word contains the centre letter, so a playable hive can be reconstructed from the words alone — recording the letters (`SpellingBeePuzzle`, optional, one row per date) only makes it exact. `spelling_bee.py` owns that derivation; `SpellingBeeHive.vue` is a dumb renderer. Word helpers are mirrored in `src/spellingBee.ts` so the entry form can validate a paste as it is typed.
 
-`MapSection.vue` draws the day's location track with Leaflet, from the same `/owntracks/track/{dt}` endpoint the PNG renderer uses, and exposes the smoothing thresholds as sliders for tuning.
+`MapSection.vue` draws the day's location track with Leaflet, from the same `/owntracks/track/{dt}` endpoint the map renderer uses, and exposes the smoothing thresholds as sliders for tuning.
 
 `api.ts` is **auto-generated** from the FastAPI OpenAPI spec via [Orval](https://orval.dev/) — do not edit it by hand.
 
@@ -116,7 +116,16 @@ docker compose exec mydiary-vuetify npm run lint
 
 `npm run lint` currently reports ~27 pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.
 
-To see a UI change rendered, drive the running app with Playwright — it is installed in the **backend** venv (`backend/.venv/bin/python`), not in the frontend. Screenshot at 1440×900 and 390×844, and scroll the page before capturing: `v-img` lazy-loads via IntersectionObserver, so an unscrolled full-page screenshot shows blank gaps where photos should be.
+To see a UI change rendered, drive the running app with the Playwright MCP tools (`mcp__playwright__*`) — don't write a standalone Playwright script against the backend venv, the MCP tools already cover navigate/resize/scroll/screenshot with no script to maintain. Resize to 1440×900 and 390×844, and scroll the page before capturing: `v-img` lazy-loads via IntersectionObserver, so an unscrolled full-page screenshot shows blank gaps where photos should be. Pass `browser_take_screenshot` a `filename` under `.playwright-mcp/` (e.g. `.playwright-mcp/foo.png`) — a bare relative name saves to the repo root instead of that gitignored output directory.
+
+The Playwright MCP server must run **Firefox** in an **isolated** context (`--browser firefox --isolated`), not the `@playwright/mcp` default of Chromium. This is set in `.mcp.json` at the repo root, which is gitignored (local machine setup, not shared) — if that file is missing or a session is defaulting to Chromium, add this entry under its `mcpServers` key (alongside the existing `mydiary` entry) and make sure `"playwright"` is listed in `.claude/settings.local.json`'s `enabledMcpjsonServers`:
+
+```json
+"playwright": {
+  "command": "npx",
+  "args": ["@playwright/mcp@latest", "--browser", "firefox", "--isolated"]
+}
+```
 
 ### Database migrations (from `backend/`)
 
@@ -172,3 +181,55 @@ Docker Compose overrides some of these to use paths inside the container (`token
 - `pendulum` is used throughout for date/time handling instead of stdlib `datetime`.
 - New database models go in `models.py`; connector logic stays in the corresponding `*_connector.py`.
 - Tests under `backend/tests/` use `pytest`. The `external_api` marker gates tests that hit live APIs.
+
+## This is a personal diary in a public repo
+
+The code is public; the diary is not. Nothing committed may contain real
+personal data, and location data is the easiest thing to leak by accident —
+a coordinate is a home address, and a date plus a city pair is an itinerary.
+
+**Never commit real location data.** Test fixtures and test cases use
+coordinates in open ocean, and that is deliberate, not arbitrary:
+
+- `backend/tests/owntracks_data/*.json` are anonymized to `~33.5, -42.0` with
+  `username: testuser`, `device: device-a`.
+- `test_owntracks_track.py` / `test_owntracks_maps.py` build cases from
+  `HOME_LAT/HOME_LON` (33.500, -42.005) and `FAR_LAT/FAR_LON` (26.782, -82.228),
+  ~3900km apart — far enough to exercise the multi-area map split.
+- Express new cases as offsets from those constants. 1° latitude is ~111km
+  anywhere; 1° longitude is ~93km at `HOME` and ~99km at `FAR`. Translating a
+  real day means keeping its *geometry*, not its coordinates.
+
+The same applies to prose. When a real day motivates a change, write down the
+shape of it and the measurement, not the trip:
+
+(The "don't" column below is written with invented places on purpose — a rule
+against recording itineraries should not record one as its own example.)
+
+| Don't | Do |
+|---|---|
+| "2026-03-14 (Springfield→Shelbyville)" | "a transcontinental flight day" |
+| "2026-03-14 was exactly this" | "one day in the data was exactly this" |
+| "its five Shelbyville stays" | "the five stays at the far end" |
+
+Aggregate statistics are fine and worth keeping — "318 days with a drawable
+track", "45 get more than one map" — they carry the engineering argument
+without pinning anyone anywhere. Real dates on their own are tolerated where
+they identify a fixture or a measurement; a date *paired with a place* is not.
+
+Also avoid baking a location into source as a default — e.g. a map's initial
+centre. `MapSection.vue` opens on a world view and refits to the day's track.
+
+Before committing, sweep the staged diff:
+
+```sh
+# any coordinate precise enough to be a real place
+git diff --cached | grep "^+" | grep -oE "\b[0-9]{1,2}\.[0-9]{4,}, ?-?[0-9]{1,3}\.[0-9]{4,}"
+# places you actually go — fill in the alternation yourself
+git diff --cached | grep "^+" | grep -inE "<place>|<place>|<place>"
+```
+
+The first is the one that catches accidents: anything with four or more decimal
+places is a real location, since the anonymized constants are quoted to three.
+The `public-readme-audit` skill covers the rest — secrets, credentials, PII,
+internal hostnames.

@@ -304,3 +304,272 @@ def test_gap_stay_not_inferred_when_the_gap_covers_ground():
         TrackPoint(base.add(hours=1), 33.58, -42.0054),  # 9km in an hour
     ]
     assert detect_gap_stays(points, [], min_minutes=20, max_kmh=1.0) == []
+
+
+# --- areas -----------------------------------------------------------------
+#
+# A "distinct area" has to mean somewhere you actually were. That is why
+# clustering runs on stays and not on every point, and these tests exist mostly
+# to pin that down.
+#
+# Coordinates follow the convention of the rest of this suite and of the
+# owntracks_data fixtures: open ocean, nowhere anyone has been. HOME and FAR are
+# ~3900km apart, the scale at which a day genuinely needs more than one map.
+# 1 degree of latitude is ~111km anywhere; 1 degree of longitude is ~93km at
+# HOME and ~99km at FAR.
+
+HOME_LAT, HOME_LON = 33.500, -42.005
+FAR_LAT, FAR_LON = 26.782, -82.228
+
+
+def _stay(lat, lon, start, hours=2, num_points=3):
+    from mydiary.owntracks_track import Stay
+
+    return Stay(lat, lon, start, start.add(hours=hours), num_points)
+
+
+def _two_area_day():
+    """A morning at HOME, then a long haul to FAR, with a stay at each end."""
+    base = pendulum.datetime(2026, 7, 1, 8, tz=TZ)
+    return build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),
+            TrackPoint(base.add(hours=1), HOME_LAT + 0.001, HOME_LON - 0.0005),
+            TrackPoint(base.add(hours=9), FAR_LAT, FAR_LON),
+            TrackPoint(base.add(hours=12), FAR_LAT + 0.004, FAR_LON - 0.008),
+        ]
+    )
+
+
+def test_a_day_that_fits_one_frame_needs_no_areas():
+    # the common case: one map, exactly as before areas existed
+    from mydiary.owntracks_track import split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),
+            TrackPoint(base.add(hours=2), HOME_LAT + 0.001, HOME_LON - 0.0005),
+            TrackPoint(base.add(hours=4), HOME_LAT - 0.028, HOME_LON - 0.0095),
+        ]
+    )
+    assert split_into_areas(track) == []
+
+
+def test_a_long_haul_day_splits_into_two_areas_in_time_order():
+    from mydiary.owntracks_track import split_into_areas
+
+    areas = split_into_areas(_two_area_day())
+    assert len(areas) == 2
+    assert areas[0].t_start < areas[1].t_start
+    assert round(areas[0].track.stays[0].lon) == round(HOME_LON)
+    assert round(areas[1].track.stays[0].lon) == round(FAR_LON)
+
+
+def test_a_road_trip_is_one_area_even_though_its_waypoints_are_far_apart():
+    # the reason clustering runs on stays: consecutive waypoints along a drive
+    # are each tens of km apart, so clustering every point would report a single
+    # journey as a dozen areas
+    from mydiary.owntracks_track import split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    points = [TrackPoint(base, HOME_LAT, HOME_LON)]
+    points.append(
+        TrackPoint(base.add(minutes=40), HOME_LAT + 0.0005, HOME_LON - 0.0005)
+    )  # a stay
+    for i in range(1, 12):  # ~11km apart each, none of them a stay
+        points.append(
+            TrackPoint(
+                base.add(hours=1, minutes=10 * i),
+                HOME_LAT + 0.0005 + 0.1 * i,
+                HOME_LON - 0.0005,
+            )
+        )
+    track = build_track(points)
+    assert len(track.links) > 5  # it really is a chain of far-apart waypoints
+    # the drive reaches well outside the one place the day stopped, so that
+    # place gets its own panel -- but the chain is never itself a crowd of areas
+    assert len(split_into_areas(track)) == 1
+
+
+def test_a_link_between_two_areas_belongs_to_neither():
+    from mydiary.owntracks_track import split_into_areas
+
+    track = _two_area_day()
+    areas = split_into_areas(track)
+    # the long haul is on the whole-day track but on neither panel, which is
+    # what keeps a panel's bounds local instead of 4000km wide
+    assert sum(len(a.track.links) for a in areas) < len(track.links)
+    for area in areas:
+        lons = [x.start_lon for x in area.track.links] + [
+            x.end_lon for x in area.track.links
+        ]
+        assert max(lons, default=0) - min(lons, default=0) < 1
+
+
+def test_area_labels_read_as_a_time_range():
+    from mydiary.owntracks_track import split_into_areas
+
+    assert split_into_areas(_two_area_day())[0].label() == "08:00–09:00"
+
+
+def test_an_empty_day_has_no_areas():
+    from mydiary.owntracks_track import split_into_areas
+
+    assert split_into_areas(build_track([])) == []
+
+
+def test_a_day_with_no_stays_at_all_needs_no_areas():
+    # pure transit: nowhere qualifies as a stay, so there is nothing to frame
+    # more tightly than the day itself
+    from mydiary.owntracks_track import split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),
+            TrackPoint(base.add(minutes=5), HOME_LAT + 0.042, HOME_LON + 0.0855),
+            TrackPoint(base.add(minutes=10), HOME_LAT + 0.092, HOME_LON + 0.1855),
+        ]
+    )
+    assert track.stays == []
+    assert split_into_areas(track) == []
+
+
+def test_cluster_stays_links_through_an_intermediate_stay():
+    # single linkage: the two ends are ~33km apart, but something sits between
+    # them, so it is one sprawling area rather than two
+    from mydiary.owntracks_track import cluster_stays
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    stays = [
+        _stay(HOME_LAT - 0.15, HOME_LON, base),
+        _stay(HOME_LAT, HOME_LON, base.add(hours=3)),
+        _stay(HOME_LAT + 0.15, HOME_LON, base.add(hours=6)),
+    ]
+    assert len(cluster_stays(stays, threshold_m=20_000)) == 1
+    assert len(cluster_stays(stays, threshold_m=5_000)) == 3
+
+
+def test_a_long_haul_with_stays_at_only_one_end_still_gets_a_panel():
+    # the shape of a real flight day: setting off, the airport and the flight
+    # are all transit, so every stay is at the far end. Counting areas alone
+    # would call that one area and leave those stays stacked inside a 4000km
+    # frame -- the exact case this feature exists for.
+    from mydiary.owntracks_track import split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 5, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),  # setting off, then straight out
+            TrackPoint(base.add(minutes=30), HOME_LAT - 0.117, HOME_LON + 0.207),
+            TrackPoint(base.add(hours=10), FAR_LAT, FAR_LON),
+            TrackPoint(base.add(hours=12), FAR_LAT + 0.0005, FAR_LON - 0.0001),
+            TrackPoint(base.add(hours=14), FAR_LAT + 0.0228, FAR_LON - 0.0105),
+        ]
+    )
+    areas = split_into_areas(track)
+    assert len(areas) == 1
+    # and the panel frames the far end, not the journey
+    lons = [s.lon for s in areas[0].track.stays]
+    assert max(lons) - min(lons) < 1
+    assert areas[0].track is not track
+
+
+def test_an_area_is_framed_on_its_stays_not_on_the_leg_out_of_it():
+    # one stay, a ~16km leg that stays inside the area and a longer one that
+    # does not. Framing the panel on its contents zoomed back out to take in
+    # that leg, and the "closer" map came out all but identical to the overview.
+    from mydiary.owntracks_track import extent_m, split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 8, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),  # the one place it stopped
+            TrackPoint(base.add(hours=6), HOME_LAT + 0.0005, HOME_LON - 0.0005),
+            TrackPoint(
+                base.add(hours=6, minutes=30), HOME_LAT - 0.14, HOME_LON - 0.05
+            ),  # ~16km
+            TrackPoint(base.add(hours=7), HOME_LAT - 0.22, HOME_LON - 0.10),
+        ]
+    )
+    assert len(track.stays) == 1
+    areas = split_into_areas(track)
+    assert len(areas) == 1
+    # the leg is still drawn -- it just runs off the edge of the frame
+    assert areas[0].track.links
+    assert extent_m(areas[0].frame) < 0.05 * extent_m(track)
+
+
+def test_stays_spread_almost_as_wide_as_the_day_get_no_panel():
+    # the frame-gain floor: when the places themselves are strung out nearly the
+    # width of the day, a panel is the overview again and is not worth a map
+    from mydiary.owntracks_track import split_into_areas
+
+    base = pendulum.datetime(2026, 7, 1, 8, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),
+            TrackPoint(base.add(hours=1), HOME_LAT + 0.0005, HOME_LON - 0.0005),
+            TrackPoint(base.add(hours=4), HOME_LAT + 0.15, HOME_LON),  # ~17km on
+            TrackPoint(base.add(hours=5), HOME_LAT + 0.1505, HOME_LON - 0.0005),
+            TrackPoint(base.add(hours=6), HOME_LAT + 0.18, HOME_LON),  # a bit past
+        ]
+    )
+    assert len(track.stays) == 2
+    assert split_into_areas(track) == []
+
+
+def test_extent_measures_the_longer_side_of_the_bounding_box():
+    from mydiary.owntracks_track import Stay, DayTrack, extent_m
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    one_place = DayTrack(
+        stays=[Stay(HOME_LAT, HOME_LON, base, base.add(hours=2), 3)]
+    )
+    assert extent_m(one_place) == 0.0
+    spread = DayTrack(
+        stays=[
+            Stay(HOME_LAT, HOME_LON, base, base.add(hours=2), 3),
+            # 0.16 deg of longitude is ~14.9km at this latitude
+            Stay(HOME_LAT, HOME_LON + 0.16, base.add(hours=3), base.add(hours=5), 3),
+        ]
+    )
+    assert 14_000 < extent_m(spread) < 16_000
+
+
+def test_geojson_says_which_area_each_feature_belongs_to():
+    # this is what lets the day page draw the same set of maps the note gets,
+    # rather than one map of everything
+    from mydiary.owntracks_track import split_into_areas, track_to_geojson
+
+    track = _two_area_day()
+    areas = split_into_areas(track)
+    gj = track_to_geojson(track, areas)
+
+    assert gj["properties"]["num_maps"] == 1 + len(areas)
+    assert [a["index"] for a in gj["properties"]["areas"]] == list(range(len(areas)))
+    # every stay belongs to exactly one area; the leg between them to none
+    stays = [f for f in gj["features"] if f["properties"]["kind"] == "stay"]
+    assert all(f["properties"]["area"] is not None for f in stays)
+    assert any(f["properties"]["area"] is None for f in gj["features"])
+    # and the bounds handed over are the frame, so a panel drawn to them is
+    # zoomed on the stays rather than on the journey
+    for area, described in zip(areas, gj["properties"]["areas"]):
+        assert described["bounds"] == area.frame.bounds()
+
+
+def test_geojson_without_areas_marks_nothing():
+    from mydiary.owntracks_track import track_to_geojson
+
+    base = pendulum.datetime(2026, 7, 1, 9, tz=TZ)
+    track = build_track(
+        [
+            TrackPoint(base, HOME_LAT, HOME_LON),
+            TrackPoint(base.add(hours=2), HOME_LAT + 0.001, HOME_LON - 0.0005),
+        ]
+    )
+    gj = track_to_geojson(track)
+    assert gj["properties"]["num_maps"] == 1
+    assert gj["properties"]["areas"] == []
+    assert all(f["properties"]["area"] is None for f in gj["features"])

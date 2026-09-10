@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from mydiary import map_render
-from mydiary.map_render import FOOTER_HEIGHT, render_day_map, stay_radius
+from mydiary.map_render import FOOTER_HEIGHT, RenderParams, render_day_map, stay_radius
 from mydiary.owntracks_track import TrackPoint, build_track
 
 TZ = "America/New_York"
@@ -58,15 +58,44 @@ def july1_track(rootdir: str):
     return build_track(points)
 
 
-def test_renders_a_png_of_the_requested_size(july1_track, downloader):
-    png = render_day_map(july1_track, width=800, height=600, tile_downloader=downloader)
-    image = Image.open(io.BytesIO(png))
-    assert image.format == "PNG"
+def test_renders_a_jpeg_of_the_requested_size(july1_track, downloader):
+    data = render_day_map(
+        july1_track, render=RenderParams(width=800, height=600), tile_downloader=downloader
+    )
+    image = Image.open(io.BytesIO(data))
+    assert image.format == "JPEG"
     assert image.size == (800, 600)
 
 
+def test_png_is_still_available(july1_track, downloader):
+    # the escape hatch for anything that needs lossless output
+    data = render_day_map(
+        july1_track,
+        render=RenderParams(width=400, height=300, fmt="PNG"),
+        tile_downloader=downloader,
+    )
+    image = Image.open(io.BytesIO(data))
+    assert image.format == "PNG"
+    assert image.size == (400, 300)
+
+
+def test_render_params_describe_their_encoding():
+    assert RenderParams().ext == "jpg"
+    assert RenderParams().media_type == "image/jpeg"
+    assert RenderParams(fmt="png").ext == "png"  # normalised, not case-sensitive
+    assert RenderParams(fmt="jpg").cache_key() == RenderParams(fmt="JPEG").cache_key()
+
+
+def test_render_params_reject_an_unknown_format():
+    # the API takes fmt as a query parameter, so this is a 400, not a 500
+    with pytest.raises(ValueError):
+        RenderParams(fmt="tiff").media_type
+
+
 def test_render_fetches_both_basemap_and_label_tiles(july1_track, downloader):
-    render_day_map(july1_track, width=400, height=300, tile_downloader=downloader)
+    render_day_map(
+        july1_track, render=RenderParams(width=400, height=300), tile_downloader=downloader
+    )
     providers = {name for name, _, _, _ in downloader.requested}
     assert providers == {
         map_render.BASEMAP_PROVIDER.name(),
@@ -77,21 +106,31 @@ def test_render_fetches_both_basemap_and_label_tiles(july1_track, downloader):
 def test_render_makes_no_network_calls(july1_track, downloader):
     # the fake downloader is the only tile source; if anything else reached out
     # this test would be slow and flaky rather than hermetic
-    render_day_map(july1_track, width=400, height=300, tile_downloader=downloader)
+    render_day_map(
+        july1_track, render=RenderParams(width=400, height=300), tile_downloader=downloader
+    )
     assert downloader.requested
 
 
 def test_footer_is_drawn_below_the_map(july1_track, downloader):
-    png = render_day_map(july1_track, width=800, height=600, tile_downloader=downloader)
-    image = Image.open(io.BytesIO(png)).convert("RGB")
+    # rendered as PNG so the assertion is about what was drawn rather than
+    # about how much JPEG nudged a flat colour
+    data = render_day_map(
+        july1_track,
+        render=RenderParams(width=800, height=600, fmt="PNG"),
+        tile_downloader=downloader,
+    )
+    image = Image.open(io.BytesIO(data)).convert("RGB")
     # the legend strip sits on the surface colour, not on tile grey
     assert image.getpixel((400, 600 - FOOTER_HEIGHT // 2)) == map_render.SURFACE
 
 
 def test_render_is_deterministic(july1_track, downloader):
-    first = render_day_map(july1_track, width=400, height=300, tile_downloader=downloader)
+    first = render_day_map(
+        july1_track, render=RenderParams(width=400, height=300), tile_downloader=downloader
+    )
     second = render_day_map(
-        july1_track, width=400, height=300, tile_downloader=FakeTileDownloader()
+        july1_track, render=RenderParams(width=400, height=300), tile_downloader=FakeTileDownloader()
     )
     assert first == second
 
@@ -110,7 +149,7 @@ def test_render_survives_a_flight_day(downloader):
         TrackPoint(base.add(hours=7), 26.782, -82.2279),
     ]
     png = render_day_map(
-        build_track(points), width=600, height=450, tile_downloader=downloader
+        build_track(points), render=RenderParams(width=600, height=450), tile_downloader=downloader
     )
     assert Image.open(io.BytesIO(png)).size == (600, 450)
 

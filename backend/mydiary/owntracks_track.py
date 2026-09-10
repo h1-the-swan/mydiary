@@ -61,6 +61,20 @@ class TrackParams:
         )
 
 
+# stays farther apart than this are different places, not one sprawling one.
+# deliberately NOT a TrackParams field: cache_key() feeds the stored content
+# hash, so adding a field there would invalidate every day in the database and
+# rewrite every note on the next sync.
+AREA_SPLIT_M = 20_000.0
+
+# ...and an area only earns a panel of its own by framing at least this much
+# tighter than the whole-day map. Separation alone is not enough: an area can
+# hold a link almost as long as the day itself, and then its "closer" panel is
+# the same picture again. Measured over 318 days, the ratios fall in two groups
+# with nothing between 0.45 and 0.62, so the exact number here is not delicate.
+FRAME_GAIN = 0.5
+
+
 @dataclass(frozen=True)
 class Period:
     name: str
@@ -461,8 +475,198 @@ def build_track(
     )
 
 
-def track_to_geojson(track: DayTrack) -> dict:
-    """FeatureCollection for the frontend map -- same pipeline as the PNG."""
+@dataclass(frozen=True)
+class Area:
+    """One geographically distinct part of a day.
+
+    track holds the area's stays and the links that fall entirely inside it. A
+    link between two areas belongs to neither -- it is what connects them, and
+    drawing a flight on the panel at either end is 4000km of nothing.
+
+    frame is what the panel is fitted to: the stays, not the contents. An area
+    can hold a leg 16km long, and framing on that would zoom back out until the
+    panel is the overview again -- which is exactly what a panel is for avoiding.
+    The leg is still drawn; it just runs off the edge, which reads correctly as
+    leaving.
+    """
+
+    track: DayTrack
+    t_start: datetime
+    t_end: datetime
+
+    @property
+    def frame(self) -> DayTrack:
+        return DayTrack(stays=self.track.stays)
+
+    def label(self) -> str:
+        """e.g. '08:12–11:40'. First arrival to last departure, so a day that
+        leaves and comes back reports the span; the itinerary below it in the
+        note is what shows the separate visits."""
+        return f"{self.t_start:%H:%M}–{self.t_end:%H:%M}"
+
+
+def cluster_stays(
+    stays: Sequence[Stay], threshold_m: float = AREA_SPLIT_M
+) -> List[List[Stay]]:
+    """Group stays by single linkage: within threshold_m of *any* member.
+
+    Single rather than complete linkage on purpose -- a city is a chain of
+    places you were, and two ends of it being 25km apart does not make them two
+    areas as long as something sits between them.
+    """
+    clusters: List[List[Stay]] = []
+    for stay in stays:
+        joined = [
+            i
+            for i, cluster in enumerate(clusters)
+            if any(
+                haversine_m(stay.lat, stay.lon, other.lat, other.lon) <= threshold_m
+                for other in cluster
+            )
+        ]
+        if not joined:
+            clusters.append([stay])
+            continue
+        first = joined[0]
+        clusters[first].append(stay)
+        # this stay may be the bridge between clusters that were separate
+        for i in reversed(joined[1:]):
+            clusters[first].extend(clusters.pop(i))
+    return clusters
+
+
+def _nearest_cluster(
+    lat: float, lon: float, clusters: Sequence[Sequence[Stay]], threshold_m: float
+) -> Optional[int]:
+    """Index of the cluster this position belongs to, or None if it is between
+    them (in transit)."""
+    best_i: Optional[int] = None
+    best_d = math.inf
+    for i, cluster in enumerate(clusters):
+        d = min(haversine_m(lat, lon, s.lat, s.lon) for s in cluster)
+        if d < best_d:
+            best_i, best_d = i, d
+    return best_i if best_d <= threshold_m else None
+
+
+def extent_m(track: DayTrack) -> float:
+    """How wide the track is on the ground, in metres.
+
+    The longer side of its bounding box, which is what the fitted zoom -- and so
+    how much detail survives -- actually follows.
+    """
+    b = track.bounds()
+    if b is None:
+        return 0.0
+    min_lat, min_lon, max_lat, max_lon = b
+    return max(
+        haversine_m(min_lat, min_lon, max_lat, min_lon),
+        haversine_m(min_lat, min_lon, min_lat, max_lon),
+    )
+
+
+def _track_span(track: DayTrack) -> Optional[Tuple[datetime, datetime]]:
+    starts = [s.t_start for s in track.stays] + [x.t_start for x in track.links]
+    ends = [s.t_end for s in track.stays] + [x.t_end for x in track.links]
+    if not starts:
+        return None
+    return min(starts), max(ends)
+
+
+def split_into_areas(
+    track: DayTrack, threshold_m: float = AREA_SPLIT_M
+) -> List[Area]:
+    """The parts of a day worth framing separately, in time order.
+
+    Returns **empty** when one frame already fits the day -- there is a single
+    area and nothing drawn reaches outside it -- which is the common case and
+    means "one map, exactly as before".
+
+    Clustering runs on **stays only**. Clustering all points instead counts a
+    chain as a crowd: consecutive waypoints along a road trip are each far apart,
+    so a single drive decomposes into dozens of spurious areas. A "distinct area"
+    has to mean somewhere you actually were, not somewhere you passed.
+
+    But the count of areas is not on its own what decides whether a day needs
+    more than one map. A flight day can have all its stays at one end -- leaving
+    home, the airport and the flight are all transit, and none of them dwells --
+    so it is one area sitting inside a 4000km frame. What matters is whether the
+    overview frames the areas or dwarfs them, so a single area still gets its own
+    panel once something drawn reaches more than threshold_m outside it.
+
+    That test is about the day reaching outside an area, which is not the same
+    as the area being small: an area can hold a link almost as long as the day
+    itself, and then its panel is the overview again at a slightly closer zoom.
+    So the areas are only kept if at least one of them frames FRAME_GAIN tighter
+    than the whole day.
+    """
+    if _track_span(track) is None:
+        return []
+    clusters = cluster_stays(track.stays, threshold_m)
+    if not clusters:
+        return []  # pure transit: nowhere to frame more tightly than the day
+
+    clusters.sort(key=lambda c: min(s.t_start for s in c))
+    ends = [
+        (
+            _nearest_cluster(link.start_lat, link.start_lon, clusters, threshold_m),
+            _nearest_cluster(link.end_lat, link.end_lon, clusters, threshold_m),
+        )
+        for link in track.links
+    ]
+    reaches_outside = any(a is None or b is None for a, b in ends)
+    if len(clusters) == 1 and not reaches_outside:
+        return []
+
+    areas: List[Area] = []
+    for i, cluster in enumerate(clusters):
+        stays = sorted(cluster, key=lambda s: s.t_start)
+        links = [
+            link
+            for link, (a, b) in zip(track.links, ends)
+            if a == i and b == i
+        ]
+        areas.append(
+            Area(
+                track=DayTrack(
+                    stays=stays,
+                    links=links,
+                    num_points=sum(s.num_points for s in stays),
+                    # dropped fixes are a fact about the day, not about one area;
+                    # repeating the count in every panel footer would multiply it
+                    num_dropped=0,
+                    distance_m=sum(link.distance_m for link in links),
+                ),
+                t_start=stays[0].t_start,
+                t_end=max(s.t_end for s in stays),
+            )
+        )
+
+    # all or nothing, so every stay stays covered by exactly one itinerary: if
+    # not even the tightest area frames meaningfully closer than the overview,
+    # the extra panels are the same picture again and the day wants one map.
+    day_extent = extent_m(track)
+    if day_extent and min(extent_m(a.frame) for a in areas) > FRAME_GAIN * day_extent:
+        return []
+    return areas
+
+
+def track_to_geojson(
+    track: DayTrack, areas: Optional[Sequence[Area]] = None
+) -> dict:
+    """FeatureCollection for the frontend map -- same pipeline as the image.
+
+    Pass the day's areas and every feature carries the index of the area it
+    belongs to (None for a link between two of them), and the collection carries
+    the areas themselves. That is what lets the frontend draw the same set of
+    maps the note gets, rather than one map of everything.
+    """
+    area_of = {}
+    for i, area in enumerate(areas or []):
+        for stay in area.track.stays:
+            area_of[stay] = i
+        for link in area.track.links:
+            area_of[link] = i
     features = []
     for link in track.links:
         features.append(
@@ -477,6 +681,7 @@ def track_to_geojson(track: DayTrack) -> dict:
                 },
                 "properties": {
                     "kind": "link",
+                    "area": area_of.get(link),
                     "uncertain": link.uncertain,
                     "period": link.period.name,
                     "color": link.period.color,
@@ -493,6 +698,7 @@ def track_to_geojson(track: DayTrack) -> dict:
                 "geometry": {"type": "Point", "coordinates": [stay.lon, stay.lat]},
                 "properties": {
                     "kind": "stay",
+                    "area": area_of.get(stay),
                     "period": stay.period.name,
                     "color": stay.period.color,
                     "t_start": stay.t_start.isoformat(),
@@ -511,6 +717,21 @@ def track_to_geojson(track: DayTrack) -> dict:
             "num_dropped": track.num_dropped,
             "num_stays": len(track.stays),
             "distance_m": round(track.distance_m),
+            # the overview counts too, so two areas means three maps
+            "num_maps": 1 + len(areas or []),
+            "areas": [
+                {
+                    "index": i,
+                    "label": area.label(),
+                    "t_start": area.t_start.isoformat(),
+                    "t_end": area.t_end.isoformat(),
+                    "num_stays": len(area.track.stays),
+                    "distance_m": round(area.track.distance_m),
+                    # the frame, not the contents: what the panel is fitted to
+                    "bounds": area.frame.bounds(),
+                }
+                for i, area in enumerate(areas or [])
+            ],
         },
     }
 

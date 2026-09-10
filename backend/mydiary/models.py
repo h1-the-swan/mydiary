@@ -686,8 +686,11 @@ class OwnTracksDayMap(SQLModel, table=True):
     # bookkeeping for the rendered daily map, so that re-rendering an unchanged
     # day reuses its Joplin resource instead of orphaning one
     diary_date: date = Field(primary_key=True)
+    # 0 is the whole-day overview, and on most days the only map there is; a day
+    # spent in two or more distinct areas adds a tighter panel per area
+    panel: int = Field(default=0, primary_key=True)
     joplin_resource_id: str
-    # sha256 over the processed track plus the render params
+    # sha256 over this panel's track plus the render params
     content_hash: str = Field(index=True)
     num_points: int
     num_stays: int

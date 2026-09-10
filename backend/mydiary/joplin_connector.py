@@ -357,6 +357,16 @@ class MyDiaryJoplin:
         )
         return r.status_code == 200
 
+    def get_resource_size(self, resource_id: str) -> Optional[int]:
+        """Bytes stored for a resource, without downloading the file itself."""
+        r = requests.get(
+            f"{self.base_url}/resources/{resource_id}",
+            params={"token": self.token, "fields": "size"},
+        )
+        if r.status_code != 200:
+            return None
+        return r.json().get("size")
+
     def create_resource(
         self,
         data: bytes,
