@@ -171,9 +171,24 @@ NEXTCLOUD_USERNAME=
 NEXTCLOUD_PASSWORD=
 OWNTRACKS_RECORDER_URL=
 OWNTRACKS_USER=
+MYDIARY_API_TOKEN=
 ```
 
 Docker Compose overrides some of these to use paths inside the container (`token_cache/` directory).
+
+`MYDIARY_API_TOKEN` is the `X-API-Key` for programmatic clients — currently only
+the iOS Shortcut that hits `/images/iphone_captures` (see
+`notes/iphone-photos-album-plan.md`). It is checked by a per-route dependency
+rather than global middleware, because the app has no login flow yet and a
+global gate would lock the browser out of the whole UI.
+
+The check **fails closed**: leaving it unset denies that route rather than
+opening it, so an unset token and a broken endpoint look identical from the
+outside. Generate one with
+`python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
+Changing it needs `docker compose up -d backend` — `restart` does **not**
+re-read `env_file`, so the container keeps serving the old value.
 
 ## Key Conventions
 
