@@ -1,0 +1,69 @@
+// Reference copy of the Tailscale tailnet policy file (ACLs).
+//
+// The SOURCE OF TRUTH is the Tailscale admin console -> Access Controls.
+// This copy exists so the policy is reviewable alongside serve.json and the
+// compose service; edits here do nothing until pasted into the console (or
+// wired up via Tailscale's GitOps sync).
+//
+// Tailscale ACLs are DEFAULT-DENY: there is no deny rule to write. Anything
+// not matched by an "accept" below is refused. The lockdown is the *absence*
+// of the default {"src": ["*"], "dst": ["*:*"]} rule.
+//
+// NOTE: no real identities in this file -- the repo is public. The tests block
+// uses a placeholder; substitute your Tailscale login only in the console.
+
+{
+  // Who is allowed to apply tag:mydiary to a node.
+  // autogroup:admin = the tailnet's admins, without hardcoding an email.
+  "tagOwners": {
+    "tag:mydiary": ["autogroup:admin"],
+  },
+
+  "acls": [
+    // Your devices -> the diary, HTTPS only.
+    // Serve terminates TLS on 443. Nothing else on that node is reachable, so
+    // the Vite dev server and the FastAPI port stay unreachable over the
+    // tailnet even though they are live inside the container network.
+    {
+      "action": "accept",
+      "src":    ["autogroup:member"],
+      "dst":    ["tag:mydiary:443"],
+    },
+
+    // Keep your own machines able to reach each other. Without this, dropping
+    // the default allow-all also cuts off device-to-device access.
+    //
+    // autogroup:member covers direct tailnet members but EXCLUDES
+    // autogroup:shared, so a device shared in from another tailnet cannot
+    // reach the diary even on 443.
+    {
+      "action": "accept",
+      "src":    ["autogroup:member"],
+      "dst":    ["autogroup:self:*"],
+    },
+  ],
+
+  // If the tailnet's existing policy has an "ssh" block, keep it -- pasting
+  // over the whole file otherwise removes Tailscale SSH between your machines.
+  // The default is roughly:
+  //
+  // "ssh": [
+  //   {
+  //     "action": "check",
+  //     "src":    ["autogroup:member"],
+  //     "dst":    ["autogroup:self"],
+  //     "users":  ["autogroup:nonroot", "root"],
+  //   },
+  // ],
+
+  // Locks the intent in: the console refuses to save if these fail.
+  // Test "src" must be a concrete identity -- autogroups are not valid here.
+  // Replace the placeholder with your Tailscale login in the console only.
+  "tests": [
+    {
+      "src":    "you@example.com",
+      "accept": ["tag:mydiary:443"],
+      "deny":   ["tag:mydiary:80", "tag:mydiary:22", "tag:mydiary:8888"],
+    },
+  ],
+}

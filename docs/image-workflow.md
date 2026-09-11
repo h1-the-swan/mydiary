@@ -18,7 +18,8 @@ Data sources:
 `MyDiaryNextcloud.get_filepaths_for_day` (`backend/mydiary/nextcloud_connector.py`):
 
 - WebDAV `PROPFIND` on `{NEXTCLOUD_URL}/remote.php/dav/files/{user}/H1phone_sync/{year}/{month}/`
-- Filters to `image/*` mimetypes, then parses a datetime out of each **filename** (format `YY-MM-DD HH-mm-ss SSSS`, e.g. `26-07-15 07-42-20 4222.jpg`) and keeps files matching the requested day.
+- Filters to `image/*` mimetypes, then parses a datetime out of each **filename** (capture time, then the 4-digit camera counter, e.g. `26-07-15 07-42-20 4222.jpg`) and keeps files matching the requested day. The counter lands in the fractional seconds (`4222` → `.422200`).
+- Not every suffix is a 4-digit counter: `zed_` occurs, and images saved in a batch within one second arrive with 1–2 digit counters. Only the timestamp is required — short counters are zero-padded and any other suffix counts as `0000`. The listing covers the whole month, so a name that still can't be parsed is logged and skipped rather than failing every day in it.
 - Returned paths are **percent-encoded** (taken from the WebDAV `href`), e.g. `H1phone_sync/2026/07/26-07-15%2007-42-20%204222.jpg`. This encoded string is the canonical identifier used everywhere: stored as `MyDiaryImage.nextcloud_path`, matched by the frontend, and passed to the thumbnail proxy.
 
 Route: `GET /nextcloud/thumbnails/{dt}` (`nextcloudPhotosThumbnailUrls`) → list of these path strings.
@@ -84,6 +85,17 @@ Upload size limit: nginx `client_max_body_size` is set in `nginx-vue/nginx.conf`
 - shared selection state via `composables/usePhotoSelection.ts` (per-photo `{path, src, selected, existing}`; a photo is dirty when `selected !== existing`);
 - the grid itself, `components/PhotoGrid.vue`: lazy-loaded thumbnails with loading placeholders and error fallbacks; selected photos at full opacity, unselected at 50%;
 - one Sync button that submits the union of both tabs' selections to `syncNoteImages`.
+
+## iPhone Photos album (Shortcut)
+
+The selection also flows back to the phone: an iOS Shortcut, run daily by a personal automation, collects the photos chosen for diary entries into a Photos album. iOS lets only on-device apps write the Photos library, so the phone pulls.
+
+Route: `GET /images/iphone_captures?since=YYYY-MM-DD` (`iphoneCaptureTimes`), gated by the `X-API-Key` header (`MYDIARY_API_TOKEN`, see CLAUDE.md). It returns the iPhone-sync rows (`H1phone_sync/…`) currently in a note, ordered by `created_at`, with `since` defaulting to 14 days ago. Each item has `capture_local`, `img_number` and `nextcloud_path`.
+
+- `capture_local` is **naive** local wall-clock time (`2026-07-15T18:33:23`), straight from the filename and formatted without the microseconds that hold the counter. That is the contract: Shortcuts renders photo dates in the device's current timezone, which is also what the filename was written in, so the two compare directly with no conversion.
+- `img_number` is the 4-digit camera counter from the filename, or `null` when the suffix isn't one.
+
+On the phone, for each timestamp the Shortcut searches for photos whose `Date Created` is that minute and that aren't in the album yet, confirms the exact second by formatting each candidate's date, and files the match into the album with `Save to Photos`. Photos already in the album are never passed to `Save to Photos` again, because it duplicates a photo that is already in the target album. A timestamp that was neither added nor found already in the album is reported as missed in the run notification. The rolling window means a day the phone missed is covered by the next run.
 
 ## Database models (`backend/mydiary/models.py`)
 

@@ -72,6 +72,27 @@ services:
     networks:
       - proxy-tier
       - default
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: mydiary
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}          # from project-root .env (gitignored)
+      - TS_HOSTNAME=mydiary               # -> mydiary.<tailnet>.ts.net
+      - TS_STATE_DIR=/var/lib/tailscale   # persist node identity across restarts
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=true                 # default; no /dev/net/tun or NET_ADMIN needed
+      - TS_ACCEPT_DNS=false               # keep Docker's DNS so "proxy-vue" still resolves
+      - TS_EXTRA_ARGS=--advertise-tags=tag:mydiary   # ACL'd as a server node, not a user device
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      # MUST mount the DIRECTORY, not the file -- tailscaled only picks up
+      # serve config changes when the parent dir is bind-mounted.
+      - ./tailscale:/config
+    networks:
+      - proxy-tier                        # same network as proxy-vue so the name resolves
+    restart: unless-stopped
+    depends_on:
+      - proxy-vue
   # cloudflared:
   #   image: cloudflare/cloudflared:2023.5.1
   #   # volumes: 
@@ -92,6 +113,7 @@ services:
 
 volumes:
   joplin_data:
+  tailscale_state:
 
 networks:
   proxy-tier:
