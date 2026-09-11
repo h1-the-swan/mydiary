@@ -172,9 +172,24 @@ NEXTCLOUD_PASSWORD=
 OWNTRACKS_RECORDER_URL=
 OWNTRACKS_USER=
 MYDIARY_API_TOKEN=
+CARTO_BASEMAP_KEY=
 ```
 
 Docker Compose overrides some of these to use paths inside the container (`token_cache/` directory).
+
+The browser map needs the same CARTO key, and Vite only exposes `VITE_`-prefixed
+variables to client code, so it is declared a second time in
+`mydiary-vuetify/.env` (gitignored, like every other `.env` here):
+
+```
+VITE_CARTO_BASEMAP_KEY=
+```
+
+Two files rather than one because it is not really a secret — it goes out with
+every tile request the browser makes, and CARTO scopes it by domain rather than
+by secrecy. Both are optional: without a key the maps still draw, with
+`API KEY REQUIRED` watermarked across the tiles. See `[basemap-vector]` in
+`notes/todo.md`.
 
 `MYDIARY_API_TOKEN` is the `X-API-Key` for programmatic clients — currently only
 the iOS Shortcut that hits `/images/iphone_captures` (see

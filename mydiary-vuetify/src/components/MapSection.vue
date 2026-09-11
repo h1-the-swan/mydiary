@@ -207,16 +207,22 @@ function areaSummary(area: Area): string {
     return `${distance} · ${area.num_stays} stop${area.num_stays === 1 ? '' : 's'}`
 }
 
+// CARTO watermarks "API KEY REQUIRED" across tiles fetched without one. The key
+// is free (carto.com/basemaps/apikey) and is not a secret -- it goes out with
+// every tile request the browser makes -- but it is per-install, so it comes
+// from the environment rather than being committed.
+const CARTO_KEY = import.meta.env.VITE_CARTO_BASEMAP_KEY ?? ''
+const BASEMAP_URL =
+    'https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png' +
+    (CARTO_KEY ? `?key=${CARTO_KEY}` : '')
+
 function basemap(target: L.Map): L.Map {
-    L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png',
-        {
-            subdomains: 'abcd',
-            maxZoom: 20,
-            attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        },
-    ).addTo(target)
+    L.tileLayer(BASEMAP_URL, {
+        subdomains: 'abcd',
+        maxZoom: 20,
+        attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    }).addTo(target)
     return target
 }
 
