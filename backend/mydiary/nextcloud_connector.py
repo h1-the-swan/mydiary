@@ -129,12 +129,20 @@ class MyDiaryNextcloud:
     ) -> pendulum.DateTime:
         filepath = requests.utils.unquote(filepath)
         name = Path(filepath).stem
-        # name will look like: "22-06-11 17-50-16 4704"
-        # I've encountered a weird one: "23-12-10 11-38-04 zed_"
-        # let's deal with that case:
-        if not name[-4:].isnumeric():
-            name = f"{name[:-4]}0000"
-        return pendulum.from_format(name, "YY-MM-DD HH-mm-ss SSSS", tz=tz)
+        # name will look like: "22-06-11 17-50-16 4704" -- capture time, then the
+        # camera counter, which lands in the fractional seconds (4704 -> .470400).
+        # The suffix isn't always a 4-digit counter: "23-12-10 11-38-04 zed_", and
+        # a batch saved within one second came through as "26-09-06 15-01-25 45".
+        # Only the timestamp is required; a short counter is zero-padded and any
+        # other suffix contributes nothing.
+        m = re.fullmatch(r"(\d{2}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})(?: (.+))?", name)
+        if m is None:
+            raise ValueError(f"not a Nextcloud auto-upload filename: {name!r}")
+        timestamp, suffix = m.groups()
+        counter = suffix.zfill(4) if suffix and re.fullmatch(r"\d{1,4}", suffix) else "0000"
+        return pendulum.from_format(
+            f"{timestamp} {counter}", "YY-MM-DD HH-mm-ss SSSS", tz=tz
+        )
 
     def get_mimetype_type(self, xml_item) -> str:
         mimetype = xml_item.find(".//{DAV:}getcontenttype")
@@ -158,7 +166,13 @@ class MyDiaryNextcloud:
                 filepath = item.find("{DAV:}href").text
                 filepath = filepath.split("/")[-4:]
                 filepath = "/".join(filepath)
-                this_dt = self.parse_datetime_from_filepath(filepath)
+                try:
+                    this_dt = self.parse_datetime_from_filepath(filepath)
+                except ValueError:
+                    # the listing covers the whole month, so one oddly named file
+                    # must not take down every day in it
+                    logger.warning("skipping unparseable Nextcloud filename: %s", filepath)
+                    continue
                 if this_dt.is_same_day(dt):
                     yield filepath
 
