@@ -23,16 +23,15 @@ import {
     onMounted,
     ref,
     useTemplateRef,
-    watch,
     watchEffect,
 } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/store/app'
-import { getDate } from '@/util'
+import { useDiaryDate, toDateStr } from '@/util'
 import { DatePicker } from 'v-calendar'
 import 'v-calendar/style.css'
 const router = useRouter()
-const route = useRoute()
+const getDate = useDiaryDate()
 const app = useAppStore()
 const joplinInfoAllDays = ref<any[]>([])
 // const calendar = ref<any>(null)
@@ -79,7 +78,7 @@ const attributes = computed<any[]>(() => [
     },
 ])
 function updateDate(val: any) {
-    const newQD = val.toISOString().split('T')[0]
+    const newQD = toDateStr(val)
     router.push({ query: { dt: newQD } })
 }
 watchEffect(() => {
