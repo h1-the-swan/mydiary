@@ -11,10 +11,11 @@ from datetime import datetime, date
 from pendulum import now
 from pathlib import Path
 
-from sqlalchemy import event, UniqueConstraint
+from sqlalchemy import event, Index, UniqueConstraint
 from sqlalchemy.orm import reconstructor
 
 from .core import get_hash_from_txt
+from .hashtags import tag_key
 from .markdown_edits import MarkdownDoc
 
 import logging
@@ -208,11 +209,6 @@ class PerformSong(PerformSongBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class PocketArticleTagLink(SQLModel, table=True):
-    article_id: int = Field(foreign_key="pocketarticle.id", primary_key=True)
-    tag_name: str = Field(foreign_key="tag.name", primary_key=True)
-
-
 class PocketStatusEnum(IntEnum):
     UNREAD = 0
     ARCHIVED = 1
@@ -236,9 +232,15 @@ class PocketArticleBase(SQLModel):
     time_pocket_raindrop_sync: Optional[datetime] = Field(default=None, index=True)
     time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
 
-    # private attribute -- will not be included in the database table
+    # private attributes -- not included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
-    # _pocket_tags: Optional[List[str]] = PrivateAttr()
+    # tag names as Pocket exported them; persisted as TagLinks with
+    # source="pocket" by MyDiaryPocket.save_articles_to_database
+    _pocket_tags: List[str] = PrivateAttr(default_factory=list)
+
+    @property
+    def pocket_tags(self) -> List[str]:
+        return list(self._pocket_tags)
 
     @property
     def pocket_url(self) -> str:
@@ -261,16 +263,6 @@ class PocketArticleBase(SQLModel):
 
 class PocketArticle(PocketArticleBase, table=True):
     id: int = Field(primary_key=True)
-
-    tags: List["Tag"] = Relationship(
-        back_populates="pocket_articles",
-        link_model=PocketArticleTagLink,
-        sa_relationship_kwargs={"cascade": "save-update,merge"},
-    )
-
-    @property
-    def tags_str(self) -> list[str]:
-        return [tag.name for tag in self.tags]
 
     @classmethod
     def from_pocket_item(cls, item: Dict) -> "PocketArticle":
@@ -308,10 +300,7 @@ class PocketArticle(PocketArticleBase, table=True):
         )
         word_count = int(item["word_count"]) if "word_count" in item else None
         top_image_url = item.get("top_image_url", None)
-        _pocket_tags = []
-        for t in item.get("tags", {}).values():
-            tag_name = t["tag"]
-            _pocket_tags.append(Tag(name=tag_name, is_pocket_tag=True))
+        _pocket_tags = [t["tag"] for t in item.get("tags", {}).values()]
         ret = cls(
             id=id,
             given_title=given_title,
@@ -326,10 +315,9 @@ class PocketArticle(PocketArticleBase, table=True):
             listen_duration_estimate=listen_duration_estimate,
             word_count=word_count,
             top_image_url=top_image_url,
-            tags=_pocket_tags,
         )
         ret._pocket_item = item
-        # ret._pocket_tags = _pocket_tags
+        ret._pocket_tags = _pocket_tags
         return ret
 
 
@@ -498,13 +486,49 @@ class JoplinNote(JoplinNoteBase, table=True):
 
 
 class TagBase(SQLModel):
-    name: str = Field(primary_key=True)
-    is_pocket_tag: bool = Field(index=True, default=False)
+    # "" means the tag has no namespace. An empty string rather than NULL,
+    # because SQLite treats NULLs as distinct in a UNIQUE constraint, and two
+    # bare `#hiking` rows must not be possible.
+    namespace: str = Field(default="", index=True)
+    slug: str = Field(index=True)
+    # display label; defaults to the slug, editable
+    name: str
 
 
 class Tag(TagBase, table=True):
-    pocket_articles: List[PocketArticle] = Relationship(
-        back_populates="tags", link_model=PocketArticleTagLink
+    __table_args__ = (
+        UniqueConstraint("namespace", "slug", name="uix_tag_namespace_slug"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime = Field(
+        default_factory=lambda: pendulum.now("UTC"), index=True
+    )
+
+    @property
+    def key(self) -> str:
+        return tag_key(self.namespace, self.slug)
+
+
+class TagLink(SQLModel, table=True):
+    """A tag attached to something: a day, a song, an article, a dog...
+
+    Polymorphic on purpose. `target_type` is a key in `tags.ENTITY_KINDS` and
+    `target_id` is that row's id as a string (a date for a day, an integer for
+    most tables), so one table links tags to every kind of thing without a
+    link table per kind. SQLite does not enforce the foreign keys here, so
+    a deleted target leaves its links behind and readers skip them.
+    """
+
+    __table_args__ = (Index("ix_taglink_target", "target_type", "target_id"),)
+    tag_id: int = Field(foreign_key="tag.id", primary_key=True)
+    target_type: str = Field(primary_key=True, index=True)
+    target_id: str = Field(primary_key=True, index=True)
+    # "note": parsed from the note body, replaced on every sync
+    # "manual": set through the API/UI, never touched by a sync
+    # "pocket": imported with the article
+    source: str = Field(default="manual", index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: pendulum.now("UTC"), index=True
     )
 
 
@@ -599,11 +623,6 @@ class Dog(DogBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class RecipeTagLink(SQLModel, table=True):
-    recipe_id: int = Field(foreign_key="recipe.id", primary_key=True)
-    tag_name: str = Field(foreign_key="tag.name", primary_key=True)
-
-
 class RecipeBase(SQLModel):
     name: str = Field(index=True)
     upvotes: int = Field(default=0, index=True)
@@ -612,9 +631,6 @@ class RecipeBase(SQLModel):
 
 class Recipe(RecipeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-
-    # tags: List["Tag"] = Relationship(back_populates="recipes", link_model=RecipeTagLink)
-    tags: List["Tag"] = Relationship(link_model=RecipeTagLink)
 
     recipe_events: Optional[List["RecipeEvent"]] = Relationship(back_populates="recipe")
 

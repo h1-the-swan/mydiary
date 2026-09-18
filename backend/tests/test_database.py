@@ -24,6 +24,8 @@ from mydiary.models import (
     MyDiaryWords,
 )
 from mydiary.core import reduce_size_recurse
+from mydiary.pocket_connector import MyDiaryPocket
+from mydiary.tags import tags_for_target
 
 
 def test_add_spotify_track_history_to_database(rootdir: str, db_session: Session):
@@ -82,8 +84,8 @@ def test_add_gcal_event_to_database(rootdir: str, db_session: Session):
 
 class TestPocketArticleDatabase:
     def test_add_pocket_article_existing_tag(self, rootdir: str, db_session: Session):
-        tag_1 = Tag(name="internet")
-        tag_2 = Tag(name="news")
+        tag_1 = Tag(slug="internet", name="internet")
+        tag_2 = Tag(slug="news", name="news")
         db_session.add(tag_1)
         db_session.add(tag_2)
         db_session.commit()
@@ -94,28 +96,27 @@ class TestPocketArticleDatabase:
         fp = Path(rootdir).joinpath("pocketitem.json")
         article_json = json.loads(fp.read_text())
         article = PocketArticle.from_pocket_item(article_json)
-        db_session.merge(article)
-        db_session.commit()
+        MyDiaryPocket().save_articles_to_database([article], session=db_session)
 
+        # the two existing tags were reused, only "quickbites" is new
         db_tags = db_session.exec(select(Tag)).all()
         assert len(db_tags) == 3
 
-        db_article = db_session.get(PocketArticle, article.id)
-
-        assert len(db_article.tags) == 3
-        for tag in db_article.tags:
-            assert tag.is_pocket_tag
+        article_tags = tags_for_target(db_session, "article", str(article.id))
+        assert len(article_tags) == 3
+        for tag, source in article_tags:
+            assert source == "pocket"
 
         for t in [tag_1, tag_2]:
-            tag_select = [tag for tag in db_article.tags if tag.name == t.name]
+            tag_select = [tag for tag, _ in article_tags if tag.name == t.name]
             assert len(tag_select) == 1
-            assert tag_select[0].name == t.name
+            assert tag_select[0].id == t.id
 
     def test_add_tags(self, caplog: pytest.LogCaptureFixture, db_session: Session):
         caplog.set_level(logging.DEBUG)
         n = 10
         for i in range(n):
-            tag = Tag(name=f"test tag {i}")
+            tag = Tag(slug=f"test-tag-{i}", name=f"test tag {i}")
             db_session.add(tag)
             db_session.commit()
 

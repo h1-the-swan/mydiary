@@ -6,8 +6,13 @@ from pathlib import Path
 # from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
-from mydiary.models import PocketArticle, PocketStatusEnum, Tag, PocketArticleUpdate
+from mydiary.models import PocketArticle, PocketStatusEnum, PocketArticleUpdate
 from mydiary.pocket_connector import MyDiaryPocket
+from mydiary.tags import tags_for_target
+
+
+def article_tag_names(session: Session, article: PocketArticle) -> list[str]:
+    return [tag.name for tag, _ in tags_for_target(session, "article", str(article.id))]
 
 # from dotenv import load_dotenv, find_dotenv
 
@@ -30,14 +35,17 @@ def test_pocket_article(rootdir, caplog, db_session: Session):
         == "[A dancing cactus toy that raps in Polish about cocaine withdrawal has been pulled from sale](https://www.avclub.com/a-dancing-cactus-toy-that-raps-in-polish-about-cocaine-1848149902) ([Pocket link](https://getpocket.com/read/3496035100))"
     )
 
-    # for t in article._pocket_item["tags"].values():
-    #     tag = Tag(name=t["tag"], pocket_tag_id=t["item_id"])
-    #     article.tags.append(tag)
-    # article.collect_tags(db_session)
-    tag_names = [tag.name for tag in article.tags]
+    # the tag names ride along on the article until it is saved
+    assert article.pocket_tags == ["internet", "news", "quickbites"]
+
+    MyDiaryPocket().save_articles_to_database([article], session=db_session)
+    tag_names = article_tag_names(db_session, article)
     assert "internet" in tag_names
     assert "news" in tag_names
     assert "quickbites" in tag_names
+    assert {src for _, src in tags_for_target(db_session, "article", str(article.id))} == {
+        "pocket"
+    }
 
 
 def test_update_article(rootdir: str, db_session: Session):
@@ -72,7 +80,7 @@ def test_update_article(rootdir: str, db_session: Session):
     assert db_article.time_added.day == 4
     assert db_article.time_read.day == 8
     assert db_article.raindrop_id == raindrop_id
-    tag_names = [tag.name for tag in db_article.tags]
+    tag_names = article_tag_names(db_session, db_article)
     assert "internet" in tag_names
     assert "news" in tag_names
     assert "quickbites" in tag_names
@@ -101,11 +109,11 @@ def _minimal_pocket_item(**overrides):
 def test_pocket_article_no_tags():
     item = _minimal_pocket_item()  # no "tags" key
     article = PocketArticle.from_pocket_item(item)
-    assert article.tags == []
+    assert article.pocket_tags == []
 
     item_empty_tags = _minimal_pocket_item(tags={})
     article2 = PocketArticle.from_pocket_item(item_empty_tags)
-    assert article2.tags == []
+    assert article2.pocket_tags == []
 
 
 def test_pocket_article_to_markdown_title_fallback():

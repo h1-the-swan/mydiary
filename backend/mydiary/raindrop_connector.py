@@ -26,8 +26,10 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from .db import engine, Session, select
-from .models import PocketArticle, Tag
+from .models import PocketArticle
+from .tags import tags_for_target
 from sqlalchemy import desc
+from sqlalchemy.orm import object_session
 
 # from dotenv import load_dotenv, find_dotenv
 
@@ -113,9 +115,13 @@ class MyDiaryRaindrop:
         request_parse: bool = True,
         note: str | None = None,
     ) -> dict:
+        session = object_session(article) or Session(engine)
+        tag_names = [
+            tag.name for tag, _ in tags_for_target(session, "article", str(article.id))
+        ]
         drop = {
             "important": article.favorite,
-            "tags": article.tags_str,
+            "tags": tag_names,
             "collection": {"$id": self.raindrop_pocket_collection_id},
         }
         if include_link is True:
