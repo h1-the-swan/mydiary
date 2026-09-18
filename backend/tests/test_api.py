@@ -1264,10 +1264,13 @@ class TestTags:
         self._seed(session)
         r = client.get("/tags/namespaces")
         assert r.status_code == 200
-        assert r.json() == [
-            {"namespace": "", "label": "Tag", "plural": "Tags", "resolvable": False, "num_tags": 3},
-            {"namespace": "dog", "label": "Dog", "plural": "Dogs", "resolvable": True, "num_tags": 1},
-        ]
+        by_ns = {n["namespace"]: n for n in r.json()}
+        assert by_ns[""] == {"namespace": "", "label": "Tag", "plural": "Tags", "resolvable": False, "num_tags": 3}
+        assert by_ns["dog"] == {"namespace": "dog", "label": "Dog", "plural": "Dogs", "resolvable": True, "num_tags": 1}
+        # registered kinds are always listed, so the UI knows their labels
+        assert by_ns["day"] == {"namespace": "day", "label": "Day", "plural": "Days", "resolvable": True, "num_tags": 0}
+        assert by_ns["article"]["resolvable"] is False
+        assert [n["namespace"] for n in r.json()][0] == ""
 
     def test_read_tag_by_key_and_by_id(self, session: Session, client: TestClient):
         song, dog = self._seed(session)

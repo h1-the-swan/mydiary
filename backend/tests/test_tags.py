@@ -202,7 +202,15 @@ class TestLookups:
         assert counts[tag_by_key(db_session, "a").id] == 2
         assert counts[tag_by_key(db_session, "dog:x").id] == 1
         assert tag_by_key(db_session, "book:lonely").id not in counts
-        assert namespaces(db_session) == [("", 1), ("book", 1), ("dog", 1)]
+        assert namespaces(db_session) == [
+            ("", 1),
+            ("article", 0),
+            ("book", 1),
+            ("day", 0),
+            ("dog", 1),
+            ("recipe", 0),
+            ("song", 0),
+        ]
 
     def test_delete_tag_removes_links(self, db_session: Session):
         set_target_tags(db_session, "article", "1", ["a", "b"])

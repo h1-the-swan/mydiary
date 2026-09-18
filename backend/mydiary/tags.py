@@ -196,7 +196,7 @@ def namespace_label(namespace: str) -> Tuple[str, str]:
     if not namespace:
         return "Tag", "Tags"
     word = namespace.replace("-", " ").replace("_", " ").title()
-    return word, word
+    return word, word + "s"
 
 
 # --- tags -----------------------------------------------------------------
@@ -245,14 +245,14 @@ def tag_link_counts(session: Session) -> Dict[int, int]:
 
 
 def namespaces(session: Session) -> List[Tuple[str, int]]:
-    return [
-        (ns, n)
-        for ns, n in session.exec(
-            select(Tag.namespace, func.count())
-            .group_by(Tag.namespace)
-            .order_by(Tag.namespace)
-        ).all()
-    ]
+    """Every namespace with its tag count: the registered kinds always, even
+    at zero, so their labels are known; anything else only once it has a tag.
+    "" (no namespace) sorts first."""
+    counts = dict(
+        session.exec(select(Tag.namespace, func.count()).group_by(Tag.namespace)).all()
+    )
+    names = set(counts) | set(ENTITY_KINDS) | {""}
+    return [(ns, counts.get(ns, 0)) for ns in sorted(names)]
 
 
 # --- links ----------------------------------------------------------------
