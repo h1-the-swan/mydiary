@@ -18,7 +18,6 @@ from .models import (
     OwnTracksLocation,
     PocketArticle,
     GoogleCalendarEvent,
-    Tag,
     JoplinNote,
 )
 from .markdown_edits import MarkdownDoc
@@ -41,7 +40,6 @@ class MyDiaryDay:
     def __init__(
         self,
         dt: datetime = now(tz="America/New_York").start_of("day"),
-        tags: List[Tag] = [],
         words: Optional[MyDiaryWords] = None,
         diary_txt: str = "",  # Markdown text
         joplin_connector: Optional[Any] = None,
@@ -67,7 +65,6 @@ class MyDiaryDay:
         flagged: bool = False,  # flagged for inspection, in the case of some potential problem
     ):
         self.dt = pendulum.instance(dt)
-        self.tags = tags
         self.words = words
         self.diary_txt = diary_txt
         self.joplin_connector = joplin_connector
@@ -388,9 +385,7 @@ class MyDiaryDay:
             )
 
     def save_note_and_words_to_db(self, session: Session):
-        note = self.joplin_connector.get_note(self.joplin_note_id)
-        note.time_last_api_sync = pendulum.now(tz="UTC")
-        if note.md_note.get_section_by_title("words").get_content():
-            note.words = MyDiaryWords.from_joplin_note(note)
-        session.merge(note)
-        session.commit()
+        # the note as Joplin now has it, its words, and its tags
+        self.joplin_connector.sync_note_api_to_db_obj(
+            self.joplin_note_id, session=session
+        )
