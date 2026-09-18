@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
-import { TagRead, syncTags } from '@/api'
+import { TagRead, readTagSyncStatus, syncTags } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
 import { useAppStore } from '@/store/app'
@@ -86,13 +86,50 @@ const groups = computed(() => {
     }))
 })
 
+const POLL_MS = 1500
+const POLL_LIMIT_MS = 10 * 60 * 1000
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * The all-notes sync runs in the background on the server, so the request
+ * returns at once. Poll its status until it finishes, then reload the tags,
+ * so what was just written in Joplin shows up without a page refresh.
+ */
 async function onSync() {
     syncing.value = true
     try {
         await syncTags()
-        snackbarText.value = 'Sync started. Tags from edited notes appear once it finishes.'
     } catch {
         snackbarText.value = 'Could not start the sync. Is Joplin running?'
+        snackbar.value = true
+        syncing.value = false
+        return
+    }
+    const deadline = Date.now() + POLL_LIMIT_MS
+    try {
+        while (Date.now() < deadline) {
+            await sleep(POLL_MS)
+            const status = (await readTagSyncStatus()).data
+            if (status.running) continue
+            await Promise.all([app.loadTags(), app.loadTagNamespaces()])
+            if (status.error) {
+                snackbarText.value = `Sync failed: ${status.error}`
+            } else if (status.last) {
+                const { notes_checked, notes_synced, tags_added, tags_removed } = status.last
+                snackbarText.value =
+                    `Checked ${notes_checked} notes, fetched ${notes_synced}. ` +
+                    `${tags_added} tag${tags_added === 1 ? '' : 's'} added, ${tags_removed} removed.`
+            } else {
+                snackbarText.value = 'Sync finished.'
+            }
+            return
+        }
+        snackbarText.value = 'The sync is still running. Reload the page later to see its tags.'
+    } catch {
+        snackbarText.value = 'Lost track of the sync. Reload the page to see its tags.'
     } finally {
         syncing.value = false
         snackbar.value = true

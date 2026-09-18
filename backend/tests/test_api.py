@@ -31,6 +31,15 @@ def session_fixture():
         yield session
 
 
+@pytest.fixture(autouse=True)
+def reset_note_sync_status():
+    from mydiary.api import reset_note_sync_status
+
+    reset_note_sync_status()
+    yield
+    reset_note_sync_status()
+
+
 @pytest.fixture(name="client")
 def client_fixture(session: Session):
     def get_session_override():
@@ -1354,7 +1363,7 @@ class TestTags:
         try:
             r = client.post("/tags/sync", params={"dt": "2026-09-13"})
             assert r.status_code == 200
-            assert r.json() == {"notes_checked": 1, "notes_synced": 1, "tags_added": 1, "tags_removed": 0, "started": False}
+            assert r.json() == {"notes_checked": 1, "notes_synced": 1, "tags_added": 1, "tags_removed": 0, "started": False, "run_id": None}
             assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["dog:ruffles"]
             # the mirror was refreshed too
             assert session.get(type(fake.notes[0]), fake.notes[0].id).has_words is True
@@ -1376,7 +1385,56 @@ class TestTags:
             app.dependency_overrides.pop(get_joplin_client, None)
         assert r.status_code == 200
         assert r.json()["started"] is True
+        assert r.json()["run_id"] == 1
         assert calls == [True]
+
+    def test_sync_status_reports_the_run(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin, make_note
+
+        fake = FakeJoplin([make_note("2026-09-13", "## Words\n\n#hiking\n")])
+        # the background runner opens its own session and client; point both at the test's
+        monkeypatch.setattr(api_module, "engine", session.get_bind())
+        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: fake)
+        app.dependency_overrides[get_joplin_client] = lambda: fake
+        try:
+            before = client.get("/tags/sync/status").json()
+            assert before == {"running": False, "run_id": 0, "started_at": None, "finished_at": None, "last": None, "error": None}
+
+            r = client.post("/tags/sync")  # TestClient runs the background task before returning
+            assert r.json()["started"] is True
+
+            after = client.get("/tags/sync/status").json()
+            assert after["running"] is False
+            assert after["run_id"] == 1
+            assert after["started_at"] and after["finished_at"]
+            assert after["error"] is None
+            assert (after["last"]["notes_checked"], after["last"]["notes_synced"], after["last"]["tags_added"]) == (1, 1, 1)
+            assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["hiking"]
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
+
+    def test_sync_status_records_a_failure(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin
+
+        class Broken(FakeJoplin):
+            def __enter__(self):
+                raise RuntimeError("failed to connect to Joplin server")
+
+        monkeypatch.setattr(api_module, "engine", session.get_bind())
+        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: Broken([]))
+        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([])
+        try:
+            client.post("/tags/sync")
+            status = client.get("/tags/sync/status").json()
+            assert status["running"] is False
+            assert "Joplin" in status["error"]
+            assert status["last"] is None
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
 
     def test_get_note_refreshes_mirror_and_tags(self, session: Session, client: TestClient):
         from mydiary.api import get_joplin_client

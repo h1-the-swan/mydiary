@@ -1,7 +1,6 @@
 # Tags
 
-Tags attach a short label to a diary day, a song, a Pocket article, a dog or a
-recipe, and a tag can also *refer* to one of those things. This document
+This document
 describes the tag system as built: the syntax, the tables, the namespace
 registry, how tags get in, how they stay current, the routes, the frontend,
 and the tests.
@@ -210,7 +209,7 @@ the `joplinnote` mirror (body, hash, flags, sync time), updates the
 |---|---|---|
 | Hourly job `scheduled_joplin_note_sync` | `:40` every hour | lists every note (100 per request, no bodies) and fetches a body only for notes that are new, whose `updated_time` moved (with a second's slack, both sides are naive local datetimes), that were never given a body, or never synced |
 | Opening a day in the app | every `GET /joplin/get_note/{id}` | that one note, mirrored before its image refs are stripped for display; a failure is logged and never breaks the view |
-| `POST /tags/sync` | on demand, and the "Sync from Joplin" button | with `dt`, one day synchronously; without, every note as above, in a background task (`started: true`), because one Joplin request per changed note is too long to hold an HTTP request open through the proxy. `force=true` re-fetches every note |
+| `POST /tags/sync` | on demand, and the "Sync from Joplin" button | with `dt`, one day synchronously; without, every note as above, in a background task (`started: true`), because one Joplin request per changed note is too long to hold an HTTP request open through the proxy. `force=true` re-fetches every note. `GET /tags/sync/status` says whether that task is still running and how the last one went; the button polls it and reloads the tags when it finishes |
 
 A first full sync fetches every note once. After that an hourly run is one
 listing per year-notebook page plus a fetch per note edited since.
@@ -234,7 +233,8 @@ function names in `api.ts`.
 | `GET /tags?namespace=&q=&target_type=&offset=&limit=` | `readTags` | `TagRead[]` with `num_links`. `namespace=""` selects bare tags; `q` is a substring of name, slug or namespace; `target_type` keeps tags on at least one thing of that kind (404 if unknown). Ordered by namespace then slug, so bare tags come first. `limit` up to 5000 |
 | `GET /tags/namespaces` | `readTagNamespaces` | `TagNamespaceRead[]`: every registered kind (even with no tags, so the UI knows its labels) plus any other namespace in use; `resolvable` says whether the kind has a resolver |
 | `GET /tags/lookup?key=` | `readTagByKey` | `TagDetailRead`, 404 if absent. A query parameter rather than a path segment so a tag called `sync` or `lookup` stays reachable |
-| `POST /tags/sync?dt=&force=` | `syncTags` | `TagSyncResult`: counts for one day, or `started: true` for all notes |
+| `POST /tags/sync?dt=&force=` | `syncTags` | `TagSyncResult`: counts for one day, or `started: true` plus a `run_id` for all notes. Only one background run at a time; an overlapping one is skipped |
+| `GET /tags/sync/status` | `readTagSyncStatus` | `TagSyncStatus {running, run_id, started_at, finished_at, last, error}`: the background sync's state, process-wide. `last` is the previous run's `TagSyncResult`; `error` is set when a run failed (Joplin unreachable, say) |
 | `GET /tags/{tag_id}` | `readTag` | `TagDetailRead` |
 | `PATCH /tags/{tag_id}` | `updateTag` | `TagRead`. Body `TagUpdate {name?, namespace?, slug?}`, halves normalised. 409 when the new key exists, and 409 on a namespace or slug change while any `note` link exists (the next sync would read the old hashtag and recreate it; change it in the note, or edit the name). 422 when nothing slug-shaped is left |
 | `DELETE /tags/{tag_id}` | `deleteTag` | `{ok: true}`; links removed explicitly |
@@ -255,7 +255,7 @@ remains the write path for article tags.
 
 | Piece | Purpose |
 |---|---|
-| `views/Tags.vue` (`/tags`, route `tags`) | index: one section per namespace ("No namespace" first), chips with link counts, a filter box, and the "Sync from Joplin" button |
+| `views/Tags.vue` (`/tags`, route `tags`) | index: one section per namespace ("No namespace" first), chips with link counts, a filter box, and the "Sync from Joplin" button, which polls the sync status every 1.5 s and reloads the tags when the run ends, reporting what it did |
 | `views/TagDetail.vue` (`/tags/:tagKey`, route `tag`) | one tag: a "Refers to" card when it resolves, a section per target kind, rename and delete dialogs. The param is `tagKey` because `key` is a reserved prop name in Vue |
 | `components/TagChips.vue` | a target's tags as chips linking to their pages. `editable` adds a combobox for the manual tags, fed by every known key; tags written in the note are shown above it and cannot be removed there. Mounted under the diary note header (editable), on the song card, on the song edit form (editable) and in the Pocket table |
 | `markdown.ts` | the one `markdown-it` instance. Its `hashtag` inline rule emits `<a class="tag-link" href="/tags/…">` for hashtags outside links, same grammar as the backend |

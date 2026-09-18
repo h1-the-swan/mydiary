@@ -5,6 +5,7 @@ import requests
 import io
 import json
 import secrets
+import threading
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
@@ -157,8 +158,20 @@ class TagSyncResult(SQLModel):
     notes_synced: int = 0
     tags_added: int = 0
     tags_removed: int = 0
-    # True when the all-notes sync was handed to a background task
+    # True when the all-notes sync was handed to a background task; poll
+    # GET /tags/sync/status for the outcome
     started: bool = False
+    run_id: Optional[int] = None
+
+
+class TagSyncStatus(SQLModel):
+    running: bool = False
+    # counts background runs since the process started
+    run_id: int = 0
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    last: Optional[TagSyncResult] = None
+    error: Optional[str] = None
 
 
 class PocketArticleRead(PocketArticleBase):
@@ -442,21 +455,45 @@ def scheduled_owntracks_sync():
     logger.info(f"{num_saved} owntracks locations saved")
 
 
+# One background note sync at a time, and a record of the last one, so the
+# UI can poll for the outcome of a sync it started instead of reloading blind.
+_note_sync_lock = threading.Lock()
+note_sync_status = TagSyncStatus()
+
+
+def reset_note_sync_status() -> None:
+    global note_sync_status
+    note_sync_status = TagSyncStatus()
+
+
 def run_full_note_sync(force: bool = False):
     """Mirror every changed diary note from Joplin and re-sync its tags.
 
     Shared by the hourly job and POST /tags/sync. Opens its own session and
     client because it runs outside any request (a request's dependencies are
     closed before a background task starts). Never raises: an unreachable
-    Joplin is logged, and the next run picks up where this one left off."""
+    Joplin is logged into the status, and the next run picks up where this
+    one left off. A run that overlaps another is skipped."""
+    if not _note_sync_lock.acquire(blocking=False):
+        logger.info("joplin note sync already running; skipping this run")
+        return None
+    note_sync_status.running = True
+    note_sync_status.started_at = pendulum.now("UTC")
+    note_sync_status.error = None
     try:
         with Session(engine) as session, MyDiaryJoplin(init_config=False) as j:
             summary = j.sync_notes_from_api(session, force=force)
-    except Exception:
+        note_sync_status.last = TagSyncResult(**asdict(summary))
+        logger.info(f"joplin note sync: {summary}")
+        return summary
+    except Exception as e:
         logger.exception("joplin note sync failed")
+        note_sync_status.error = str(e) or type(e).__name__
         return None
-    logger.info(f"joplin note sync: {summary}")
-    return summary
+    finally:
+        note_sync_status.running = False
+        note_sync_status.finished_at = pendulum.now("UTC")
+        _note_sync_lock.release()
 
 
 def scheduled_joplin_note_sync():
@@ -730,10 +767,22 @@ def sync_tags(
     note, too long to hold an HTTP request open through the proxy, so it is
     handed to a background task and `started` comes back true."""
     if dt is None:
+        # marked running here, not in the task, so a poll that lands before
+        # the task has started still sees it as in progress
+        note_sync_status.run_id += 1
+        note_sync_status.running = True
         background_tasks.add_task(run_full_note_sync, force=force)
-        return TagSyncResult(started=True)
+        return TagSyncResult(started=True, run_id=note_sync_status.run_id)
     summary = mydiary_joplin.sync_one_day(session, parse_dt(dt, tz))
     return TagSyncResult(**asdict(summary))
+
+
+@app.get(
+    "/tags/sync/status", operation_id="readTagSyncStatus", response_model=TagSyncStatus
+)
+def read_tag_sync_status():
+    """Whether a background note sync is running, and how the last one went."""
+    return note_sync_status
 
 
 @app.get("/tags/{tag_id}", operation_id="readTag", response_model=TagDetailRead)

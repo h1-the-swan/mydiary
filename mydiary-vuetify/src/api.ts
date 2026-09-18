@@ -369,6 +369,16 @@ export interface TagSyncResult {
   tags_added?: number;
   tags_removed?: number;
   started?: boolean;
+  run_id?: number | null;
+}
+
+export interface TagSyncStatus {
+  running?: boolean;
+  run_id?: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+  last?: TagSyncResult | null;
+  error?: string | null;
 }
 
 export interface TagUpdate {
@@ -753,6 +763,18 @@ export const syncTags = (
       undefined,{
     ...options,
         params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * Whether a background note sync is running, and how the last one went.
+ * @summary Read Tag Sync Status
+ */
+export const readTagSyncStatus = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagSyncStatus>> => {
+    return axios.get(
+      `/tags/sync/status`,options
     );
   }
 
@@ -1582,6 +1604,7 @@ export type ReadTagsResult = AxiosResponse<TagRead[]>
 export type ReadTagNamespacesResult = AxiosResponse<TagNamespaceRead[]>
 export type ReadTagByKeyResult = AxiosResponse<TagDetailRead>
 export type SyncTagsResult = AxiosResponse<TagSyncResult>
+export type ReadTagSyncStatusResult = AxiosResponse<TagSyncStatus>
 export type ReadTagResult = AxiosResponse<TagDetailRead>
 export type UpdateTagResult = AxiosResponse<TagRead>
 export type DeleteTagResult = AxiosResponse<unknown>
