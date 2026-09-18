@@ -50,5 +50,7 @@ export default createVuetify({
         VAutocomplete: { variant: 'outlined', density: 'comfortable' },
         VFileInput: { variant: 'outlined', density: 'comfortable' },
         VDataTable: { density: 'comfortable' },
+        VChip: { size: 'small' },
+        VCombobox: { variant: 'outlined', density: 'comfortable' },
     },
 })

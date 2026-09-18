@@ -28,6 +28,11 @@
             Capo {{ performSong.capo }}
           </v-chip>
         </div>
+        <tag-chips
+          class="mb-3"
+          target-type="song"
+          :target-id="String(performSong.id)"
+        />
 
         <p v-if="performSong.notes" class="text-body-2 mb-2">
           {{ performSong.notes }}
@@ -44,15 +49,15 @@
     <v-divider v-if="performSong.lyrics" />
     <v-card-text v-if="performSong.lyrics">
       <div class="text-overline text-medium-emphasis mb-2">Lyrics</div>
-      <div class="prose" v-html="md.render(performSong.lyrics)"></div>
+      <div v-router-links class="prose" v-html="md.render(performSong.lyrics)"></div>
     </v-card-text>
   </v-card>
 </template>
 
 <script lang="ts" setup>
 import { PerformSongRead } from '@/api';
-import markdownit from 'markdown-it';
-const md = markdownit()
+import { md } from '@/markdown';
+import TagChips from '@/components/TagChips.vue';
 const props = defineProps<{
   performSong?: PerformSongRead;
   imageUrl?: string;

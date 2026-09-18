@@ -8,14 +8,23 @@ import requests
 import subprocess
 import hashlib
 from pathlib import Path
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from time import sleep
 import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union, Generator
 
 from .core import get_hash_from_txt, reduce_image_size, reduce_size_recurse
-from .models import JoplinNote, JoplinFolder, MyDiaryImage, MyDiaryWords
+from sqlalchemy import update
+
+from .models import (
+    JoplinNote,
+    JoplinNoteImageLink,
+    JoplinFolder,
+    MyDiaryImage,
+    MyDiaryWords,
+)
 from .db import engine, Session, select
 
 import logging
@@ -78,6 +87,16 @@ JOPLIN_CONFIG = {
 
 def title_from_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d")
+
+
+@dataclass
+class NoteSyncSummary:
+    """What a note sync did. `notes_checked` counts listings, not fetches."""
+
+    notes_checked: int = 0
+    notes_synced: int = 0
+    tags_added: int = 0
+    tags_removed: int = 0
 
 
 class MyDiaryJoplin:
@@ -321,27 +340,215 @@ class MyDiaryJoplin:
         session: Session,
         commit: bool = True,
         sync_dt: Optional[datetime] = None,
-    ):
+    ) -> Tuple[int, int]:
+        """Mirror one note from the API into the database, and sync its tags.
+
+        Refreshes the JoplinNote row (body, hash, flags, sync time), updates
+        the MyDiaryWords row in place (creating it the first time the note
+        has words), and brings the day's note-sourced tag links in line with
+        the hashtags in the body. Returns the tag (added, removed) counts.
+        """
+        from .tags import sync_joplin_note_tags, sync_note_tags
+
         if not isinstance(note, JoplinNote):
             note = self.get_note(note)
         if sync_dt is None:
             sync_dt = pendulum.now(tz="UTC")
-        md_note = note.md_note
-        words_content = md_note.get_section_by_title("words").get_content()
-        words_hash = get_hash_from_txt(words_content)
+
+        words_content = ""
+        resource_ids: List[str] = []
+        if note.body:
+            md_note = note.md_note
+            try:
+                words_content = md_note.get_section_by_title("words").get_content()
+            except KeyError:
+                pass  # no Words section: nothing to mirror into MyDiaryWords
+            try:
+                resource_ids = md_note.get_image_resource_ids()
+            except KeyError:
+                pass  # no Images section either
+
+        self._rekey_recreated_note(note, session)
+
         db_words = session.exec(
             select(MyDiaryWords).where(MyDiaryWords.joplin_note_id == note.id)
-        ).one()
-        if db_words.hash != words_hash:
-            note.words = MyDiaryWords.from_joplin_note(note)
-            # session.merge(words_update)
-        resource_ids = md_note.get_image_resource_ids()
+        ).one_or_none()
+        if words_content:
+            words_hash = get_hash_from_txt(words_content)
+            if db_words is None:
+                session.add(MyDiaryWords.from_joplin_note(note))
+            elif db_words.hash != words_hash:
+                # in place: assigning a fresh row to note.words would leave the
+                # old one behind with a NULL note id (no delete-orphan cascade)
+                db_words.txt = words_content
+                db_words.hash = words_hash
+                db_words.updated_at = note.updated_time
+                db_words.note_title = note.title
+                session.add(db_words)
+
         note.has_words = len(words_content) > 0
         note.has_images = len(resource_ids) > 0
         note.time_last_api_sync = sync_dt
         session.merge(note)
+        session.flush()
+        added, removed = sync_note_tags(session, note, commit=False)
+        # Joplin's own tags on the note, one way; a second request per note
+        j_added, j_removed = sync_joplin_note_tags(
+            session, note.title, self.get_note_tags(note.id), commit=False
+        )
         if commit is True:
             session.commit()
+        return added + j_added, removed + j_removed
+
+    def _rekey_recreated_note(self, note: JoplinNote, session: Session) -> None:
+        """Move a mirrored note onto a new Joplin id.
+
+        A note deleted and re-created in the Joplin app keeps its date title
+        but gets a new id, and titles are unique in the mirror. Rather than
+        fail the insert, the old row and everything keyed on it (words, image
+        links) are moved to the new id. Tag links are keyed by title, so they
+        need nothing."""
+        if session.get(JoplinNote, note.id) is not None:
+            return
+        stale = session.exec(
+            select(JoplinNote).where(JoplinNote.title == note.title)
+        ).one_or_none()
+        if stale is None:
+            return
+        old_id = stale.id
+        logger.warning(
+            f"note {note.title!r} was re-created in Joplin: {old_id} -> {note.id}"
+        )
+        session.expunge(stale)
+        for model in (MyDiaryWords, JoplinNoteImageLink):
+            session.execute(
+                update(model)
+                .where(model.joplin_note_id == old_id)
+                .values(joplin_note_id=note.id)
+            )
+        session.execute(
+            update(JoplinNote).where(JoplinNote.id == old_id).values(id=note.id)
+        )
+        session.flush()
+
+    def sync_one_day(self, session: Session, dt: datetime) -> "NoteSyncSummary":
+        """Mirror the one note for a day, if it exists."""
+        summary = NoteSyncSummary()
+        note_id = self.get_note_id_by_date(dt)
+        if note_id == "does_not_exist":
+            return summary
+        summary.notes_checked = 1
+        added, removed = self.sync_note_api_to_db_obj(note_id, session)
+        summary.notes_synced = 1
+        summary.tags_added = added
+        summary.tags_removed = removed
+        return summary
+
+    def _yield_pages(self, url: str, fields: List[str]) -> Generator[Dict, None, None]:
+        params = {
+            "token": self.token,
+            "fields": ",".join(fields),
+            "limit": 100,
+            "page": 1,
+        }
+        while True:
+            r = requests.get(url, params=params)
+            r.raise_for_status()
+            resp = r.json()
+            yield from resp["items"]
+            if not resp.get("has_more"):
+                return
+            params["page"] += 1
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        """Titles of Joplin's own tags on a note."""
+        return [
+            item["title"]
+            for item in self._yield_pages(f"{self.base_url}/notes/{note_id}/tags", ["id", "title"])
+        ]
+
+    def yield_all_tags(self, fields: Optional[List[str]] = None) -> Generator[Dict, None, None]:
+        yield from self._yield_pages(f"{self.base_url}/tags", fields or ["id", "title"])
+
+    def yield_tag_note_ids(self, tag_id: str) -> Generator[str, None, None]:
+        for item in self._yield_pages(f"{self.base_url}/tags/{tag_id}/notes", ["id"]):
+            yield item["id"]
+
+    def sync_joplin_tags(self, session: Session) -> Tuple[int, int]:
+        """Reconcile every diary day's joplin-sourced links with Joplin.
+
+        Tagging a note in Joplin does not change the note's updated_time, so
+        the per-note "fetch what changed" rule cannot see it. This reads from
+        the tag side instead: one listing of all tags, then one request per
+        tag for its notes. Notes outside the mirror (other notebooks, or not
+        yet fetched) are ignored."""
+        from .tags import sync_joplin_tags_bulk
+
+        title_by_note_id = dict(session.exec(select(JoplinNote.id, JoplinNote.title)).all())
+        titles_by_day: Dict[str, List[str]] = {}
+        for tag in self.yield_all_tags():
+            for note_id in self.yield_tag_note_ids(tag["id"]):
+                day = title_by_note_id.get(note_id)
+                if day is not None:
+                    titles_by_day.setdefault(day, []).append(tag["title"])
+        return sync_joplin_tags_bulk(session, titles_by_day)
+
+    def sync_notes_from_api(
+        self, session: Session, force: bool = False
+    ) -> "NoteSyncSummary":
+        """Mirror every diary note whose Joplin copy is newer than the mirror.
+
+        The listing is cheap (100 notes per request, no bodies). A body is
+        fetched only for a note that is new, edited (updated_time newer, with
+        a second's slack because both sides are naive local datetimes), was
+        never given a body, or was never synced. `force` fetches all of them.
+        A note that fails to sync is logged and skipped, not fatal."""
+        summary = NoteSyncSummary()
+        known = {
+            note_id: (updated_time, body_is_null, sync_is_null)
+            for note_id, updated_time, body_is_null, sync_is_null in session.exec(
+                select(
+                    JoplinNote.id,
+                    JoplinNote.updated_time,
+                    JoplinNote.body.is_(None),
+                    JoplinNote.time_last_api_sync.is_(None),
+                )
+            ).all()
+        }
+        fields = ["id", "parent_id", "title", "updated_time"]
+        for item in self.yield_all_mydiary_notes(fields=fields):
+            summary.notes_checked += 1
+            api_updated = datetime.fromtimestamp(item["updated_time"] / 1000)
+            row = known.get(item["id"])
+            needs_fetch = (
+                force
+                or row is None
+                or row[1]
+                or row[2]
+                or api_updated > row[0] + timedelta(seconds=1)
+            )
+            if not needs_fetch:
+                continue
+            try:
+                added, removed = self.sync_note_api_to_db_obj(item["id"], session)
+            except Exception:
+                logger.exception(
+                    f"failed to sync note {item['id']} ({item.get('title')})"
+                )
+                session.rollback()
+                continue
+            summary.notes_synced += 1
+            summary.tags_added += added
+            summary.tags_removed += removed
+        try:
+            added, removed = self.sync_joplin_tags(session)
+        except Exception:
+            logger.exception("failed to sync Joplin's note tags")
+            session.rollback()
+        else:
+            summary.tags_added += added
+            summary.tags_removed += removed
+        return summary
 
     def update_note_body(self, note_id: str, new_body: str):
         return requests.put(

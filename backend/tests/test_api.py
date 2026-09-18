@@ -31,6 +31,15 @@ def session_fixture():
         yield session
 
 
+@pytest.fixture(autouse=True)
+def reset_note_sync_status():
+    from mydiary.api import reset_note_sync_status
+
+    reset_note_sync_status()
+    yield
+    reset_note_sync_status()
+
+
 @pytest.fixture(name="client")
 def client_fixture(session: Session):
     def get_session_override():
@@ -92,12 +101,8 @@ class TestPocketArticle:
         assert data[0]["top_image_url"] == article.top_image_url
         assert len(data[0]["tags"]) == 3
         tags = data[0]["tags"]
-        assert tags[0]["name"] == "internet"
-        assert tags[0]["is_pocket_tag"] is True
-        assert tags[1]["name"] == "news"
-        assert tags[1]["is_pocket_tag"] is True
-        assert tags[2]["name"] == "quickbites"
-        assert tags[2]["is_pocket_tag"] is True
+        assert [t["name"] for t in tags] == ["internet", "news", "quickbites"]
+        assert [t["key"] for t in tags] == ["internet", "news", "quickbites"]
 
     def test_update_pocket_article(self, rootdir, session: Session, client: TestClient):
         from mydiary.pocket_connector import MyDiaryPocket
@@ -124,12 +129,8 @@ class TestPocketArticle:
         assert d["resolved_title"] == "dddd"
         assert d["url"] == article.url
         tags = d["tags"]
-        assert tags[0]["name"] == "internet"
-        assert tags[0]["is_pocket_tag"] is True
-        assert tags[1]["name"] == "news"
-        assert tags[1]["is_pocket_tag"] is True
-        assert tags[2]["name"] == "quickbites"
-        assert tags[2]["is_pocket_tag"] is True
+        assert [t["name"] for t in tags] == ["internet", "news", "quickbites"]
+        assert [t["key"] for t in tags] == ["internet", "news", "quickbites"]
 
     def test_update_pocket_article_missing(self, client: TestClient):
         response = client.patch("/pocket/articles/99999", json={"resolved_title": "X"})
@@ -167,12 +168,8 @@ class TestPocketArticle:
         )
         assert d["url"] == article.url
         tags = d["tags"]
-        assert tags[0]["name"] == "internet"
-        assert tags[0]["is_pocket_tag"] is True
-        assert tags[1]["name"] == "news"
-        assert tags[1]["is_pocket_tag"] is True
-        assert tags[2]["name"] == "quickbites"
-        assert tags[2]["is_pocket_tag"] is True
+        assert [t["name"] for t in tags] == ["internet", "news", "quickbites"]
+        assert [t["key"] for t in tags] == ["internet", "news", "quickbites"]
         assert d["raindrop_id"] == raindrop_id
 
         db_article = session.get(PocketArticle, article.id)
@@ -1237,3 +1234,227 @@ class TestIPhoneCaptureTimes:
             headers=self.auth,
         )
         assert [i["img_number"] for i in r.json()] == ["4230", None]
+
+
+class TestTags:
+    def _seed(self, session: Session):
+        from mydiary.models import JoplinNote
+        from mydiary.tags import set_target_tags, sync_note_tags
+        from tests.fakes import make_note
+
+        song = PerformSong(name="Wonderwall")
+        dog = Dog(name="Ruffles")
+        session.add(song)
+        session.add(dog)
+        session.add(make_note("2026-09-13", "Walked #dog:Ruffles and went #hiking"))
+        session.commit()
+        sync_note_tags(session, session.get(JoplinNote, "note-2026-09-13"))
+        set_target_tags(session, "song", str(song.id), ["hiking", "rock"])
+        set_target_tags(session, "article", "1", ["saved for later"], source="pocket", raw_names=True)
+        return song, dog
+
+    def test_read_tags_with_counts_and_filters(self, session: Session, client: TestClient):
+        self._seed(session)
+        r = client.get("/tags")
+        assert r.status_code == 200
+        by_key = {t["key"]: t for t in r.json()}
+        assert set(by_key) == {"dog:ruffles", "hiking", "rock", "saved-for-later"}
+        assert by_key["hiking"]["num_links"] == 2
+        assert by_key["saved-for-later"]["name"] == "saved for later"
+        assert by_key["dog:ruffles"]["namespace"] == "dog"
+
+        assert [t["key"] for t in client.get("/tags", params={"namespace": "dog"}).json()] == ["dog:ruffles"]
+        assert {t["key"] for t in client.get("/tags", params={"namespace": ""}).json()} == {"hiking", "rock", "saved-for-later"}
+        assert [t["key"] for t in client.get("/tags", params={"q": "ruff"}).json()] == ["dog:ruffles"]
+        assert {t["key"] for t in client.get("/tags", params={"target_type": "song"}).json()} == {"hiking", "rock"}
+        assert client.get("/tags", params={"target_type": "unicorn"}).status_code == 404
+
+    def test_read_namespaces(self, session: Session, client: TestClient):
+        self._seed(session)
+        r = client.get("/tags/namespaces")
+        assert r.status_code == 200
+        by_ns = {n["namespace"]: n for n in r.json()}
+        assert by_ns[""] == {"namespace": "", "label": "Tag", "plural": "Tags", "resolvable": False, "num_tags": 3}
+        assert by_ns["dog"] == {"namespace": "dog", "label": "Dog", "plural": "Dogs", "resolvable": True, "num_tags": 1}
+        # registered kinds are always listed, so the UI knows their labels
+        assert by_ns["day"] == {"namespace": "day", "label": "Day", "plural": "Days", "resolvable": True, "num_tags": 0}
+        assert by_ns["article"]["resolvable"] is False
+        assert [n["namespace"] for n in r.json()][0] == ""
+
+    def test_read_tag_by_key_and_by_id(self, session: Session, client: TestClient):
+        song, dog = self._seed(session)
+        r = client.get("/tags/lookup", params={"key": "Dog:Ruffles"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["key"] == "dog:ruffles"
+        assert d["resolved"] == {"kind": "dog", "id": str(dog.id), "label": "Ruffles", "frontend_route": None}
+        assert d["targets"] == [
+            {"kind": "day", "id": "2026-09-13", "label": "2026-09-13", "source": "note", "frontend_route": "MyDiaryDay"}
+        ]
+        assert client.get(f"/tags/{d['id']}").json() == d
+        assert client.get("/tags/lookup", params={"key": "nope"}).status_code == 404
+        assert client.get("/tags/999").status_code == 404
+
+        hiking = client.get("/tags/lookup", params={"key": "hiking"}).json()
+        assert hiking["resolved"] is None
+        assert [(t["kind"], t["id"], t["source"]) for t in hiking["targets"]] == [
+            ("day", "2026-09-13", "note"),
+            ("song", str(song.id), "manual"),
+        ]
+        assert hiking["targets"][1]["frontend_route"] == "performSong"
+
+    def test_set_and_read_target_tags(self, session: Session, client: TestClient):
+        r = client.put("/tagged/song/7", json=["Rock", "dog:Ruffles"])
+        assert r.status_code == 200
+        # bare tags first (their namespace sorts as ""), then by namespace and slug
+        assert [(t["key"], t["source"]) for t in r.json()] == [("rock", "manual"), ("dog:ruffles", "manual")]
+        assert [t["key"] for t in client.get("/tagged/song/7").json()] == ["rock", "dog:ruffles"]
+        assert client.put("/tagged/song/7", json=[]).json() == []
+        assert client.get("/tagged/unicorn/1").status_code == 404
+        assert client.put("/tagged/unicorn/1", json=["x"]).status_code == 404
+        assert client.put("/tagged/song/7", json=["!!!"]).status_code == 422
+
+    def test_update_tag(self, session: Session, client: TestClient):
+        self._seed(session)
+        rock = client.get("/tags/lookup", params={"key": "rock"}).json()
+        hiking = client.get("/tags/lookup", params={"key": "hiking"}).json()
+
+        r = client.patch(f"/tags/{rock['id']}", json={"name": "Rock music"})
+        assert r.status_code == 200
+        assert r.json()["name"] == "Rock music"
+        assert r.json()["key"] == "rock"
+
+        r = client.patch(f"/tags/{rock['id']}", json={"namespace": "Genre", "slug": "Rock N Roll"})
+        assert r.status_code == 200
+        assert r.json()["key"] == "genre:rock-n-roll"
+        assert client.get("/tags/lookup", params={"key": "rock"}).status_code == 404
+
+        # a key that exists already
+        assert client.patch(f"/tags/{rock['id']}", json={"namespace": "", "slug": "hiking"}).status_code == 409
+        # a tag a note still spells out: the next sync would just recreate it
+        assert client.patch(f"/tags/{hiking['id']}", json={"slug": "walking"}).status_code == 409
+        # but its label is free to change
+        assert client.patch(f"/tags/{hiking['id']}", json={"name": "Hiking!"}).status_code == 200
+        assert client.patch(f"/tags/{hiking['id']}", json={"slug": "!!!"}).status_code == 422
+        assert client.patch("/tags/999", json={"name": "x"}).status_code == 404
+
+    def test_delete_tag(self, session: Session, client: TestClient):
+        self._seed(session)
+        hiking = client.get("/tags/lookup", params={"key": "hiking"}).json()
+        assert client.delete(f"/tags/{hiking['id']}").status_code == 200
+        assert client.get(f"/tags/{hiking['id']}").status_code == 404
+        assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["dog:ruffles"]
+        assert client.delete("/tags/999").status_code == 404
+
+    def test_pocket_article_tag_filter_uses_keys(self, rootdir, session: Session, client: TestClient):
+        from mydiary.pocket_connector import MyDiaryPocket
+
+        article = PocketArticle.from_pocket_item(json.loads(Path(rootdir).joinpath("pocketitem.json").read_text()))
+        MyDiaryPocket().save_articles_to_database([article], session)
+        assert len(client.get("/pocket/articles", params={"tags": "internet,news"}).json()) == 1
+        assert client.get("/pocket/articles", params={"tags": "internet,nothing"}).json() == []
+
+    def test_sync_one_day(self, session: Session, client: TestClient):
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin, make_note
+
+        fake = FakeJoplin(
+            [make_note("2026-09-13", "## Words\n\nWalked #dog:Ruffles\n")],
+            tags={"note-2026-09-13": ["Hiking"]},
+        )
+        app.dependency_overrides[get_joplin_client] = lambda: fake
+        try:
+            r = client.post("/tags/sync", params={"dt": "2026-09-13"})
+            assert r.status_code == 200
+            assert r.json() == {"notes_checked": 1, "notes_synced": 1, "tags_added": 2, "tags_removed": 0, "started": False, "run_id": None}
+            assert [(t["key"], t["source"]) for t in client.get("/tagged/day/2026-09-13").json()] == [
+                ("hiking", "joplin"),
+                ("dog:ruffles", "note"),
+            ]
+            # the mirror was refreshed too
+            assert session.get(type(fake.notes[0]), fake.notes[0].id).has_words is True
+            assert client.post("/tags/sync", params={"dt": "2026-01-01"}).json()["notes_checked"] == 0
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
+
+    def test_sync_all_runs_in_the_background(self, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin
+
+        calls = []
+        monkeypatch.setattr(api_module, "run_full_note_sync", lambda force=False: calls.append(force))
+        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([])
+        try:
+            r = client.post("/tags/sync", params={"force": "true"})
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
+        assert r.status_code == 200
+        assert r.json()["started"] is True
+        assert r.json()["run_id"] == 1
+        assert calls == [True]
+
+    def test_sync_status_reports_the_run(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin, make_note
+
+        fake = FakeJoplin([make_note("2026-09-13", "## Words\n\n#hiking\n")])
+        # the background runner opens its own session and client; point both at the test's
+        monkeypatch.setattr(api_module, "engine", session.get_bind())
+        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: fake)
+        app.dependency_overrides[get_joplin_client] = lambda: fake
+        try:
+            before = client.get("/tags/sync/status").json()
+            assert before == {"running": False, "run_id": 0, "started_at": None, "finished_at": None, "last": None, "error": None}
+
+            r = client.post("/tags/sync")  # TestClient runs the background task before returning
+            assert r.json()["started"] is True
+
+            after = client.get("/tags/sync/status").json()
+            assert after["running"] is False
+            assert after["run_id"] == 1
+            assert after["started_at"] and after["finished_at"]
+            assert after["error"] is None
+            assert (after["last"]["notes_checked"], after["last"]["notes_synced"], after["last"]["tags_added"]) == (1, 1, 1)
+            assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["hiking"]
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
+
+    def test_sync_status_records_a_failure(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin
+
+        class Broken(FakeJoplin):
+            def __enter__(self):
+                raise RuntimeError("failed to connect to Joplin server")
+
+        monkeypatch.setattr(api_module, "engine", session.get_bind())
+        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: Broken([]))
+        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([])
+        try:
+            client.post("/tags/sync")
+            status = client.get("/tags/sync/status").json()
+            assert status["running"] is False
+            assert "Joplin" in status["error"]
+            assert status["last"] is None
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)
+
+    def test_get_note_refreshes_mirror_and_tags(self, session: Session, client: TestClient):
+        from mydiary.api import get_joplin_client
+        from tests.fakes import FakeJoplin, make_note
+
+        note = make_note("2026-09-13", "## Words\n\n#hiking\n\n## Images\n\n![img](:/abc123)\n")
+        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([note])
+        try:
+            r = client.get(f"/joplin/get_note/{note.id}", params={"remove_image_refs": "true"})
+            assert r.status_code == 200
+            assert "Joplin resource_id: abc123" in r.json()["body"]
+            assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["hiking"]
+            db_note = session.get(type(note), note.id)
+            assert db_note.has_images is True
+            assert "![img]" in db_note.body  # the mirror keeps the real body
+        finally:
+            app.dependency_overrides.pop(get_joplin_client, None)

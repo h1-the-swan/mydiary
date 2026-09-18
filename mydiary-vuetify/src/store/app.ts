@@ -13,6 +13,10 @@ import {
     SpellingBeeHiveRead,
     readSpellingBeeWordsList,
     readSpellingBeeHivesList,
+    TagRead,
+    TagNamespaceRead,
+    readTags,
+    readTagNamespaces,
 } from '@/api'
 
 // export const useAppStore = defineStore('app', {
@@ -75,6 +79,17 @@ export const useAppStore = defineStore('app', () => {
         })
     }
 
+    // every tag, as the backend orders them (bare tags first, then by
+    // namespace and slug); the chips' suggestion list and the tags index
+    const tags = ref<TagRead[]>()
+    async function loadTags() {
+        tags.value = await readTags({ limit: 5000 }).then((res) => res.data)
+    }
+    const tagNamespaces = ref<TagNamespaceRead[]>()
+    async function loadTagNamespaces() {
+        tagNamespaces.value = await readTagNamespaces().then((res) => res.data)
+    }
+
     return {
         performSongs,
         loadPerformSongs,
@@ -88,5 +103,9 @@ export const useAppStore = defineStore('app', () => {
         loadSpellingBeeWords,
         spellingBeeHives,
         loadSpellingBeeHives,
+        tags,
+        loadTags,
+        tagNamespaces,
+        loadTagNamespaces,
     }
 })

@@ -5,6 +5,7 @@ import requests
 import io
 import json
 import secrets
+import threading
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
@@ -20,17 +21,36 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi import BackgroundTasks, Body
+from dataclasses import asdict
 import pydantic
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import desc, all_
+from sqlalchemy import desc, all_, String, cast, or_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
 
 from mydiary.joplin_connector import MyDiaryJoplin
 from .db import Session, engine, select, func, get_db_status
+from .hashtags import slugify_tag, tag_key
+from .tags import (
+    ENTITY_KINDS,
+    SOURCE_NOTE,
+    UnknownTargetType,
+    delete_tag,
+    kind_for,
+    namespace_label,
+    namespaces,
+    resolve_tag,
+    set_target_tags,
+    tag_by_key,
+    tag_link_counts,
+    tag_targets,
+    tags_for_target,
+    tags_for_targets,
+)
 from .models import (
     Recipe,
     RecipeBase,
@@ -47,6 +67,7 @@ from .models import (
     SpotifyTrackHistoryFrozen,
     Tag,
     TagBase,
+    TagLink,
     PocketArticle,
     PocketArticleBase,
     PocketArticleUpdate,
@@ -86,11 +107,74 @@ class GoogleCalendarEventRead(GoogleCalendarEvent):
 
 
 class TagRead(TagBase):
-    num_pocket_articles: Optional[int] = None
+    id: int
+    key: str
+    created_at: datetime
+    # how many things carry the tag; None where a route did not count
+    num_links: Optional[int] = None
+
+
+class TargetTagRead(TagRead):
+    # how the tag got onto this target: "note", "manual" or "pocket"
+    source: str
+
+
+class TagUpdate(SQLModel):
+    name: Optional[str] = None
+    namespace: Optional[str] = None
+    slug: Optional[str] = None
+
+
+class ResolvedRefRead(SQLModel):
+    kind: str
+    id: str
+    label: str
+    frontend_route: Optional[str] = None
+
+
+class TargetRefRead(SQLModel):
+    kind: str
+    id: str
+    label: str
+    source: str
+    frontend_route: Optional[str] = None
+
+
+class TagDetailRead(TagRead):
+    resolved: Optional[ResolvedRefRead] = None
+    targets: List[TargetRefRead] = []
+
+
+class TagNamespaceRead(SQLModel):
+    namespace: str
+    label: str
+    plural: str
+    resolvable: bool
+    num_tags: int
+
+
+class TagSyncResult(SQLModel):
+    notes_checked: int = 0
+    notes_synced: int = 0
+    tags_added: int = 0
+    tags_removed: int = 0
+    # True when the all-notes sync was handed to a background task; poll
+    # GET /tags/sync/status for the outcome
+    started: bool = False
+    run_id: Optional[int] = None
+
+
+class TagSyncStatus(SQLModel):
+    running: bool = False
+    # counts background runs since the process started
+    run_id: int = 0
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    last: Optional[TagSyncResult] = None
+    error: Optional[str] = None
 
 
 class PocketArticleRead(PocketArticleBase):
-    # tags_: List[TagRead] = Field(alias="tags")
     tags: List[TagRead] = []
 
 
@@ -295,6 +379,15 @@ def get_session():
         yield session
 
 
+def parse_dt(dt: str, tz: str = "local") -> pendulum.DateTime:
+    """The `dt` path/query idiom shared by the Joplin routes."""
+    if dt == "today":
+        return pendulum.today(tz=tz)
+    if dt == "yesterday":
+        return pendulum.yesterday(tz=tz)
+    return pendulum.parse(dt, tz=tz)
+
+
 def img_number_from_nextcloud_path(nextcloud_path: str) -> Optional[str]:
     """Trailing camera counter from a Nextcloud auto-upload filename.
 
@@ -362,6 +455,51 @@ def scheduled_owntracks_sync():
     logger.info(f"{num_saved} owntracks locations saved")
 
 
+# One background note sync at a time, and a record of the last one, so the
+# UI can poll for the outcome of a sync it started instead of reloading blind.
+_note_sync_lock = threading.Lock()
+note_sync_status = TagSyncStatus()
+
+
+def reset_note_sync_status() -> None:
+    global note_sync_status
+    note_sync_status = TagSyncStatus()
+
+
+def run_full_note_sync(force: bool = False):
+    """Mirror every changed diary note from Joplin and re-sync its tags.
+
+    Shared by the hourly job and POST /tags/sync. Opens its own session and
+    client because it runs outside any request (a request's dependencies are
+    closed before a background task starts). Never raises: an unreachable
+    Joplin is logged into the status, and the next run picks up where this
+    one left off. A run that overlaps another is skipped."""
+    if not _note_sync_lock.acquire(blocking=False):
+        logger.info("joplin note sync already running; skipping this run")
+        return None
+    note_sync_status.running = True
+    note_sync_status.started_at = pendulum.now("UTC")
+    note_sync_status.error = None
+    try:
+        with Session(engine) as session, MyDiaryJoplin(init_config=False) as j:
+            summary = j.sync_notes_from_api(session, force=force)
+        note_sync_status.last = TagSyncResult(**asdict(summary))
+        logger.info(f"joplin note sync: {summary}")
+        return summary
+    except Exception as e:
+        logger.exception("joplin note sync failed")
+        note_sync_status.error = str(e) or type(e).__name__
+        return None
+    finally:
+        note_sync_status.running = False
+        note_sync_status.finished_at = pendulum.now("UTC")
+        _note_sync_lock.release()
+
+
+def scheduled_joplin_note_sync():
+    run_full_note_sync()
+
+
 scheduler = BackgroundScheduler()
 
 apscheduler_logger = logging.getLogger("apscheduler")
@@ -403,6 +541,11 @@ async def lifespan(app: FastAPI):
             CronTrigger.from_crontab("25 * * * *"),
             misfire_grace_time=None,
         )  # At 25 minutes past the hour
+        scheduler.add_job(
+            scheduled_joplin_note_sync,
+            CronTrigger.from_crontab("40 * * * *"),
+            misfire_grace_time=None,
+        )  # At 40 minutes past the hour: notes edited in the Joplin app, and their tags
         # nothing writes a map into a note on a schedule: that is a manual action,
         # via the "Add map to note" button or POST /owntracks/map/{dt}/to_note
         # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
@@ -488,26 +631,274 @@ def read_gcal_events(
     return events
 
 
+def _kind_or_404(target_type: str):
+    try:
+        return kind_for(target_type)
+    except UnknownTargetType as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+def _tag_read(
+    tag: Tag, counts: Optional[Dict[int, int]] = None, source: Optional[str] = None
+) -> TagRead:
+    data = {
+        "key": tag.key,
+        "num_links": counts.get(tag.id, 0) if counts is not None else None,
+    }
+    if source is not None:
+        return TargetTagRead.model_validate(tag, update={**data, "source": source})
+    return TagRead.model_validate(tag, update=data)
+
+
+def _tag_detail(session: Session, tag: Tag) -> TagDetailRead:
+    resolved = resolve_tag(session, tag)
+    num_links = session.exec(
+        select(func.count()).where(TagLink.tag_id == tag.id)
+    ).one()
+    return TagDetailRead.model_validate(
+        tag,
+        update={
+            "key": tag.key,
+            "num_links": num_links,
+            "resolved": ResolvedRefRead(**asdict(resolved)) if resolved else None,
+            "targets": [TargetRefRead(**asdict(t)) for t in tag_targets(session, tag)],
+        },
+    )
+
+
+def _target_tag_reads(session: Session, target_type: str, target_id: str):
+    return [
+        _tag_read(tag, source=source)
+        for tag, source in tags_for_target(session, target_type, target_id)
+    ]
+
+
 @app.get("/tags", operation_id="readTags", response_model=List[TagRead])
 def read_tags(
     *,
     session: Session = Depends(get_session),
+    namespace: Optional[str] = Query(
+        None, description='Exact namespace; "" for tags without one'
+    ),
+    q: Optional[str] = Query(None, description="Substring of name, slug or namespace"),
+    target_type: Optional[str] = Query(
+        None, description="Only tags attached to at least one thing of this kind"
+    ),
     offset: int = 0,
-    limit: int = Query(default=100, lte=1000),
-    is_pocket_tag: Optional[bool] = None,
+    limit: int = Query(default=1000, le=5000),
 ):
     stmt = select(Tag)
-    if is_pocket_tag is not None:
-        stmt = stmt.where(Tag.is_pocket_tag == is_pocket_tag)
-    stmt = stmt.offset(offset).limit(limit)
-    tags: List[Tag] = session.exec(stmt).all()
-    ret: List[TagRead] = []
-    for tag in tags:
-        num_pocket_articles = len(tag.pocket_articles)
-        item = TagRead.model_validate(tag)
-        item.num_pocket_articles = num_pocket_articles
-        ret.append(item)
-    return ret
+    if namespace is not None:
+        stmt = stmt.where(Tag.namespace == namespace)
+    if q:
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Tag.name).like(like),
+                Tag.slug.like(like),
+                Tag.namespace.like(like),
+            )
+        )
+    if target_type is not None:
+        _kind_or_404(target_type)
+        stmt = stmt.where(
+            Tag.id.in_(
+                select(TagLink.tag_id).where(TagLink.target_type == target_type)
+            )
+        )
+    stmt = stmt.order_by(Tag.namespace, Tag.slug).offset(offset).limit(limit)
+    tags = session.exec(stmt).all()
+    counts = tag_link_counts(session)
+    return [_tag_read(tag, counts) for tag in tags]
+
+
+@app.get(
+    "/tags/namespaces",
+    operation_id="readTagNamespaces",
+    response_model=List[TagNamespaceRead],
+)
+def read_tag_namespaces(*, session: Session = Depends(get_session)):
+    out = []
+    for ns, num_tags in namespaces(session):
+        label, plural = namespace_label(ns)
+        kind = ENTITY_KINDS.get(ns) if ns else None
+        out.append(
+            TagNamespaceRead(
+                namespace=ns,
+                label=label,
+                plural=plural,
+                resolvable=bool(kind is not None and kind.resolve is not None),
+                num_tags=num_tags,
+            )
+        )
+    return out
+
+
+@app.get("/tags/lookup", operation_id="readTagByKey", response_model=TagDetailRead)
+def read_tag_by_key(
+    *,
+    session: Session = Depends(get_session),
+    key: str = Query(..., description="namespace:slug, or a bare slug"),
+):
+    # a query parameter rather than a path segment, so a bare tag called
+    # "lookup" or "sync" stays reachable
+    try:
+        tag = tag_by_key(session, key)
+    except ValueError:
+        tag = None
+    if tag is None:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return _tag_detail(session, tag)
+
+
+@app.post("/tags/sync", operation_id="syncTags", response_model=TagSyncResult)
+def sync_tags(
+    *,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    dt: Optional[str] = Query(None, description="One day; omit for every note"),
+    tz: str = "local",
+    force: bool = Query(False, description="Re-fetch notes that look unchanged"),
+):
+    """Pull notes from Joplin into the database and re-read their hashtags.
+
+    One day is synchronous. Every note is one Joplin request per changed
+    note, too long to hold an HTTP request open through the proxy, so it is
+    handed to a background task and `started` comes back true."""
+    if dt is None:
+        # marked running here, not in the task, so a poll that lands before
+        # the task has started still sees it as in progress
+        note_sync_status.run_id += 1
+        note_sync_status.running = True
+        background_tasks.add_task(run_full_note_sync, force=force)
+        return TagSyncResult(started=True, run_id=note_sync_status.run_id)
+    summary = mydiary_joplin.sync_one_day(session, parse_dt(dt, tz))
+    return TagSyncResult(**asdict(summary))
+
+
+@app.get(
+    "/tags/sync/status", operation_id="readTagSyncStatus", response_model=TagSyncStatus
+)
+def read_tag_sync_status():
+    """Whether a background note sync is running, and how the last one went."""
+    return note_sync_status
+
+
+@app.get("/tags/{tag_id}", operation_id="readTag", response_model=TagDetailRead)
+def read_tag(*, session: Session = Depends(get_session), tag_id: int):
+    tag = session.get(Tag, tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return _tag_detail(session, tag)
+
+
+@app.patch("/tags/{tag_id}", operation_id="updateTag", response_model=TagRead)
+def update_tag(
+    *,
+    session: Session = Depends(get_session),
+    tag_id: int,
+    tag_update: TagUpdate,
+):
+    tag = session.get(Tag, tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    data = tag_update.model_dump(exclude_unset=True)
+    namespace, slug = tag.namespace, tag.slug
+    try:
+        if "namespace" in data:
+            namespace = slugify_tag(data["namespace"]) if data["namespace"] else ""
+        if "slug" in data:
+            slug = slugify_tag(data["slug"] or "")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if (namespace, slug) != (tag.namespace, tag.slug):
+        note_links = session.exec(
+            select(func.count()).where(
+                TagLink.tag_id == tag.id, TagLink.source == SOURCE_NOTE
+            )
+        ).one()
+        if note_links:
+            # the next sync would read the old hashtag and recreate it
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"#{tag.key} is written in {note_links} note(s); change it there "
+                    "and sync again, or edit the name instead"
+                ),
+            )
+        clash = session.exec(
+            select(Tag).where(Tag.namespace == namespace, Tag.slug == slug)
+        ).one_or_none()
+        if clash is not None and clash.id != tag.id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"a tag with key {tag_key(namespace, slug)} already exists",
+            )
+        if tag.name == tag.slug:
+            tag.name = slug  # the label was the default; keep it so
+        tag.namespace, tag.slug = namespace, slug
+    if data.get("name"):
+        tag.name = data["name"].strip()
+    session.add(tag)
+    session.commit()
+    session.refresh(tag)
+    return _tag_read(tag, tag_link_counts(session))
+
+
+@app.delete("/tags/{tag_id}", operation_id="deleteTag")
+def delete_tag_route(*, session: Session = Depends(get_session), tag_id: int):
+    tag = session.get(Tag, tag_id)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    delete_tag(session, tag)
+    return {"ok": True}
+
+
+@app.get(
+    "/tagged/{target_type}/{target_id}",
+    operation_id="readTargetTags",
+    response_model=List[TargetTagRead],
+)
+def read_target_tags(
+    *, session: Session = Depends(get_session), target_type: str, target_id: str
+):
+    _kind_or_404(target_type)
+    return _target_tag_reads(session, target_type, target_id)
+
+
+@app.put(
+    "/tagged/{target_type}/{target_id}",
+    operation_id="setTargetTags",
+    response_model=List[TargetTagRead],
+)
+def set_target_tags_route(
+    *,
+    session: Session = Depends(get_session),
+    target_type: str,
+    target_id: str,
+    keys: List[str] = Body(..., description="Tag keys: namespace:slug or slug"),
+):
+    """Replace the manually set tags on one thing. Tags that come from a
+    note's hashtags stay whatever this list says."""
+    _kind_or_404(target_type)
+    try:
+        set_target_tags(session, target_type, target_id, keys)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _target_tag_reads(session, target_type, target_id)
+
+
+def _pocket_article_reads(
+    session: Session, articles: List[PocketArticle]
+) -> List[PocketArticleRead]:
+    tags_by_id = tags_for_targets(session, "article", [str(a.id) for a in articles])
+    return [
+        PocketArticleRead.model_validate(
+            a, update={"tags": [_tag_read(t) for t in tags_by_id[str(a.id)]]}
+        )
+        for a in articles
+    ]
 
 
 @app.get(
@@ -528,7 +919,7 @@ def read_pocket_articles(
     offset: int = 0,
     limit: int = Query(default=100),
     status: Optional[Set[int]] = Query(None),
-    tags: Optional[str] = Query(None, description="Tag names (comma separated"),
+    tags: Optional[str] = Query(None, description="Tag keys (comma separated)"),
     dateMin: Optional[str] = Query(None),
     dateMax: Optional[str] = Query(None),
     year: Optional[int] = Query(
@@ -543,8 +934,20 @@ def read_pocket_articles(
     if status is not None:
         stmt = stmt.where(PocketArticle.status.in_([PocketStatusEnum(s) for s in status]))
     if tags:
-        for t in tags.split(","):
-            stmt = stmt.where(PocketArticle.tags.any(Tag.name == t))
+        for key in tags.split(","):
+            try:
+                tag = tag_by_key(session, key)
+            except ValueError:
+                tag = None
+            if tag is None:
+                return []  # nothing carries a tag that does not exist
+            stmt = stmt.where(
+                cast(PocketArticle.id, String).in_(
+                    select(TagLink.target_id).where(
+                        TagLink.tag_id == tag.id, TagLink.target_type == "article"
+                    )
+                )
+            )
 
     if dateMin:
         stmt = stmt.where(PocketArticle.time_added >= dateMin)
@@ -557,7 +960,7 @@ def read_pocket_articles(
         stmt = stmt.where(PocketArticle.time_added >= dt.start_of("year"))
         stmt = stmt.where(PocketArticle.time_added < dt.end_of("year"))
     articles = session.exec(stmt.offset(offset).limit(limit)).all()
-    return articles
+    return _pocket_article_reads(session, articles)
 
 
 @app.patch(
@@ -582,8 +985,7 @@ def update_pocket_article(
         post_commit=False,
     )
     session.commit()
-    # session.refresh(db_article)
-    return db_article
+    return _pocket_article_reads(session, [db_article])[0]
 
 
 @app.get(
@@ -731,9 +1133,19 @@ async def day_init_markdown(
 def joplin_get_note(
     note_id: str,
     remove_image_refs: bool = False,
+    session: Session = Depends(get_session),
     mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
 ):
     note = mydiary_joplin.get_note(note_id)
+    # A read that also writes, on purpose: this is the moment the app holds the
+    # note exactly as Joplin has it, so the database mirror (body, words, tags)
+    # is refreshed here instead of waiting for the hourly sync. Idempotent, and
+    # never allowed to break the view.
+    try:
+        mydiary_joplin.sync_note_api_to_db_obj(note, session=session)
+    except Exception:
+        logger.exception(f"could not mirror note {note_id} to the database")
+        session.rollback()
     if remove_image_refs is True:
         note.body = re.sub(
             r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", r"[Joplin resource_id: \1]", note.body
