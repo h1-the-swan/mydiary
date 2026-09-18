@@ -160,9 +160,13 @@ export const PocketStatusEnum = {
 } as const;
 
 export interface TagRead {
+  namespace?: string;
+  slug: string;
   name: string;
-  is_pocket_tag?: boolean;
-  num_pocket_articles?: number | null;
+  id: number;
+  key: string;
+  created_at: string;
+  num_links?: number | null;
 }
 
 export interface PocketArticleRead {
@@ -214,6 +218,13 @@ export interface RecipeRead {
   upvotes?: number;
   notes?: string | null;
   id: number;
+}
+
+export interface ResolvedRefRead {
+  kind: string;
+  id: string;
+  label: string;
+  frontend_route?: string | null;
 }
 
 /**
@@ -324,6 +335,59 @@ export interface SpotifyTrackHistoryRead {
   track: SpotifyTrackBase;
 }
 
+export interface TargetRefRead {
+  kind: string;
+  id: string;
+  label: string;
+  source: string;
+  frontend_route?: string | null;
+}
+
+export interface TagDetailRead {
+  namespace?: string;
+  slug: string;
+  name: string;
+  id: number;
+  key: string;
+  created_at: string;
+  num_links?: number | null;
+  resolved?: ResolvedRefRead | null;
+  targets?: TargetRefRead[];
+}
+
+export interface TagNamespaceRead {
+  namespace: string;
+  label: string;
+  plural: string;
+  resolvable: boolean;
+  num_tags: number;
+}
+
+export interface TagSyncResult {
+  notes_checked?: number;
+  notes_synced?: number;
+  tags_added?: number;
+  tags_removed?: number;
+  started?: boolean;
+}
+
+export interface TagUpdate {
+  name?: string | null;
+  namespace?: string | null;
+  slug?: string | null;
+}
+
+export interface TargetTagRead {
+  namespace?: string;
+  slug: string;
+  name: string;
+  id: number;
+  key: string;
+  created_at: string;
+  num_links?: number | null;
+  source: string;
+}
+
 export interface TimeZoneChange {
   changed_at: string;
   tz_before: string;
@@ -346,9 +410,42 @@ limit?: number;
 };
 
 export type ReadTagsParams = {
+/**
+ * Exact namespace; "" for tags without one
+ */
+namespace?: string | null;
+/**
+ * Substring of name, slug or namespace
+ */
+q?: string | null;
+/**
+ * Only tags attached to at least one thing of this kind
+ */
+target_type?: string | null;
 offset?: number;
+/**
+ * @maximum 5000
+ */
 limit?: number;
-is_pocket_tag?: boolean | null;
+};
+
+export type ReadTagByKeyParams = {
+/**
+ * namespace:slug, or a bare slug
+ */
+key: string;
+};
+
+export type SyncTagsParams = {
+/**
+ * One day; omit for every note
+ */
+dt?: string | null;
+tz?: string;
+/**
+ * Re-fetch notes that look unchanged
+ */
+force?: boolean;
 };
 
 export type ReadPocketArticlesParams = {
@@ -356,7 +453,7 @@ offset?: number;
 limit?: number;
 status?: number[] | null;
 /**
- * Tag names (comma separated
+ * Tag keys (comma separated)
  */
 tags?: string | null;
 dateMin?: string | null;
@@ -613,6 +710,112 @@ export const readTags = (
       `/tags`,{
     ...options,
         params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Read Tag Namespaces
+ */
+export const readTagNamespaces = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagNamespaceRead[]>> => {
+    return axios.get(
+      `/tags/namespaces`,options
+    );
+  }
+
+/**
+ * @summary Read Tag By Key
+ */
+export const readTagByKey = (
+    params: ReadTagByKeyParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagDetailRead>> => {
+    return axios.get(
+      `/tags/lookup`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * Pull notes from Joplin into the database and re-read their hashtags.
+ *
+ * One day is synchronous. Every note is one Joplin request per changed
+ * note, too long to hold an HTTP request open through the proxy, so it is
+ * handed to a background task and `started` comes back true.
+ * @summary Sync Tags
+ */
+export const syncTags = (
+    params?: SyncTagsParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagSyncResult>> => {
+    return axios.post(
+      `/tags/sync`,
+      undefined,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Read Tag
+ */
+export const readTag = (
+    tagId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagDetailRead>> => {
+    return axios.get(
+      `/tags/${tagId}`,options
+    );
+  }
+
+/**
+ * @summary Update Tag
+ */
+export const updateTag = (
+    tagId: number,
+    tagUpdate: TagUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TagRead>> => {
+    return axios.patch(
+      `/tags/${tagId}`,
+      tagUpdate,options
+    );
+  }
+
+/**
+ * @summary Delete Tag Route
+ */
+export const deleteTag = (
+    tagId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.delete(
+      `/tags/${tagId}`,options
+    );
+  }
+
+/**
+ * @summary Read Target Tags
+ */
+export const readTargetTags = (
+    targetType: string,
+    targetId: string, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TargetTagRead[]>> => {
+    return axios.get(
+      `/tagged/${targetType}/${targetId}`,options
+    );
+  }
+
+/**
+ * Replace the manually set tags on one thing. Tags that come from a
+ * note's hashtags stay whatever this list says.
+ * @summary Set Target Tags Route
+ */
+export const setTargetTags = (
+    targetType: string,
+    targetId: string,
+    setTargetTagsBody: string[], options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TargetTagRead[]>> => {
+    return axios.put(
+      `/tagged/${targetType}/${targetId}`,
+      setTargetTagsBody,options
     );
   }
 
@@ -1376,6 +1579,14 @@ export type RefreshGCalTokenResult = AxiosResponse<unknown>
 export type CheckGCalAuthResult = AxiosResponse<unknown>
 export type ReadGCalEventsResult = AxiosResponse<GoogleCalendarEventRead[]>
 export type ReadTagsResult = AxiosResponse<TagRead[]>
+export type ReadTagNamespacesResult = AxiosResponse<TagNamespaceRead[]>
+export type ReadTagByKeyResult = AxiosResponse<TagDetailRead>
+export type SyncTagsResult = AxiosResponse<TagSyncResult>
+export type ReadTagResult = AxiosResponse<TagDetailRead>
+export type UpdateTagResult = AxiosResponse<TagRead>
+export type DeleteTagResult = AxiosResponse<unknown>
+export type ReadTargetTagsResult = AxiosResponse<TargetTagRead[]>
+export type SetTargetTagsResult = AxiosResponse<TargetTagRead[]>
 export type CountPocketArticlesResult = AxiosResponse<number>
 export type ReadPocketArticlesResult = AxiosResponse<PocketArticleRead[]>
 export type UpdatePocketArticleResult = AxiosResponse<PocketArticleRead>

@@ -74,6 +74,14 @@
                                 label="Learned on"
                             ></v-text-field>
                         </v-col>
+                        <v-col v-if="props.performSong" cols="12">
+                            <!-- saved as you go, separately from the form -->
+                            <tag-chips
+                                target-type="song"
+                                :target-id="String(props.performSong.id)"
+                                editable
+                            />
+                        </v-col>
                     </v-row>
                 </v-container>
             </v-card-text>
@@ -118,6 +126,7 @@ import {
     deletePerformSong,
 } from '@/api'
 import { useAppStore } from '@/store/app'
+import TagChips from '@/components/TagChips.vue'
 import { useRouter } from 'vue-router'
 const date = useDate()
 const props = defineProps<{

@@ -32,6 +32,13 @@
 
         <div v-if="diaryNoteExists" class="reading mb-8">
             <section-header label="Diary note" />
+            <tag-chips
+                class="mb-4"
+                target-type="day"
+                :target-id="getDateStr"
+                :reload-key="diaryNote?.id"
+                editable
+            />
             <v-expansion-panels>
                 <v-expansion-panel>
                     <v-expansion-panel-title>
@@ -42,6 +49,7 @@
                         <v-progress-linear v-if="!diaryNote" indeterminate />
                         <div
                             v-else-if="diaryNote.body"
+                            v-router-links
                             class="prose"
                             v-html="md.render(diaryNote.body)"
                         ></div>
@@ -100,7 +108,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import axios from 'axios'
-import markdownit from 'markdown-it'
+import { md } from '@/markdown'
 import {
     joplinGetNote,
     joplinGetNoteId,
@@ -116,13 +124,13 @@ import SectionHeader from '@/components/SectionHeader.vue'
 // import JoplinSyncButton from '@/components/JoplinSyncButton.vue'
 import PhotosSection from '@/components/PhotosSection.vue'
 import MapSection from '@/components/MapSection.vue'
+import TagChips from '@/components/TagChips.vue'
 import { useAppStore } from '@/store/app'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
 const route = useRoute()
 const app = useAppStore()
 const initMarkdown = ref('')
-const md = markdownit()
 const joplinNoteId = ref('')
 const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])

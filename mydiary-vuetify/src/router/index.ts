@@ -63,6 +63,23 @@ const routes = [
                 props: true,
             },
             {
+                path: '/tags',
+                name: 'tags',
+                component: () =>
+                    import(/* webpackChunkName: "tags" */ '@/views/Tags.vue'),
+            },
+            {
+                // not `:key`: Vue reserves that prop name, and <router-view>
+                // would swallow it instead of passing it to the page
+                path: '/tags/:tagKey',
+                name: 'tag',
+                component: () =>
+                    import(
+                        /* webpackChunkName: "tags" */ '@/views/TagDetail.vue'
+                    ),
+                props: true,
+            },
+            {
                 path: '/pocket',
                 name: 'pocket',
                 component: () =>

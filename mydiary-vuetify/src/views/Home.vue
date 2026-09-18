@@ -45,6 +45,12 @@ const links = [
     icon: 'mdi-notebook',
   },
   {
+    name: 'tags',
+    title: 'Tags',
+    subtitle: 'Everything you’ve tagged, by #tag',
+    icon: 'mdi-tag-multiple-outline',
+  },
+  {
     name: 'performSongs',
     title: 'Perform Songs',
     subtitle: 'Browse the guitar songs tracker',
