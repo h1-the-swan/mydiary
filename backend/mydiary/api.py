@@ -374,26 +374,41 @@ if not apscheduler_logger.handlers:
     apscheduler_logger.addHandler(apscheduler_handler)
 
 
+def scheduler_is_enabled() -> bool:
+    # On by default. A second stack (a git worktree) turns it off, because both
+    # stacks would poll Spotify hourly against one shared token cache file, and
+    # a refresh by one invalidates the other's token. See
+    # docker-compose.worktree.yaml.
+    return os.getenv("MYDIARY_ENABLE_SCHEDULER", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # logger.info('lifespan startup!')
     # print('lifespan startup!')
-    scheduler.add_job(
-        scheduled_spotify_save_recent_tracks,
-        CronTrigger.from_crontab("10 * * * *"),
-        # sleep/suspend (e.g. WSL2 host sleeping) makes wakeups miss the default
-        # 1-second misfire grace time; run the job however late it fires
-        misfire_grace_time=None,
-    )  # At 10 minutes past the hour
-    scheduler.add_job(
-        scheduled_owntracks_sync,
-        CronTrigger.from_crontab("25 * * * *"),
-        misfire_grace_time=None,
-    )  # At 25 minutes past the hour
-    # nothing writes a map into a note on a schedule: that is a manual action,
-    # via the "Add map to note" button or POST /owntracks/map/{dt}/to_note
-    # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
-    scheduler.start()
+    if scheduler_is_enabled():
+        scheduler.add_job(
+            scheduled_spotify_save_recent_tracks,
+            CronTrigger.from_crontab("10 * * * *"),
+            # sleep/suspend (e.g. WSL2 host sleeping) makes wakeups miss the default
+            # 1-second misfire grace time; run the job however late it fires
+            misfire_grace_time=None,
+        )  # At 10 minutes past the hour
+        scheduler.add_job(
+            scheduled_owntracks_sync,
+            CronTrigger.from_crontab("25 * * * *"),
+            misfire_grace_time=None,
+        )  # At 25 minutes past the hour
+        # nothing writes a map into a note on a schedule: that is a manual action,
+        # via the "Add map to note" button or POST /owntracks/map/{dt}/to_note
+        # scheduler.add_job(lambda: logger.info("heartbeat"), "interval", minutes=1)
+        scheduler.start()
+    else:
+        logger.info("scheduler disabled via MYDIARY_ENABLE_SCHEDULER")
     yield
     from .nextcloud_connector import close_async_client
 
@@ -417,8 +432,12 @@ async def testhealthcheck():
 
 
 @app.get("/db_status", operation_id="dbStatus")
-async def db_status(more: bool = False) -> Dict[str, Any]:
-    return get_db_status(more=more)
+async def db_status(
+    more: bool = False, session: Session = Depends(get_session)
+) -> Dict[str, Any]:
+    # Report on the session's own engine rather than the module global, so this
+    # says something about the database the rest of the app is actually using.
+    return get_db_status(more=more, engine=session.get_bind())
 
 
 @app.get("/gcal/get_auth_url", operation_id="getGCalAuthUrl", response_model=str)
