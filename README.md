@@ -48,6 +48,12 @@ I mainly use [Spotify](https://www.spotify.com) to listen to music. Mydiary uses
 
 ### .env files
 
+There's a committed `.env.example` beside each of the three `.env` files —
+`.env.example`, `backend/.env.example` and `mydiary-vuetify/.env.example` —
+listing every key with a comment on what it's for and where to get it. Copying
+those and filling in the blanks is the quickest route; the rest of this section
+explains the ones with a story behind them.
+
 Set the following environment variables in `backend/.env`:
 
 ```
@@ -95,6 +101,30 @@ container, environment and all, so Compose never re-reads `env_file`. The
 frontend is fine with a restart, since Vite reads its `.env` off disk each time
 it starts — which makes for a confusing failure where the browser map comes back
 clean and the rendered map images are still watermarked.
+
+### Working on a branch in a git worktree
+
+A second checkout can run its own stack next to the main one, on its own ports,
+so a feature doesn't have to stop the app you use every day:
+
+```sh
+git worktree add ../mydiary-<feature> -b <feature>
+cd ../mydiary-<feature>
+scripts/bootstrap-worktree.sh --db snapshot   # or --db empty
+docker compose up -d
+```
+
+The script shares the credentials with the primary checkout rather than copying
+them, finds free ports, and turns off the things that don't tolerate a second
+stack: the Tailscale sidecar, the hourly sync jobs, and Vite's hot-reload
+socket, which would otherwise connect to the other stack. Run it with `--help`
+for the `--db` tradeoff, which is a real choice each time — a snapshot gives you
+the real diary to develop against but forks from it immediately, while an empty
+database gives you a working app with nothing in it.
+
+Joplin and the OwnTracks recorder stay shared, since each is a single instance
+on the host. Reads are fine; a worktree stack writing to Joplin edits the real
+notes. CLAUDE.md has the full detail.
 
 ### Alembic
 
