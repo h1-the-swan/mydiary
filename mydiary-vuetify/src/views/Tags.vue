@@ -18,7 +18,7 @@
 
         <v-progress-linear v-if="!app.tags || !app.tagNamespaces" indeterminate />
 
-        <div v-else-if="!app.tags.length" class="reading text-body-1 text-medium-emphasis">
+        <div v-else-if="!usedTags.length" class="reading text-body-1 text-medium-emphasis">
             No tags yet. Write <code>#hiking</code> or <code>#dog:ruffles</code> in a diary
             note, or add tags to a day or a song, and they show up here.
         </div>
@@ -41,6 +41,10 @@
             </section>
             <p v-if="search && !groups.length" class="text-medium-emphasis">
                 No tags match “{{ search }}”.
+            </p>
+            <p v-if="hiddenUnused" class="text-body-2 text-medium-emphasis">
+                {{ hiddenUnused }} {{ hiddenUnused === 1 ? 'tag' : 'tags' }} with nothing on
+                {{ hiddenUnused === 1 ? 'it' : 'them' }} not shown.
             </p>
         </template>
 
@@ -69,10 +73,15 @@ const syncing = ref(false)
 const snackbar = ref(false)
 const snackbarText = ref('')
 
+// a tag with no links (every link removed, or a hashtag since edited out of
+// its note) still exists, but the index is about what is in use
+const usedTags = computed(() => (app.tags ?? []).filter((tag) => (tag.num_links ?? 0) > 0))
+const hiddenUnused = computed(() => (app.tags?.length ?? 0) - usedTags.value.length)
+
 const groups = computed(() => {
     const needle = (search.value || '').trim().toLowerCase()
     const byNamespace = new Map<string, TagRead[]>()
-    for (const tag of app.tags ?? []) {
+    for (const tag of usedTags.value) {
         if (needle && !`${tag.key} ${tag.name}`.toLowerCase().includes(needle)) continue
         const list = byNamespace.get(tag.namespace ?? '') ?? []
         list.push(tag)
