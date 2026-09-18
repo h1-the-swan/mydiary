@@ -1,0 +1,39 @@
+# Overlay for a stack running out of a git worktree, applied automatically via
+# COMPOSE_FILE in the worktree's root .env (written by
+# scripts/bootstrap-worktree.sh, which also sets MYDIARY_PRIMARY_ROOT).
+#
+# This is a patch, not a copy: it adds keys to services defined in
+# docker-compose.yaml and duplicates nothing from it. If either service below
+# is *renamed* there, rename it here too -- bootstrap-worktree.sh re-checks the
+# merged config and fails if tailscale escapes the gate.
+services:
+  tailscale:
+    # Never activated, so the sidecar does not start. TS_HOSTNAME is hardcoded
+    # to `mydiary` and the authkey is reusable, so a second node would race the
+    # real one and force a fresh Let's Encrypt cert fetch -- see the rate-limit
+    # warning under "Remote access" in CLAUDE.md. A worktree stack is reachable
+    # on localhost only.
+    profiles: ["never"]
+
+  backend:
+    environment:
+      # Both stacks would otherwise run the hourly Spotify and OwnTracks jobs.
+      # The Spotify one is the harmful case: it refreshes the shared
+      # token_cache/spotify.json, and one stack's refresh invalidates the
+      # other's token.
+      - MYDIARY_ENABLE_SCHEDULER=0
+    volumes:
+      # Mount the primary checkout's token cache, rather than linking it.
+      # bootstrap-worktree.sh also leaves host symlinks here for anything run
+      # outside Docker, but a symlink to an absolute host path is dangling
+      # *inside* the container -- the bind mount only brings ./backend in, so
+      # nothing resolves above it. The Google token is refreshed in place and
+      # this keeps there being exactly one copy of it.
+      - ${MYDIARY_PRIMARY_ROOT:?set by scripts/bootstrap-worktree.sh}/backend/token_cache:/usr/local/src/app/backend/token_cache
+
+  mydiary-vuetify:
+    volumes:
+      # Same reasoning: Vite reads this file inside the container, so a host
+      # symlink would leave VITE_CARTO_BASEMAP_KEY unset and the browser map
+      # watermarked, with nothing to indicate why.
+      - ${MYDIARY_PRIMARY_ROOT:?set by scripts/bootstrap-worktree.sh}/mydiary-vuetify/.env:/usr/local/src/app/mydiary-vuetify/.env:ro

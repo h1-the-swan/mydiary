@@ -32,6 +32,8 @@ dist/
 data/
 
 database.db
+# provenance note written beside a worktree's snapshot database
+database.db.snapshot-info
 *backup*.db
 *Copy*.db
 

@@ -26,7 +26,7 @@ def vacuum_db(engine=engine):
         session.exec(text("VACUUM"))
 
 
-def get_db_status(more=False):
+def get_db_status(more=False, engine=engine):
     table_names = inspect(engine).get_table_names()
 
     ret = {
