@@ -84,16 +84,19 @@ page shows the date either way.
 `source` records how the link got there:
 
 - `note`: parsed from the note body. A sync replaces these to match the body.
+- `joplin`: one of Joplin's own note-level tags. A sync replaces these to
+  match Joplin; nothing is written back (one way).
 - `manual`: set through the API or the UI. A sync never touches them.
 - `pocket`: imported with a Pocket article, together with its name as Pocket
   exported it.
 
-The primary key does not include the source, so the two writers only ever
-**ensure a link exists**. A sync adds `note` links for hashtags that have no
-link of any source yet and deletes `note` links whose hashtag is gone; a
-manual edit replaces the `manual`/`pocket` links and skips keys that already
-have a `note` link. The practical effect: a manual tag outlives the hashtag,
-and a note's tag cannot be removed from the UI while the note still says it.
+The primary key does not include the source, so every writer only ever
+**ensures a link exists** and only removes links of its own source. A key that
+already has a link under another source is left as it is. The practical
+effects: a manual tag outlives the hashtag; a tag that is both a hashtag and a
+Joplin tag is one link, which changes hands from `note` to `joplin` when the
+hashtag is edited out; and a tag that follows the note (`note` or `joplin`)
+cannot be removed from the UI, only in Joplin.
 
 SQLite does not enforce these foreign keys (the app sets no `PRAGMA
 foreign_keys`). Deleting a tag through the API removes its links explicitly.
@@ -181,6 +184,22 @@ Spotify tracks) are lists of links, which is where the false positives were.
 Every hashtag found becomes a `TagLink` with `target_type="day"`,
 `target_id=<note title>`, `source="note"`; tags are created on first sight.
 
+### Joplin's own note tags
+
+Joplin has note-level tags of its own, and the Data API exposes them
+(`GET /notes/{id}/tags`, `GET /tags`, `GET /tags/{id}/notes`). They are
+collected one way, Joplin to mydiary. A Joplin tag's title is read as a
+**key**, so a Joplin tag called `dog:ruffles` is the namespaced tag `dog:ruffles`
+(Joplin's tag box cannot type `#`, but a colon is fine) and one called
+`Saved For Later` is `saved-for-later`; the title is kept as the tag's name.
+The links carry `source="joplin"`.
+
+Two things follow from how Joplin stores this. Tagging a note does **not**
+change the note's `updated_time`, so the full sync cannot find tag changes by
+looking for changed notes; it reads from the tag side instead (see below).
+And a Joplin tag on a note outside the diary notebook, or on a note not yet
+mirrored, is ignored.
+
 ### Manual tags
 
 `PUT /tagged/{target_type}/{target_id}` with a list of keys replaces that
@@ -207,8 +226,8 @@ the `joplinnote` mirror (body, hash, flags, sync time), updates the
 
 | Path | When | What it fetches |
 |---|---|---|
-| Hourly job `scheduled_joplin_note_sync` | `:40` every hour | lists every note (100 per request, no bodies) and fetches a body only for notes that are new, whose `updated_time` moved (with a second's slack, both sides are naive local datetimes), that were never given a body, or never synced |
-| Opening a day in the app | every `GET /joplin/get_note/{id}` | that one note, mirrored before its image refs are stripped for display; a failure is logged and never breaks the view |
+| Hourly job `scheduled_joplin_note_sync` | `:40` every hour | lists every note (100 per request, no bodies) and fetches a body only for notes that are new, whose `updated_time` moved (with a second's slack, both sides are naive local datetimes), that were never given a body, or never synced. Then reconciles Joplin's note tags for every day: one listing of all Joplin tags plus one request per tag for its notes, so a tag added or removed in Joplin shows up even though the note itself did not change |
+| Opening a day in the app | every `GET /joplin/get_note/{id}` | that one note (body and its Joplin tags, two requests), mirrored before its image refs are stripped for display; a failure is logged and never breaks the view |
 | `POST /tags/sync` | on demand, and the "Sync from Joplin" button | with `dt`, one day synchronously; without, every note as above, in a background task (`started: true`), because one Joplin request per changed note is too long to hold an HTTP request open through the proxy. `force=true` re-fetches every note. `GET /tags/sync/status` says whether that task is still running and how the last one went; the button polls it and reloads the tags when it finishes |
 
 A first full sync fetches every note once. After that an hourly run is one

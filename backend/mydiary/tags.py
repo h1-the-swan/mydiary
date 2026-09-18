@@ -12,12 +12,13 @@ resolves. That is the point: you can start writing `#book:...` today, and if a
 Book table appears later the existing tags light up without any migration,
 because resolution is computed when a tag is read and never stored.
 
-Links are stored, with a `source`. Hashtags found in a note body produce
-`source="note"` links that are replaced on every sync; links set through the
-API or the UI are `source="manual"` and a sync never touches them. The primary
-key of a link does not include the source, so both writers only ever *ensure*
-a link exists: a manual link outlives the hashtag, and a note link outlives a
-manual removal until the hashtag itself goes.
+Links are stored, with a `source`: "note" for a hashtag in the note body,
+"joplin" for one of Joplin's own note-level tags (one way, Joplin -> here),
+"manual" for the API and the UI, "pocket" for an imported article tag. The
+primary key of a link does not include the source, so every writer only
+*ensures* a link exists and only removes links of its own source: a manual
+link outlives the hashtag, and a note link outlives a manual removal until the
+hashtag itself goes.
 """
 
 from dataclasses import dataclass
@@ -35,9 +36,10 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
-SOURCE_NOTE = "note"
-SOURCE_MANUAL = "manual"
-SOURCE_POCKET = "pocket"
+SOURCE_NOTE = "note"  # a hashtag in the note body
+SOURCE_JOPLIN = "joplin"  # one of Joplin's own note-level tags
+SOURCE_MANUAL = "manual"  # set through the API or the UI
+SOURCE_POCKET = "pocket"  # imported with a Pocket article
 
 # the target type a note's hashtags attach to; target_id is the note title (YYYY-MM-DD)
 DAY = "day"
@@ -353,6 +355,60 @@ def sync_note_tags(
     return result
 
 
+def _wanted_from_joplin_titles(titles: Iterable[str]) -> Dict[Tuple[str, str], Optional[str]]:
+    # a Joplin tag title is read as a key (`dog:ruffles` names a dog) and kept
+    # as the tag's label; one that has nothing slug-shaped in it is skipped
+    wanted: Dict[Tuple[str, str], Optional[str]] = {}
+    for title in titles:
+        try:
+            wanted.setdefault(parse_key(title), title)
+        except ValueError:
+            logger.warning(f"ignoring Joplin tag {title!r}: nothing slug-shaped in it")
+    return wanted
+
+
+def sync_joplin_note_tags(
+    session: Session, day: str, titles: Iterable[str], commit: bool = True
+) -> Tuple[int, int]:
+    """Make a day's joplin-sourced links match the note's tags in Joplin.
+
+    One way: what Joplin has wins for this source, and nothing is written
+    back. Returns (added, removed)."""
+    result = _ensure_links(
+        session,
+        DAY,
+        day,
+        _wanted_from_joplin_titles(titles),
+        source=SOURCE_JOPLIN,
+        remove_source=lambda s: s == SOURCE_JOPLIN,
+    )
+    if commit:
+        session.commit()
+    return result
+
+
+def sync_joplin_tags_bulk(
+    session: Session, titles_by_day: Dict[str, List[str]], commit: bool = True
+) -> Tuple[int, int]:
+    """Reconcile every day's joplin-sourced links against a full picture of
+    Joplin's tags. Days that no longer carry any Joplin tag are cleared too."""
+    days_with_links = set(
+        session.exec(
+            select(TagLink.target_id).where(
+                TagLink.target_type == DAY, TagLink.source == SOURCE_JOPLIN
+            )
+        ).all()
+    )
+    added = removed = 0
+    for day in sorted(set(titles_by_day) | days_with_links):
+        a, r = sync_joplin_note_tags(session, day, titles_by_day.get(day, []), commit=False)
+        added += a
+        removed += r
+    if commit:
+        session.commit()
+    return added, removed
+
+
 def set_target_tags(
     session: Session,
     target_type: str,
@@ -367,8 +423,9 @@ def set_target_tags(
     `keys` are `namespace:slug` strings, normalised on the way in. With
     `raw_names=True` they are display names instead (as Pocket exported
     them): no namespace is parsed out of them, and the name is kept as the
-    tag's label. Note-sourced links are never removed, and a key that already
-    has one is left as it is. Returns every tag now on the target."""
+    tag's label. Only links of the same `source` are removed; a key that
+    already has a link of any source is left as it is. Returns every tag now
+    on the target."""
     kind_for(target_type)
     wanted: Dict[Tuple[str, str], Optional[str]] = {}
     for key in keys:
@@ -383,7 +440,7 @@ def set_target_tags(
         str(target_id),
         wanted,
         source=source,
-        remove_source=lambda s: s != SOURCE_NOTE,
+        remove_source=lambda s: s == source,
     )
     if commit:
         session.commit()

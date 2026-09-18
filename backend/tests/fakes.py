@@ -30,8 +30,12 @@ class FakeJoplin(MyDiaryJoplin):
     that fetch a note. Mutate `notes` between calls to simulate edits made in
     the Joplin app."""
 
-    def __init__(self, notes: Iterable[JoplinNote]):
+    def __init__(
+        self, notes: Iterable[JoplinNote], tags: Optional[Dict[str, List[str]]] = None
+    ):
         self.notes: List[JoplinNote] = list(notes)
+        # Joplin's own note-level tags: note id -> tag titles
+        self.note_tags: Dict[str, List[str]] = {k: list(v) for k, v in (tags or {}).items()}
         self.base_url = "http://joplin.invalid"
         self.token = "fake"
         self.notebook_id = "fake-notebook"
@@ -63,6 +67,20 @@ class FakeJoplin(MyDiaryJoplin):
             if n.title == title:
                 return n.id
         return "does_not_exist"
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        return list(self.note_tags.get(note_id, []))
+
+    def yield_all_tags(self, fields: Optional[List[str]] = None) -> Iterable[Dict]:
+        titles = sorted({t for ts in self.note_tags.values() for t in ts})
+        for title in titles:
+            yield {"id": f"tag-{title}", "title": title}
+
+    def yield_tag_note_ids(self, tag_id: str) -> Iterable[str]:
+        title = tag_id[len("tag-"):]
+        for note_id, titles in self.note_tags.items():
+            if title in titles:
+                yield note_id
 
     def yield_all_mydiary_notes(self, fields: Optional[List[str]] = None) -> Iterable[Dict]:
         for n in self.notes:

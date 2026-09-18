@@ -1358,13 +1358,19 @@ class TestTags:
         from mydiary.api import get_joplin_client
         from tests.fakes import FakeJoplin, make_note
 
-        fake = FakeJoplin([make_note("2026-09-13", "## Words\n\nWalked #dog:Ruffles\n")])
+        fake = FakeJoplin(
+            [make_note("2026-09-13", "## Words\n\nWalked #dog:Ruffles\n")],
+            tags={"note-2026-09-13": ["Hiking"]},
+        )
         app.dependency_overrides[get_joplin_client] = lambda: fake
         try:
             r = client.post("/tags/sync", params={"dt": "2026-09-13"})
             assert r.status_code == 200
-            assert r.json() == {"notes_checked": 1, "notes_synced": 1, "tags_added": 1, "tags_removed": 0, "started": False, "run_id": None}
-            assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["dog:ruffles"]
+            assert r.json() == {"notes_checked": 1, "notes_synced": 1, "tags_added": 2, "tags_removed": 0, "started": False, "run_id": None}
+            assert [(t["key"], t["source"]) for t in client.get("/tagged/day/2026-09-13").json()] == [
+                ("hiking", "joplin"),
+                ("dog:ruffles", "note"),
+            ]
             # the mirror was refreshed too
             assert session.get(type(fake.notes[0]), fake.notes[0].id).has_words is True
             assert client.post("/tags/sync", params={"dt": "2026-01-01"}).json()["notes_checked"] == 0

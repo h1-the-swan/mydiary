@@ -10,7 +10,7 @@
                 v-for="tag in tags"
                 :key="tag.id"
                 :to="tagRoute(tag.key)"
-                :prepend-icon="tag.source === 'note' ? 'mdi-text' : undefined"
+                :prepend-icon="sourceIcon(tag.source)"
                 :title="chipTitle(tag)"
                 variant="tonal"
             >
@@ -18,14 +18,14 @@
             </v-chip>
         </div>
 
-        <!-- editable: the note's own tags stay put; the rest can be changed -->
+        <!-- editable: tags that follow the note stay put; the rest can be changed -->
         <div v-else>
-            <div v-if="noteTags.length" class="d-flex flex-wrap align-center ga-2 mb-2">
+            <div v-if="fixedTags.length" class="d-flex flex-wrap align-center ga-2 mb-2">
                 <v-chip
-                    v-for="tag in noteTags"
+                    v-for="tag in fixedTags"
                     :key="tag.id"
                     :to="tagRoute(tag.key)"
-                    prepend-icon="mdi-text"
+                    :prepend-icon="sourceIcon(tag.source)"
                     :title="chipTitle(tag)"
                     variant="tonal"
                 >
@@ -39,7 +39,7 @@
                 :loading="saving"
                 :error-messages="error"
                 placeholder="hiking, or dog:ruffles"
-                hint="Enter adds a tag. Tags written in the note itself are shown above and follow the note."
+                hint="Enter adds a tag. Tags written in the note, or set on it in Joplin, are shown above and follow the note."
                 persistent-hint
                 density="compact"
                 multiple
@@ -86,10 +86,20 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 
-const noteTags = computed(() => (tags.value ?? []).filter((t) => t.source === 'note'))
+// sources that follow the note in Joplin and cannot be removed here
+const FIXED_SOURCES = ['note', 'joplin']
+const isFixed = (t: TargetTagRead) => FIXED_SOURCES.includes(t.source)
+
+const fixedTags = computed(() => (tags.value ?? []).filter(isFixed))
 const suggestions = computed(() =>
-    (app.tags ?? []).map((t) => t.key).filter((k) => !noteTags.value.some((t) => t.key === k))
+    (app.tags ?? []).map((t) => t.key).filter((k) => !fixedTags.value.some((t) => t.key === k))
 )
+
+function sourceIcon(source: string): string | undefined {
+    if (source === 'note') return 'mdi-text'
+    if (source === 'joplin') return 'mdi-tag-outline'
+    return undefined
+}
 
 // the combobox's chip slot hands over a list item, or the bare string
 function keyOf(item: unknown): string {
@@ -98,7 +108,12 @@ function keyOf(item: unknown): string {
 }
 
 function chipTitle(tag: TargetTagRead): string {
-    const from = tag.source === 'note' ? 'written in the note' : `added ${tag.source === 'pocket' ? 'with the article' : 'by hand'}`
+    const from =
+        tag.source === 'note'
+            ? 'written in the note'
+            : tag.source === 'joplin'
+              ? 'a Joplin tag on the note'
+              : `added ${tag.source === 'pocket' ? 'with the article' : 'by hand'}`
     return tag.name && tag.name !== tag.slug ? `${tag.name} · ${from}` : from
 }
 
@@ -110,7 +125,7 @@ async function load() {
     loading.value = true
     try {
         tags.value = (await readTargetTags(props.targetType, props.targetId)).data
-        manualKeys.value = tags.value.filter((t) => t.source !== 'note').map((t) => t.key)
+        manualKeys.value = tags.value.filter((t) => !isFixed(t)).map((t) => t.key)
     } finally {
         loading.value = false
     }
@@ -132,7 +147,7 @@ async function onChange(values: unknown) {
     error.value = ''
     try {
         tags.value = (await setTargetTags(props.targetType, props.targetId, keys)).data
-        manualKeys.value = tags.value.filter((t) => t.source !== 'note').map((t) => t.key)
+        manualKeys.value = tags.value.filter((t) => !isFixed(t)).map((t) => t.key)
         app.loadTags()
     } catch (e: any) {
         error.value = e?.response?.data?.detail ?? 'Could not save tags'

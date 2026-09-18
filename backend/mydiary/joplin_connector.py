@@ -348,7 +348,7 @@ class MyDiaryJoplin:
         has words), and brings the day's note-sourced tag links in line with
         the hashtags in the body. Returns the tag (added, removed) counts.
         """
-        from .tags import sync_note_tags
+        from .tags import sync_joplin_note_tags, sync_note_tags
 
         if not isinstance(note, JoplinNote):
             note = self.get_note(note)
@@ -392,9 +392,13 @@ class MyDiaryJoplin:
         session.merge(note)
         session.flush()
         added, removed = sync_note_tags(session, note, commit=False)
+        # Joplin's own tags on the note, one way; a second request per note
+        j_added, j_removed = sync_joplin_note_tags(
+            session, note.title, self.get_note_tags(note.id), commit=False
+        )
         if commit is True:
             session.commit()
-        return added, removed
+        return added + j_added, removed + j_removed
 
     def _rekey_recreated_note(self, note: JoplinNote, session: Session) -> None:
         """Move a mirrored note onto a new Joplin id.
@@ -439,6 +443,55 @@ class MyDiaryJoplin:
         summary.tags_added = added
         summary.tags_removed = removed
         return summary
+
+    def _yield_pages(self, url: str, fields: List[str]) -> Generator[Dict, None, None]:
+        params = {
+            "token": self.token,
+            "fields": ",".join(fields),
+            "limit": 100,
+            "page": 1,
+        }
+        while True:
+            r = requests.get(url, params=params)
+            r.raise_for_status()
+            resp = r.json()
+            yield from resp["items"]
+            if not resp.get("has_more"):
+                return
+            params["page"] += 1
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        """Titles of Joplin's own tags on a note."""
+        return [
+            item["title"]
+            for item in self._yield_pages(f"{self.base_url}/notes/{note_id}/tags", ["id", "title"])
+        ]
+
+    def yield_all_tags(self, fields: Optional[List[str]] = None) -> Generator[Dict, None, None]:
+        yield from self._yield_pages(f"{self.base_url}/tags", fields or ["id", "title"])
+
+    def yield_tag_note_ids(self, tag_id: str) -> Generator[str, None, None]:
+        for item in self._yield_pages(f"{self.base_url}/tags/{tag_id}/notes", ["id"]):
+            yield item["id"]
+
+    def sync_joplin_tags(self, session: Session) -> Tuple[int, int]:
+        """Reconcile every diary day's joplin-sourced links with Joplin.
+
+        Tagging a note in Joplin does not change the note's updated_time, so
+        the per-note "fetch what changed" rule cannot see it. This reads from
+        the tag side instead: one listing of all tags, then one request per
+        tag for its notes. Notes outside the mirror (other notebooks, or not
+        yet fetched) are ignored."""
+        from .tags import sync_joplin_tags_bulk
+
+        title_by_note_id = dict(session.exec(select(JoplinNote.id, JoplinNote.title)).all())
+        titles_by_day: Dict[str, List[str]] = {}
+        for tag in self.yield_all_tags():
+            for note_id in self.yield_tag_note_ids(tag["id"]):
+                day = title_by_note_id.get(note_id)
+                if day is not None:
+                    titles_by_day.setdefault(day, []).append(tag["title"])
+        return sync_joplin_tags_bulk(session, titles_by_day)
 
     def sync_notes_from_api(
         self, session: Session, force: bool = False
@@ -485,6 +538,14 @@ class MyDiaryJoplin:
                 session.rollback()
                 continue
             summary.notes_synced += 1
+            summary.tags_added += added
+            summary.tags_removed += removed
+        try:
+            added, removed = self.sync_joplin_tags(session)
+        except Exception:
+            logger.exception("failed to sync Joplin's note tags")
+            session.rollback()
+        else:
             summary.tags_added += added
             summary.tags_removed += removed
         return summary

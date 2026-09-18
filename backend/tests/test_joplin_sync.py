@@ -139,3 +139,72 @@ class TestSyncAllNotes:
         assert (summary.notes_checked, summary.notes_synced, summary.tags_added) == (1, 1, 1)
         missing = joplin.sync_one_day(db_session, datetime(2026, 1, 1))
         assert (missing.notes_checked, missing.notes_synced) == (0, 0)
+
+
+class TestJoplinNoteTags:
+    """Joplin's own note-level tags, one way: Joplin -> mydiary."""
+
+    def test_note_tags_become_joplin_links(self, db_session: Session):
+        note = make_note("2026-09-13", WORDS)
+        joplin = FakeJoplin([note], tags={note.id: ["Hiking", "book:The Husbands"]})
+        added, removed = joplin.sync_note_api_to_db_obj(note.id, db_session)
+        assert (added, removed) == (3, 0)  # the hashtag plus two Joplin tags
+        got = {t.key: (t.name, src) for t, src in tags_for_target(db_session, "day", "2026-09-13")}
+        assert got == {
+            "dog:ruffles": ("ruffles", "note"),
+            "hiking": ("Hiking", "joplin"),
+            "book:the-husbands": ("book:The Husbands", "joplin"),
+        }
+
+    def test_tag_removed_in_joplin_removes_only_its_link(self, db_session: Session):
+        from mydiary.tags import set_target_tags
+
+        note = make_note("2026-09-13", "no hashtags")
+        joplin = FakeJoplin([note], tags={note.id: ["hiking", "rain"]})
+        joplin.sync_note_api_to_db_obj(note.id, db_session)
+        set_target_tags(db_session, "day", "2026-09-13", ["manual-one"])
+
+        joplin.note_tags[note.id] = ["rain"]
+        assert joplin.sync_note_api_to_db_obj(note.id, db_session) == (0, 1)
+        assert sorted(t.key for t, _ in tags_for_target(db_session, "day", "2026-09-13")) == [
+            "manual-one",
+            "rain",
+        ]
+
+    def test_hashtag_and_joplin_tag_with_the_same_key_share_one_link(self, db_session: Session):
+        note = make_note("2026-09-13", "## Words\n\n#hiking\n")
+        joplin = FakeJoplin([note], tags={note.id: ["hiking"]})
+        joplin.sync_note_api_to_db_obj(note.id, db_session)
+        ((tag, source),) = tags_for_target(db_session, "day", "2026-09-13")
+        assert (tag.key, source) == ("hiking", "note")
+        # the hashtag goes, the Joplin tag stays: the link changes hands
+        note.body = "## Words\n\nnothing\n"
+        joplin.sync_note_api_to_db_obj(note.id, db_session)
+        ((tag, source),) = tags_for_target(db_session, "day", "2026-09-13")
+        assert (tag.key, source) == ("hiking", "joplin")
+
+    def test_full_sync_sees_a_tag_change_without_a_body_change(self, db_session: Session):
+        note = make_note("2026-09-13", "## Words\n\nplain\n")
+        joplin = FakeJoplin([note])
+        joplin.sync_notes_from_api(db_session)
+        assert tags_for_target(db_session, "day", "2026-09-13") == []
+
+        # tagging a note in Joplin does not touch its updated_time
+        joplin.note_tags[note.id] = ["hiking"]
+        summary = joplin.sync_notes_from_api(db_session)
+        assert (summary.notes_synced, summary.tags_added) == (0, 1)
+        assert [(t.key, s) for t, s in tags_for_target(db_session, "day", "2026-09-13")] == [
+            ("hiking", "joplin")
+        ]
+
+        joplin.note_tags[note.id] = []
+        summary = joplin.sync_notes_from_api(db_session)
+        assert (summary.tags_added, summary.tags_removed) == (0, 1)
+        assert tags_for_target(db_session, "day", "2026-09-13") == []
+
+    def test_tags_on_notes_outside_the_diary_are_ignored(self, db_session: Session):
+        note = make_note("2026-09-13", "plain")
+        joplin = FakeJoplin([note], tags={"some-other-note": ["hiking"]})
+        joplin.sync_notes_from_api(db_session)
+        from mydiary.models import TagLink
+        assert db_session.exec(select(TagLink)).all() == []

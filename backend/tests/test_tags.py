@@ -169,6 +169,29 @@ class TestSetTargetTags:
         set_target_tags(db_session, "day", "2026-09-13", [])
         assert [l.source for l in links(db_session, target_id="2026-09-13")] == ["note"]
 
+    def test_each_source_owns_its_own_links(self, db_session: Session):
+        from mydiary.tags import sync_joplin_note_tags
+
+        sync_joplin_note_tags(db_session, "2026-09-13", ["hiking"])
+        set_target_tags(db_session, "day", "2026-09-13", ["extra"])
+        assert sorted((t.key, s) for t, s in tags_for_target(db_session, "day", "2026-09-13")) == [
+            ("extra", "manual"),
+            ("hiking", "joplin"),
+        ]
+        # clearing the manual set leaves the Joplin link; and the other way round
+        set_target_tags(db_session, "day", "2026-09-13", [])
+        assert [s for _, s in tags_for_target(db_session, "day", "2026-09-13")] == ["joplin"]
+        set_target_tags(db_session, "day", "2026-09-13", ["hiking"])  # already there as joplin
+        sync_joplin_note_tags(db_session, "2026-09-13", [])
+        assert tags_for_target(db_session, "day", "2026-09-13") == []
+
+    def test_joplin_tag_titles_are_keys_with_their_title_as_name(self, db_session: Session):
+        from mydiary.tags import sync_joplin_note_tags
+
+        sync_joplin_note_tags(db_session, "2026-09-13", ["Dog:Ruffles", "Saved For Later"])
+        got = {t.key: t.name for t, _ in tags_for_target(db_session, "day", "2026-09-13")}
+        assert got == {"dog:ruffles": "Dog:Ruffles", "saved-for-later": "Saved For Later"}
+
     def test_source_is_recorded(self, db_session: Session):
         set_target_tags(db_session, "article", "123", ["news"], source="pocket")
         (link,) = links(db_session, target_id="123")

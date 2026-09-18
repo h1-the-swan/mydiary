@@ -53,9 +53,9 @@
                         v-for="ref in group.refs"
                         :key="`${ref.kind}-${ref.id}`"
                         :to="targetRoute(ref.kind, ref.id, ref.frontend_route)"
-                        :prepend-icon="ref.source === 'note' ? 'mdi-text' : undefined"
+                        :prepend-icon="ref.source === 'note' ? 'mdi-text' : ref.source === 'joplin' ? 'mdi-tag-outline' : undefined"
                         :variant="targetRoute(ref.kind, ref.id, ref.frontend_route) ? 'tonal' : 'outlined'"
-                        :title="ref.source === 'note' ? 'written in the note' : undefined"
+                        :title="ref.source === 'note' ? 'written in the note' : ref.source === 'joplin' ? 'a Joplin tag on the note' : undefined"
                     >
                         {{ ref.kind === 'day' ? formatDay(ref.id) : ref.label }}
                     </v-chip>
