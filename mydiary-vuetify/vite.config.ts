@@ -32,5 +32,14 @@ export default defineConfig({
         // --port explicitly
         port: 3001,
         allowedHosts: ['mydiary-vuetify'],
+        hmr: {
+            // The page is served through nginx on another port, and nginx does
+            // not upgrade websockets on `/`, so the HMR client can't reach the
+            // dev server at the page's origin. Left alone it falls back to
+            // its own `port` -- fine for one stack, wrong for two, where the
+            // fallback lands on whichever stack published 3001. Point it at
+            // the port this container is actually published on.
+            clientPort: Number(process.env.VITE_HMR_CLIENT_PORT) || 3001,
+        },
     },
 })
