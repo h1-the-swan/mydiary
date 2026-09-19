@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
     abbreviate,
+    bracketedNonChords,
+    convertChordsOverLyrics,
     isChord,
     parseChordLine,
     parseDefine,
@@ -8,6 +10,7 @@ import {
     sectionKeys,
     skeleton,
     structure,
+    suggestSections,
 } from './chordpro'
 
 const SHEET = `{title: Paper Lanterns}
@@ -134,5 +137,55 @@ describe('structure', () => {
 
     it('lists unique section keys in order', () => {
         expect(sectionKeys(parseSheet(SHEET))).toEqual(['Verse 1', 'Chorus', 'Verse 2', 'Bridge'])
+    })
+})
+
+describe('convertChordsOverLyrics', () => {
+    it('merges chord lines into the lyric below', () => {
+        const paste = ['[Verse 1]', 'C              G', 'Paper lanterns on the line', '', 'Chorus:', 'F        C', 'Hold the light'].join('\n')
+        expect(convertChordsOverLyrics(paste)).toBe(
+            ['[Verse 1]', '[C]Paper lanterns [G]on the line', '', '[Chorus]', '[F]Hold the [C]light', ''].join('\n')
+        )
+    })
+
+    it('pads a lyric shorter than its chords', () => {
+        expect(convertChordsOverLyrics('G       D\nOh')).toBe('[G]Oh      [D]\n')
+    })
+
+    it('keeps a chord line with no lyric as chords', () => {
+        expect(convertChordsOverLyrics('[Intro]\nG  D  Em  C\n\n[Verse]\nwords')).toBe('[Intro]\n[G] [D] [Em] [C]\n\n[Verse]\nwords\n')
+    })
+
+    it('ignores bar lines and repeat marks when detecting chord lines', () => {
+        expect(convertChordsOverLyrics('| G | D | x2')).toBe('[G] [D]\n')
+    })
+
+    it('strips tab-site markup', () => {
+        expect(convertChordsOverLyrics('[tab][ch]G[/ch]\nhello[/tab]')).toBe('[G]hello\n')
+    })
+
+    it('does not mistake a lyric for chords', () => {
+        expect(convertChordsOverLyrics('Am I wrong')).toBe('Am I wrong\n')
+    })
+})
+
+describe('suggestSections', () => {
+    it('labels verses and writes a repeated block once', () => {
+        const plain = ['First verse line', 'second line', '', 'Hold the light', 'Hold it tight', '', 'Another verse', '', 'Hold the light', 'Hold it tight!'].join('\n')
+        expect(suggestSections(plain)).toBe(
+            ['[Verse 1]', 'First verse line', 'second line', '', '[Chorus?]', 'Hold the light', 'Hold it tight', '', '[Verse 2]', 'Another verse', '', '[Chorus?]', ''].join('\n')
+        )
+    })
+
+    it('names a second repeated block differently', () => {
+        const plain = 'a\n\nb\n\na\n\nb'
+        expect(parseSheet(suggestSections(plain)).occurrences.map((o) => o.key)).toEqual(['Chorus?', 'Repeat 2?', 'Chorus?', 'Repeat 2?'])
+    })
+})
+
+describe('bracketedNonChords', () => {
+    it('finds alternate-lyric brackets but not chords or labels', () => {
+        const sheet = '[Verse 1]\nFolding [holding] paper [G]cranes\n[Chorus]'
+        expect(bracketedNonChords(sheet)).toEqual(['holding'])
     })
 })

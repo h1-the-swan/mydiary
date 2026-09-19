@@ -240,3 +240,126 @@ export function skeleton(parsed: ParsedSheet): string {
         .map((s) => (s.count > 1 ? `${s.abbr}×${s.count}` : s.abbr))
         .join(' ')
 }
+
+// --- importing a sheet ------------------------------------------------------
+
+const SECTION_WORDS =
+    'intro|verse|pre-?chorus|chorus|post-?chorus|bridge|outro|refrain|interlude|solo|instrumental|coda|hook|break|tag'
+const PASTE_LABEL_RE = new RegExp(`^\\s*\\[?\\s*((?:${SECTION_WORDS})(?:\\s*\\d+)?)\\s*\\]?\\s*:?\\s*$`, 'i')
+// tokens a tab puts on a chord line that are not chords
+const NOISE_TOKEN_RE = /^(?:\||\/|-+|x\d+|\(x\d+\)|\.{2,3})$/i
+
+function chordColumns(line: string): ChordAt[] | null {
+    const out: ChordAt[] = []
+    for (const m of line.matchAll(/\S+/g)) {
+        if (NOISE_TOKEN_RE.test(m[0])) continue
+        if (!isChord(m[0])) return null
+        out.push({ chord: m[0], index: m.index! })
+    }
+    return out.length ? out : null
+}
+
+function tidyLabel(label: string): string {
+    const t = label.trim().replace(/\s+/g, ' ')
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
+}
+
+function placeChords(lyric: string, chords: ChordAt[]): string {
+    let out = lyric
+    for (const { chord, index } of [...chords].sort((a, b) => b.index - a.index)) {
+        out = out.padEnd(index, ' ')
+        out = out.slice(0, index) + `[${chord}]` + out.slice(index)
+    }
+    return out.replace(/\s+$/, '')
+}
+
+/** A chords-over-lyrics paste from a tab site, as ChordPro. */
+export function convertChordsOverLyrics(paste: string): string {
+    const lines = (paste || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\[\/?(?:ch|tab)\]/g, '')
+        .split('\n')
+        .map((l) => l.replace(/\t/g, '    ').replace(/\s+$/, ''))
+    const out: string[] = []
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const label = line.match(PASTE_LABEL_RE)
+        if (label) {
+            out.push(`[${tidyLabel(label[1])}]`)
+            continue
+        }
+        const chords = chordColumns(line)
+        if (!chords) {
+            out.push(line)
+            continue
+        }
+        const next = lines[i + 1]
+        if (next !== undefined && next.trim() && !chordColumns(next) && !PASTE_LABEL_RE.test(next)) {
+            out.push(placeChords(next, chords))
+            i++
+        } else {
+            out.push(chords.map((c) => `[${c.chord}]`).join(' '))
+        }
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+}
+
+function normalizeBlock(lines: string[]): string {
+    return lines
+        .map((l) => l.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, '').replace(/\s+/g, ' ').trim())
+        .join('\n')
+}
+
+/**
+ * Plain lyrics (e.g. from LRCLIB) as labelled ChordPro. Stanzas are the
+ * blank-line blocks; a block that appears more than once is probably a chorus,
+ * so it is written once and later appearances are bare labels that recall it.
+ * Labels end in "?" until the user confirms them.
+ */
+export function suggestSections(plain: string): string {
+    const blocks = (plain || '')
+        .replace(/\r\n?/g, '\n')
+        .split(/\n\s*\n/)
+        .map((b) => b.split('\n').map((l) => l.trim()).filter(Boolean))
+        .filter((b) => b.length)
+    const counts = new Map<string, number>()
+    for (const b of blocks) {
+        const n = normalizeBlock(b)
+        counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+    const labels = new Map<string, string>()
+    let verses = 0
+    let repeats = 0
+    const sections: string[] = []
+    for (const b of blocks) {
+        const n = normalizeBlock(b)
+        const known = labels.get(n)
+        if (known) {
+            sections.push(`[${known}]`)
+            continue
+        }
+        let label: string
+        if ((counts.get(n) ?? 0) > 1) {
+            repeats += 1
+            label = repeats === 1 ? 'Chorus?' : `Repeat ${repeats}?`
+        } else {
+            verses += 1
+            label = `Verse ${verses}`
+        }
+        labels.set(n, label)
+        sections.push([`[${label}]`, ...b].join('\n'))
+    }
+    return sections.join('\n\n') + '\n'
+}
+
+/** Bracketed text ChordPro would read as a chord but isn't one, e.g. an alternate lyric. */
+export function bracketedNonChords(sheet: string): string[] {
+    const found = new Set<string>()
+    for (const line of (sheet || '').split('\n')) {
+        if (DIRECTIVE_RE.test(line) || LABEL_RE.test(line)) continue
+        for (const m of line.matchAll(/\[([^\]]*)\]/g)) {
+            if (!isChord(m[1])) found.add(m[1])
+        }
+    }
+    return [...found]
+}
