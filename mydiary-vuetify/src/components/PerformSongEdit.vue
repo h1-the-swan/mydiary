@@ -24,6 +24,8 @@
                             <v-checkbox
                                 v-model="submitPerformSong.learned"
                                 label="Learned"
+                                hint="Unticked songs are in the learning queue"
+                                persistent-hint
                             ></v-checkbox>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
@@ -134,7 +136,8 @@ const props = defineProps<{
 }>()
 const router = useRouter()
 const app = useAppStore()
-const submitPerformSong = ref<PerformSongUpdate>({})
+// a new song is usually one about to be learned, so it starts in the queue
+const submitPerformSong = ref<PerformSongUpdate>(props.performSong ? {} : { learned: false })
 const submitted = ref<PerformSongRead>()
 const snackbar = ref(false)
 const formTitle = computed(() => {
@@ -186,7 +189,13 @@ async function onSave() {
     }
     snackbar.value = true
     app.loadPerformSongs()
-    router.push({ name: 'performSong', params: { id: submitted.value.id } })
+    // a song headed for the learning queue needs a sheet next
+    const toSheets = !props.performSong && !submitted.value.learned
+    router.push({
+        name: 'performSong',
+        params: { id: submitted.value.id },
+        hash: toSheets ? '#arrangements' : undefined,
+    })
 }
 async function onDelete() {
     if (!props.performSong) throw Error

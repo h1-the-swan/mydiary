@@ -26,6 +26,8 @@
             <PerformSongEdit class="mb-8" :perform-song="performSong" />
         </template>
 
+        <LearningQueue v-if="!performSong" />
+
         <section>
             <section-header label="All songs" :meta="songCountLabel">
                 <template #actions>
@@ -105,6 +107,7 @@ import PerformSongsDropdown from '@/components/PerformSongsDropdown.vue'
 import PerformSongsRandomButton from '@/components/PerformSongsRandomButton.vue'
 import PerformSongEdit from '@/components/PerformSongEdit.vue'
 import SongArrangements from '@/components/SongArrangements.vue'
+import LearningQueue from '@/components/LearningQueue.vue'
 import { computed, ref, watchEffect } from 'vue'
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
