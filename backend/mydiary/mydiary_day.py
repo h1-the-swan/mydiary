@@ -21,6 +21,7 @@ from .models import (
     JoplinNote,
 )
 from .markdown_edits import MarkdownDoc
+from .song_practice import RunSummary, practice_markdown
 from .db import Session, engine, select
 
 import logging
@@ -59,6 +60,9 @@ class MyDiaryDay:
         owntracks_day_maps: List[
             OwnTracksDayMap
         ] = [],  # the day's rendered maps, ordered by panel
+        practice_runs: List[
+            RunSummary
+        ] = [],  # song practice runs recorded on this day
         rating: Optional[
             int
         ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
@@ -76,6 +80,7 @@ class MyDiaryDay:
         self.google_calendar_events = google_calendar_events
         self.owntracks_locations = owntracks_locations
         self.owntracks_day_maps = owntracks_day_maps
+        self.practice_runs = practice_runs
         self.rating = rating
         self.flagged = flagged
 
@@ -159,6 +164,10 @@ class MyDiaryDay:
             )
         )
 
+        from .songs import runs_for_day
+
+        practice_runs = runs_for_day(session, dt)
+
         return cls(
             dt=dt,
             words=words,
@@ -168,6 +177,7 @@ class MyDiaryDay:
             google_calendar_events=google_calendar_events,
             owntracks_locations=owntracks_locations,
             owntracks_day_maps=owntracks_day_maps,
+            practice_runs=practice_runs,
             joplin_note_id=getattr(note, "id", None),
             **kwargs,
         )
@@ -211,6 +221,9 @@ class MyDiaryDay:
             pocket_articles = self.pocket_articles_markdown()
             md += f"## Pocket articles\n\n{pocket_articles}\n\n"
         md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"
+        # like Location, only days with practice get the section
+        if self.practice_runs:
+            md += f"## Practice\n\n{self.practice_markdown()}\n\n"
         return md
 
     def images_markdown(self) -> str:
@@ -262,6 +275,9 @@ class MyDiaryDay:
             lines.append(t.to_markdown(timezone=timezone))
         return "\n".join(lines)
 
+    def practice_markdown(self) -> str:
+        return practice_markdown(self.practice_runs)
+
     def google_calendar_events_markdown(self) -> str:
         if not self.google_calendar_events:
             return "None"
@@ -302,6 +318,11 @@ class MyDiaryDay:
         note = self.joplin_connector.get_note(self.joplin_note_id)
         md_note = MarkdownDoc(note.body, parent=note)
         md_new = MarkdownDoc(self.init_markdown())
+
+        # a note initialized before the day's first practice run has no
+        # Practice section, and the loop below only refreshes existing ones
+        if self.practice_runs:
+            md_note.ensure_section("Practice", after_title="Spotify tracks")
 
         need_to_update = False
         for sec in md_note.sections:
