@@ -167,6 +167,29 @@ describe('convertChordsOverLyrics', () => {
     it('does not mistake a lyric for chords', () => {
         expect(convertChordsOverLyrics('Am I wrong')).toBe('Am I wrong\n')
     })
+
+    it('reads a lone chord-shaped word over a lyric as a chord, not the lyric', () => {
+        // Ambiguous with a one-word lyric line that happens to be chord-shaped
+        // ("A", "Am"); a bare chord at column 0 above a lyric is far more
+        // common in a tab paste, so chords win. See the comment on chordColumns.
+        expect(convertChordsOverLyrics('A\nWalking down the road')).toBe('[A]Walking down the road\n')
+    })
+
+    it('reads bars written without spaces as separate chords', () => {
+        expect(convertChordsOverLyrics('C|G|Am|F')).toBe('[C] [G] [Am] [F]\n')
+    })
+
+    it('treats a trailing * marker as part of the chord, not the token', () => {
+        expect(convertChordsOverLyrics('G   D   Em   C*\nHold the light')).toBe('[G]Hold[D] the[Em] ligh[C]t\n')
+    })
+
+    it('blanks out a parenthesised aside on a chord line', () => {
+        expect(convertChordsOverLyrics('G       D      (let ring)\nOh what a day')).toBe('[G]Oh what [D]a day\n')
+    })
+
+    it('leaves a line of only parentheticals as a lyric', () => {
+        expect(convertChordsOverLyrics('(oh) (yeah)')).toBe('(oh) (yeah)\n')
+    })
 })
 
 describe('suggestSections', () => {

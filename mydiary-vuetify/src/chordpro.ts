@@ -249,12 +249,27 @@ const PASTE_LABEL_RE = new RegExp(`^\\s*\\[?\\s*((?:${SECTION_WORDS})(?:\\s*\\d+
 // tokens a tab puts on a chord line that are not chords
 const NOISE_TOKEN_RE = /^(?:\||\/|-+|x\d+|\(x\d+\)|\.{2,3})$/i
 
+// A one-word lyric that happens to be chord-shaped ("A", "Am") is
+// indistinguishable from a lone chord above the next line; a bare chord at
+// column 0 over a lyric line is far more common in a tab paste than a
+// one-word lyric line, so this reads it as a chord. See
+// convertChordsOverLyrics's "reads a lone chord-shaped word over a lyric
+// as a chord, not the lyric" test.
 function chordColumns(line: string): ChordAt[] | null {
+    // Blank out parenthesised asides ("(let ring)") before tokenising, so they
+    // can't be mistaken for lyric words, but keep every other token's column
+    // position intact.
+    const blanked = line.replace(/\([^)]*\)/g, (m) => ' '.repeat(m.length))
     const out: ChordAt[] = []
-    for (const m of line.matchAll(/\S+/g)) {
-        if (NOISE_TOKEN_RE.test(m[0])) continue
-        if (!isChord(m[0])) return null
-        out.push({ chord: m[0], index: m.index! })
+    // Tokenise on runs of anything but whitespace or '|', so bars written
+    // without surrounding spaces ("C|G|Am|F") still split into separate
+    // chord tokens at their real columns.
+    for (const m of blanked.matchAll(/[^\s|]+/g)) {
+        const token = m[0]
+        if (NOISE_TOKEN_RE.test(token)) continue
+        const chord = token.replace(/\*+$/, '') // trailing '*' markers, e.g. "C*"
+        if (!chord || !isChord(chord)) return null
+        out.push({ chord, index: m.index! })
     }
     return out.length ? out : null
 }
