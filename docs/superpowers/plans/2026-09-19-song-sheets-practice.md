@@ -1,0 +1,5049 @@
+# Song Sheets and Practice Loop Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Songs in the learning queue get per-instrument ChordPro sheets (lyrics, sections, chords, fingerings). A practice sheet fades each section as you learn it, and a two-tap check after each run-through drives the fading and feeds the diary.
+
+**Architecture:** The backend stores sheets as opaque text, records practice runs, and computes section levels on read with a pure function (`song_practice.py`). DB access lives in `songs.py`, and routes in `api.py`. The frontend owns everything about ChordPro in one tested TS module (`chordpro.ts`), plus a fingering module (`chords.ts`) over the chords-db data. The Vue components render sheets, the editor, the practice view and the learning queue.
+
+**Tech Stack:** FastAPI + SQLModel + alembic (SQLite), pendulum, requests; Vue 3 + Vuetify 4 + Orval client; new frontend deps `svguitar` (MIT), `@tombatossals/chords-db` (MIT), and `vitest` (dev).
+
+**Spec:** `docs/superpowers/specs/2026-09-19-song-sheets-practice-design.md`
+
+## Global Constraints
+
+- Level names, in order: `full`, `letters`, `cues`, `memorized`. 3 consecutive clean runs move a section up one level, and a stumble moves it down one and resets the count.
+- Instruments: `guitar`, `ukulele`. Unique on (`perform_song_id`, `instrument`).
+- `key` is the **sounding** key. The chords in `sheet` are the shapes fingered. Shape key = sounding key minus `capo` semitones.
+- A section's identity is its label as written. Practice history is keyed on it and shared by all of a song's arrangements.
+- Timestamps are stored in UTC (`pendulum.now("UTC")`), following the rest of `models.py`.
+- Every new route's `operation_id` must be unique (Orval uses them as function names). Regenerate `src/api.ts` after route changes and never edit it by hand.
+- `pendulum` for dates in the backend, not stdlib datetime arithmetic.
+- **Fixtures use invented lyrics only.** The repo is public and lyrics are copyrighted. Never paste a real song's lyrics into a test, a doc or a commit message.
+- No real location data in anything committed (standing repo rule).
+- UI: wrap every view in `PageShell`, use `SectionHeader` for section labels, `d-flex` + `ga-*` for toolbars (never a `v-row` inside a flex container), and label things for the user, not after DB columns.
+- Don't touch `views/TestDay.vue`, `HelloWorld.vue`, or the untracked files in `notes/`.
+- Stage and commit as separate steps: run `git add …` and `git commit …` as separate commands (separate tool calls), never chained with `&&`.
+- `npm run lint` has ~27 pre-existing errors. Compare counts before and after rather than expecting a clean run.
+
+## Departures from the spec
+
+These were decided while planning. They are intended, and a reviewer shouldn't flag them:
+
+- **`PracticeRunSection.position`** is an extra column holding the section's order in the sheet, so the diary can list stumbles in song order.
+- **No "practice runs for a date" route.** Nothing in the UI needs one, and the diary reads runs through `songs.runs_for_day`.
+- **Section suggestion runs in the frontend.** The LRCLIB route returns plain lyrics, and `chordpro.ts` (`suggestSections`) labels them, which keeps the backend ChordPro-free as the spec intends.
+- **The "learning queue toggle"** is the existing Learned checkbox, unticked by default for new songs, with a hint. A second control meaning `!learned` would be redundant.
+- **ChordSheetJS is replaced** by our own `chordpro.ts` (the spec was amended; ChordSheetJS is GPL-2.0-only).
+
+## Where this runs
+
+Do the work in a git worktree with its own stack, as `CLAUDE.md` → "Git worktrees" describes:
+
+```sh
+# from the primary checkout
+git worktree add ../mydiary-song-practice -b song-practice
+cd ../mydiary-song-practice
+scripts/bootstrap-worktree.sh --db snapshot
+docker compose up -d
+```
+
+- The script prints the worktree's HTTP port (8087 or the next free one). Use it wherever this plan says `$PORT`.
+- Every backend command runs **in the backend container** (`docker compose exec backend …`), from the worktree root. The container's working directory is the backend root, so paths like `tests/…` are relative to `backend/`.
+- Every frontend `npm` command runs in the frontend container (`docker compose exec mydiary-vuetify …`), because the host `node_modules` is incomplete.
+- **Joplin is shared with the real diary.** Never click "Init note" or call `POST /joplin/init_note/…` from this stack. Task 6 is tested with a fake Joplin.
+
+## File structure
+
+Backend (`backend/`):
+
+| File | Responsibility |
+|---|---|
+| `mydiary/models.py` (modify) | `SongArrangement`, `PracticeRun`, `PracticeRunSection`, `SectionLevelOverride` |
+| `alembic/versions/<rev>_add_song_arrangements_and_practice.py` (create, autogenerated) | the four tables |
+| `mydiary/song_practice.py` (create) | pure: level rules, diary line formatting |
+| `mydiary/songs.py` (create) | DB reads/writes for arrangements, runs, levels, history moves, a day's runs |
+| `mydiary/lrclib_connector.py` (create) | LRCLIB lookup |
+| `mydiary/api.py` (modify) | request/response models and routes |
+| `mydiary/mydiary_day.py` (modify) | `## Practice` diary section |
+| `tests/test_song_practice.py`, `tests/test_songs.py`, `tests/test_song_practice_api.py`, `tests/test_lrclib.py`, `tests/test_mydiary_day_practice.py` (create) | tests |
+
+Frontend (`mydiary-vuetify/`):
+
+| File | Responsibility |
+|---|---|
+| `package.json`, `vitest.config.ts` (modify/create) | new deps, test runner |
+| `src/chordpro.ts` + `src/chordpro.test.ts` (create) | parse, structure, paste import, section suggestion, transposition, directives, fading |
+| `src/chords.ts` + `src/chords.test.ts` (create) | chord-name → fingering lookup over chords-db, svguitar conversion |
+| `src/practice.ts` (create) | level colors/labels, API-row helpers |
+| `src/plugins/vuetify.ts` (modify) | level colors as theme colors |
+| `src/components/ChordDiagram.vue` (create) | one chord diagram |
+| `src/components/SongSheet.vue` (create) | renders a parsed sheet at given levels |
+| `src/components/StructureLine.vue` (create) | the `V1 V2 C …` skeleton |
+| `src/components/ChordPanel.vue` (create) | chord list with diagrams, fingering choice, notes |
+| `src/components/NewArrangementDialog.vue` (create) | the four ways to start an arrangement |
+| `src/components/ArrangementEditor.vue` (create) | text + preview + chord panel + save with rename check |
+| `src/components/SongArrangements.vue` (create) | arrangements section on the song page |
+| `src/components/AfterRunCheck.vue` (create) | the after-run check |
+| `src/components/LearningQueue.vue` (create) | the Learning section on the songs page |
+| `src/views/SongPractice.vue` (create) | the practice page |
+| `src/views/PerformSongs.vue`, `src/components/PerformSongEdit.vue`, `src/router/index.ts` (modify) | wiring |
+
+Docs: `docs/song-practice.md` (create), `CLAUDE.md` (modify).
+
+---
+
+### Task 1: Tables and migration
+
+**Files:**
+- Modify: `backend/mydiary/models.py` (after `class PerformSong`, around line 210)
+- Create: `backend/alembic/versions/<autogenerated>_add_song_arrangements_and_practice.py`
+- Test: `backend/tests/test_songs.py`
+
+**Interfaces:**
+- Produces: `SongArrangementBase`, `SongArrangement`, `PracticeRunBase`, `PracticeRun`, `PracticeRunSection`, `SectionLevelOverride` in `mydiary.models`, with the fields below.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `backend/tests/test_songs.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+import pendulum
+import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.pool import StaticPool
+
+from mydiary.models import (
+    PerformSong,
+    PracticeRun,
+    PracticeRunSection,
+    SectionLevelOverride,
+    SongArrangement,
+)
+
+NOW = pendulum.datetime(2026, 9, 19, 12, tz="UTC")
+
+
+@pytest.fixture(name="session")
+def session_fixture():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+
+
+@pytest.fixture
+def song(session: Session) -> PerformSong:
+    s = PerformSong(name="Paper Lanterns", artist_name="The Invented Band", learned=False, key="Ab", capo=8)
+    session.add(s)
+    session.commit()
+    session.refresh(s)
+    return s
+
+
+class TestTables:
+    def test_arrangement_unique_per_instrument(self, session: Session, song: PerformSong):
+        for _ in range(2):
+            session.add(
+                SongArrangement(
+                    perform_song_id=song.id,
+                    instrument="guitar",
+                    sheet="",
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    def test_run_sections_and_override_round_trip(self, session: Session, song: PerformSong):
+        run = PracticeRun(perform_song_id=song.id, practiced_at=NOW)
+        session.add(run)
+        session.flush()
+        session.add(PracticeRunSection(run_id=run.id, section_key="Chorus", stumbled=True, position=0))
+        session.add(SectionLevelOverride(perform_song_id=song.id, section_key="Chorus", level="cues", set_at=NOW))
+        session.commit()
+        assert session.get(PracticeRunSection, (run.id, "Chorus")).stumbled is True
+        assert session.get(SectionLevelOverride, (song.id, "Chorus")).level == "cues"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `docker compose exec backend pytest tests/test_songs.py -v`
+Expected: FAIL with `ImportError: cannot import name 'PracticeRun'`
+
+- [ ] **Step 3: Add the models**
+
+In `backend/mydiary/models.py`, directly after `class PerformSong(PerformSongBase, table=True): …`:
+
+```python
+class SongArrangementBase(SQLModel):
+    # one instrument's version of a song. `key` is what it sounds in; the chords
+    # written in `sheet` (ChordPro text, parsed only by the frontend) are the
+    # shapes fingered, so with a capo the two differ
+    perform_song_id: int = Field(foreign_key="performsong.id", index=True)
+    instrument: str = Field(index=True)  # "guitar" or "ukulele"
+    key: Optional[str] = Field(default=None)
+    capo: Optional[int] = Field(default=None)  # fret, 0 for none
+    sheet: str = Field(default="")
+    # where the sheet started: paste, lrclib, manual, or copied:<arrangement id>
+    source: str = Field(default="manual")
+
+
+class SongArrangement(SongArrangementBase, table=True):
+    __table_args__ = (
+        UniqueConstraint(
+            "perform_song_id", "instrument", name="uix_songarrangement_song_instrument"
+        ),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime  # stored in the database in UTC timezone
+    updated_at: datetime  # stored in the database in UTC timezone
+
+
+class PracticeRunBase(SQLModel):
+    # one play-through (or part of one), recorded by the after-run check
+    perform_song_id: int = Field(foreign_key="performsong.id", index=True)
+    # null for practice away from the instrument ("lyrics only"), and for runs
+    # whose arrangement was later deleted -- the run still belongs to the song
+    arrangement_id: Optional[int] = Field(
+        default=None, foreign_key="songarrangement.id", index=True
+    )
+    instrument: Optional[str] = Field(default=None)
+    practiced_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    note: Optional[str] = Field(default=None)
+
+
+class PracticeRun(PracticeRunBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class PracticeRunSection(SQLModel, table=True):
+    # one row per section actually played; a section skipped gets no row, so it
+    # neither helps nor hurts that section's level. keyed by the section label
+    # as written in the sheet, which is shared by all of a song's arrangements
+    run_id: int = Field(foreign_key="practicerun.id", primary_key=True)
+    section_key: str = Field(primary_key=True)
+    stumbled: bool = Field(default=False)
+    position: int = Field(default=0)  # order in the sheet, for the diary line
+
+
+class SectionLevelOverride(SQLModel, table=True):
+    # a level set by hand. the level rules continue from it with the runs
+    # recorded after set_at (see song_practice.py)
+    perform_song_id: int = Field(foreign_key="performsong.id", primary_key=True)
+    section_key: str = Field(primary_key=True)
+    level: str
+    set_at: datetime  # stored in the database in UTC timezone
+```
+
+`UniqueConstraint`, `Optional` and `datetime` are already imported in `models.py`.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `docker compose exec backend pytest tests/test_songs.py -v`
+Expected: 2 passed
+
+- [ ] **Step 5: Generate and apply the migration**
+
+Run: `docker compose exec backend alembic revision --autogenerate -m "add song arrangements and practice runs"`
+
+Open the generated file in `backend/alembic/versions/`. `upgrade()` must contain exactly four `op.create_table` calls (`songarrangement`, `practicerun`, `practicerunsection`, `sectionleveloverride`) plus their `op.create_index` calls. Delete any other operation autogenerate added for unrelated tables (drift in existing tables is out of scope). `downgrade()` must drop the four tables in reverse order.
+
+Run: `docker compose exec backend alembic upgrade head`
+Expected: `Running upgrade … -> <rev>, add song arrangements and practice runs`
+
+Run: `docker compose exec backend python -c "from mydiary.db import engine; from sqlalchemy import inspect; print(sorted(t for t in inspect(engine).get_table_names() if 'practice' in t or 'arrangement' in t or 'override' in t))"`
+Expected: `['practicerun', 'practicerunsection', 'sectionleveloverride', 'songarrangement']`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/mydiary/models.py backend/alembic/versions/*_add_song_arrangements_and_practice_runs.py backend/tests/test_songs.py
+git commit -m "songs: tables for arrangements, practice runs and level overrides"
+```
+
+---
+
+### Task 2: Level rules and diary lines (pure)
+
+**Files:**
+- Create: `backend/mydiary/song_practice.py`
+- Test: `backend/tests/test_song_practice.py`
+
+**Interfaces:**
+- Produces:
+  - `LEVELS: tuple[str, ...] = ("full", "letters", "cues", "memorized")`, `CLEAN_RUNS_TO_LEVEL_UP = 3`
+  - `SectionResult(practiced_at: datetime, stumbled: bool)`, frozen dataclass
+  - `LevelOverride(level: str, set_at: datetime)`, frozen dataclass
+  - `SectionLevel(level: str, clean_streak: int, num_runs: int, last_practiced_at: Optional[datetime], overridden: bool)`, frozen dataclass
+  - `validate_level(level: str) -> str` (raises `ValueError`)
+  - `section_level(results: Iterable[SectionResult], override: Optional[LevelOverride] = None) -> SectionLevel`
+  - `RunSummary(song_name: str, instrument: Optional[str], stumbled: List[str], practiced_at: datetime)`, frozen dataclass
+  - `song_ref(song_name: str) -> str`, `run_line(run: RunSummary) -> str`, `practice_markdown(runs: Iterable[RunSummary]) -> str`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `backend/tests/test_song_practice.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+from datetime import datetime, timedelta
+
+import pytest
+
+from mydiary.song_practice import (
+    CLEAN_RUNS_TO_LEVEL_UP,
+    LEVELS,
+    LevelOverride,
+    RunSummary,
+    SectionResult,
+    practice_markdown,
+    run_line,
+    section_level,
+    song_ref,
+    validate_level,
+)
+
+T0 = datetime(2026, 9, 1, 12, 0)
+
+
+def results(pattern: str, start: datetime = T0):
+    """'ccs' -> clean, clean, stumbled, one day apart."""
+    return [
+        SectionResult(practiced_at=start + timedelta(days=i), stumbled=(ch == "s"))
+        for i, ch in enumerate(pattern)
+    ]
+
+
+class TestSectionLevel:
+    def test_no_runs_is_full(self):
+        lvl = section_level([])
+        assert lvl.level == "full"
+        assert lvl.num_runs == 0
+        assert lvl.last_practiced_at is None
+        assert lvl.overridden is False
+
+    def test_threshold_is_three(self):
+        assert CLEAN_RUNS_TO_LEVEL_UP == 3
+        assert LEVELS == ("full", "letters", "cues", "memorized")
+
+    def test_two_clean_runs_stay_full(self):
+        lvl = section_level(results("cc"))
+        assert (lvl.level, lvl.clean_streak) == ("full", 2)
+
+    def test_three_clean_runs_move_up_and_reset_streak(self):
+        lvl = section_level(results("ccc"))
+        assert (lvl.level, lvl.clean_streak) == ("letters", 0)
+
+    def test_nine_clean_runs_reach_memorized(self):
+        assert section_level(results("c" * 9)).level == "memorized"
+
+    def test_memorized_is_the_ceiling(self):
+        lvl = section_level(results("c" * 12))
+        assert lvl.level == "memorized"
+        assert lvl.clean_streak == 3
+
+    def test_stumble_moves_down_one_and_resets(self):
+        lvl = section_level(results("cccccc" + "s"))  # cues, then a stumble
+        assert (lvl.level, lvl.clean_streak) == ("letters", 0)
+
+    def test_stumble_at_full_stays_full(self):
+        assert section_level(results("s")).level == "full"
+
+    def test_stumble_breaks_a_streak(self):
+        # two clean, a stumble, two clean: never three in a row
+        assert section_level(results("ccscc")).level == "full"
+
+    def test_results_are_sorted_by_time(self):
+        rs = results("ccc")
+        assert section_level(list(reversed(rs))).level == "letters"
+        assert section_level(rs).last_practiced_at == rs[-1].practiced_at
+
+    def test_override_sets_level_and_ignores_earlier_runs(self):
+        rs = results("sss")
+        ov = LevelOverride(level="cues", set_at=rs[-1].practiced_at)
+        lvl = section_level(rs, ov)
+        assert lvl.level == "cues"
+        assert lvl.overridden is True
+        assert lvl.num_runs == 3
+
+    def test_rules_continue_after_override(self):
+        rs = results("ccc")
+        ov = LevelOverride(level="memorized", set_at=T0 - timedelta(days=1))
+        assert section_level(rs + results("s", start=T0 + timedelta(days=5)), ov).level == "cues"
+
+    def test_validate_level(self):
+        assert validate_level("cues") == "cues"
+        with pytest.raises(ValueError):
+            validate_level("mostly")
+
+
+class TestDiaryLines:
+    def test_song_ref_is_a_song_tag(self):
+        assert song_ref("Paper Lanterns") == "#song:paper-lanterns"
+
+    def test_song_ref_falls_back_to_name(self):
+        assert song_ref("!!!") == "!!!"
+
+    def test_clean_run(self):
+        run = RunSummary("Paper Lanterns", "ukulele", [], T0)
+        assert run_line(run) == "- #song:paper-lanterns, ukulele: clean run"
+
+    def test_stumbles_listed_in_order(self):
+        run = RunSummary("Paper Lanterns", "guitar", ["Verse 2", "Bridge"], T0)
+        assert run_line(run) == "- #song:paper-lanterns, guitar: stumbled on Verse 2, Bridge"
+
+    def test_lyrics_only(self):
+        run = RunSummary("Paper Lanterns", None, [], T0)
+        assert run_line(run) == "- #song:paper-lanterns, lyrics only: clean run"
+
+    def test_markdown_sorted_by_time_and_none_when_empty(self):
+        late = RunSummary("B Song", "guitar", [], T0 + timedelta(hours=2))
+        early = RunSummary("A Song", "guitar", [], T0)
+        assert practice_markdown([late, early]).splitlines() == [
+            "- #song:a-song, guitar: clean run",
+            "- #song:b-song, guitar: clean run",
+        ]
+        assert practice_markdown([]) == "None"
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec backend pytest tests/test_song_practice.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'mydiary.song_practice'`
+
+- [ ] **Step 3: Write the module**
+
+Create `backend/mydiary/song_practice.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+DESCRIPTION = """How well each section of a song is known, worked out from practice runs.
+
+A section's level decides how much of it the practice sheet shows. It is never
+stored: it is recomputed from the run history on every read, so changing the
+thresholds here re-evaluates everything already recorded. Pure functions, no
+I/O -- songs.py gathers the inputs."""
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Iterable, List, Optional
+
+from .hashtags import slugify_tag
+
+# from the most help to the least. the frontend mirrors these names in chordpro.ts
+LEVELS = ("full", "letters", "cues", "memorized")
+# clean runs in a row that move a section up one level
+CLEAN_RUNS_TO_LEVEL_UP = 3
+
+
+@dataclass(frozen=True)
+class SectionResult:
+    practiced_at: datetime
+    stumbled: bool
+
+
+@dataclass(frozen=True)
+class LevelOverride:
+    level: str
+    set_at: datetime
+
+
+@dataclass(frozen=True)
+class SectionLevel:
+    level: str
+    clean_streak: int  # clean runs since the level last changed
+    num_runs: int
+    last_practiced_at: Optional[datetime]
+    overridden: bool
+
+
+def validate_level(level: str) -> str:
+    if level not in LEVELS:
+        raise ValueError(f"unknown level {level!r}; expected one of {LEVELS}")
+    return level
+
+
+def section_level(
+    results: Iterable[SectionResult], override: Optional[LevelOverride] = None
+) -> SectionLevel:
+    """Replay a section's runs, oldest first, from `full` (or from an override).
+
+    A stumble only brings the hints back one step, and three clean runs take
+    them away again, so one bad day costs little."""
+    ordered = sorted(results, key=lambda r: r.practiced_at)
+    idx = 0
+    counted = ordered
+    if override is not None:
+        idx = LEVELS.index(validate_level(override.level))
+        counted = [r for r in ordered if r.practiced_at > override.set_at]
+
+    streak = 0
+    for r in counted:
+        if r.stumbled:
+            idx = max(idx - 1, 0)
+            streak = 0
+            continue
+        streak += 1
+        if streak >= CLEAN_RUNS_TO_LEVEL_UP and idx < len(LEVELS) - 1:
+            idx += 1
+            streak = 0
+
+    return SectionLevel(
+        level=LEVELS[idx],
+        clean_streak=streak,
+        num_runs=len(ordered),
+        last_practiced_at=ordered[-1].practiced_at if ordered else None,
+        overridden=override is not None,
+    )
+
+
+@dataclass(frozen=True)
+class RunSummary:
+    song_name: str
+    instrument: Optional[str]  # None for practice away from the instrument
+    stumbled: List[str]  # section keys, in sheet order
+    practiced_at: datetime
+
+
+def song_ref(song_name: str) -> str:
+    """`#song:<slug>`, so the diary line links to the song through the tag system.
+
+    Falls back to the bare name for a title with nothing slug-shaped in it."""
+    try:
+        return f"#song:{slugify_tag(song_name)}"
+    except ValueError:
+        return song_name
+
+
+def run_line(run: RunSummary) -> str:
+    where = run.instrument or "lyrics only"
+    if run.stumbled:
+        result = "stumbled on " + ", ".join(run.stumbled)
+    else:
+        result = "clean run"
+    return f"- {song_ref(run.song_name)}, {where}: {result}"
+
+
+def practice_markdown(runs: Iterable[RunSummary]) -> str:
+    runs = sorted(runs, key=lambda r: r.practiced_at)
+    if not runs:
+        return "None"
+    return "\n".join(run_line(r) for r in runs)
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec backend pytest tests/test_song_practice.py -v`
+Expected: all pass. If `test_song_ref_is_a_song_tag` fails, print `slugify_tag("Paper Lanterns")` and fix the expected slug in the test to match `hashtags.slugify_tag`. Don't change `slugify_tag`, because the tag resolver relies on it.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/mydiary/song_practice.py backend/tests/test_song_practice.py
+git commit -m "songs: level rules and diary lines for practice runs"
+```
+
+---
+
+### Task 3: DB layer (`songs.py`)
+
+**Files:**
+- Create: `backend/mydiary/songs.py`
+- Test: `backend/tests/test_songs.py` (extend)
+
+**Interfaces:**
+- Consumes: the Task 1 models; `section_level`, `SectionResult`, `LevelOverride`, `SectionLevel`, `RunSummary`, `validate_level` from Task 2.
+- Produces (all take `session: Session` first):
+  - `INSTRUMENTS = ("guitar", "ukulele")`, `class ArrangementExists(Exception)`
+  - `arrangements_for_song(session, song_id: int) -> List[SongArrangement]`
+  - `create_arrangement(session, song: PerformSong, instrument: str, key: Optional[str] = None, capo: Optional[int] = None, sheet: str = "", source: str = "manual") -> SongArrangement`
+  - `update_arrangement(session, arrangement: SongArrangement, changes: dict) -> SongArrangement`
+  - `delete_arrangement(session, arrangement: SongArrangement) -> None`
+  - `create_run(session, song_id: int, sections: List[Tuple[str, bool]], arrangement: Optional[SongArrangement] = None, practiced_at: Optional[datetime] = None, note: Optional[str] = None) -> PracticeRun`
+  - `sections_for_runs(session, run_ids: Iterable[int]) -> Dict[int, List[PracticeRunSection]]`
+  - `runs_for_song(session, song_id: int) -> List[PracticeRun]` (newest first)
+  - `levels_for_song(session, song_id: int) -> Dict[str, SectionLevel]`
+  - `last_practiced(session, song_id: int) -> Optional[datetime]`
+  - `set_override(session, song_id: int, section_key: str, level: str) -> SectionLevelOverride`
+  - `clear_override(session, song_id: int, section_key: str) -> bool`
+  - `rename_section(session, song_id: int, from_key: str, to_key: str) -> int`
+  - `runs_for_day(session, dt: datetime) -> List[RunSummary]`
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `backend/tests/test_songs.py`:
+
+```python
+from datetime import timedelta
+
+from mydiary import songs
+
+
+def make_run(session, song, sections, when=NOW, arrangement=None):
+    return songs.create_run(
+        session, song.id, sections, arrangement=arrangement, practiced_at=when
+    )
+
+
+class TestArrangements:
+    def test_first_guitar_arrangement_inherits_key_and_capo(self, session, song):
+        arr = songs.create_arrangement(session, song, "guitar", sheet="[Chorus]\nla")
+        assert (arr.key, arr.capo) == ("Ab", 8)
+        assert arr.created_at is not None and arr.updated_at is not None
+
+    def test_ukulele_does_not_inherit(self, session, song):
+        arr = songs.create_arrangement(session, song, "ukulele")
+        assert (arr.key, arr.capo) == (None, None)
+
+    def test_explicit_key_wins(self, session, song):
+        arr = songs.create_arrangement(session, song, "guitar", key="G", capo=0)
+        assert (arr.key, arr.capo) == ("G", 0)
+
+    def test_duplicate_instrument_raises(self, session, song):
+        songs.create_arrangement(session, song, "guitar")
+        with pytest.raises(songs.ArrangementExists):
+            songs.create_arrangement(session, song, "guitar")
+
+    def test_unknown_instrument_raises(self, session, song):
+        with pytest.raises(ValueError):
+            songs.create_arrangement(session, song, "banjo")
+
+    def test_update_bumps_updated_at(self, session, song):
+        arr = songs.create_arrangement(session, song, "guitar")
+        before = arr.updated_at
+        arr = songs.update_arrangement(session, arr, {"sheet": "[Verse 1]\nhello"})
+        assert arr.sheet == "[Verse 1]\nhello"
+        assert arr.updated_at >= before
+
+    def test_delete_keeps_runs_but_detaches_them(self, session, song):
+        arr = songs.create_arrangement(session, song, "guitar")
+        run = make_run(session, song, [("Chorus", False)], arrangement=arr)
+        songs.delete_arrangement(session, arr)
+        session.refresh(run)
+        assert run.arrangement_id is None
+        assert run.instrument == "guitar"
+        assert songs.arrangements_for_song(session, song.id) == []
+
+
+class TestRuns:
+    def test_run_copies_instrument_and_keeps_section_order(self, session, song):
+        arr = songs.create_arrangement(session, song, "ukulele")
+        run = make_run(session, song, [("Verse 1", False), ("Chorus", True)], arrangement=arr)
+        assert run.instrument == "ukulele"
+        secs = songs.sections_for_runs(session, [run.id])[run.id]
+        assert [(s.section_key, s.stumbled, s.position) for s in secs] == [
+            ("Verse 1", False, 0),
+            ("Chorus", True, 1),
+        ]
+
+    def test_run_needs_a_section(self, session, song):
+        with pytest.raises(ValueError):
+            make_run(session, song, [])
+
+    def test_run_rejects_duplicate_sections(self, session, song):
+        with pytest.raises(ValueError):
+            make_run(session, song, [("Chorus", False), ("Chorus", True)])
+
+    def test_runs_for_song_newest_first(self, session, song):
+        a = make_run(session, song, [("Chorus", False)], when=NOW)
+        b = make_run(session, song, [("Chorus", False)], when=NOW + timedelta(hours=1))
+        assert [r.id for r in songs.runs_for_song(session, song.id)] == [b.id, a.id]
+        assert songs.last_practiced(session, song.id) == b.practiced_at.replace(tzinfo=None)
+
+
+class TestLevels:
+    def test_levels_from_runs(self, session, song):
+        for i in range(3):
+            make_run(session, song, [("Chorus", False), ("Verse 1", i == 2)], when=NOW + timedelta(days=i))
+        levels = songs.levels_for_song(session, song.id)
+        assert levels["Chorus"].level == "letters"
+        assert levels["Verse 1"].level == "full"
+
+    def test_override_and_clear(self, session, song):
+        songs.set_override(session, song.id, "Bridge", "cues")
+        assert songs.levels_for_song(session, song.id)["Bridge"].level == "cues"
+        assert songs.clear_override(session, song.id, "Bridge") is True
+        assert "Bridge" not in songs.levels_for_song(session, song.id)
+        assert songs.clear_override(session, song.id, "Bridge") is False
+
+    def test_override_rejects_unknown_level(self, session, song):
+        with pytest.raises(ValueError):
+            songs.set_override(session, song.id, "Bridge", "mostly")
+
+
+class TestRename:
+    def test_moves_history(self, session, song):
+        make_run(session, song, [("Chorus?", True)])
+        songs.set_override(session, song.id, "Chorus?", "letters")
+        assert songs.rename_section(session, song.id, "Chorus?", "Chorus") == 1
+        levels = songs.levels_for_song(session, song.id)
+        assert "Chorus?" not in levels
+        assert levels["Chorus"].num_runs == 1
+        assert levels["Chorus"].overridden is True
+
+    def test_merges_when_run_has_both_keys(self, session, song):
+        run = make_run(session, song, [("A", True), ("B", False)])
+        songs.rename_section(session, song.id, "A", "B")
+        secs = songs.sections_for_runs(session, [run.id])[run.id]
+        assert [(s.section_key, s.stumbled) for s in secs] == [("B", True)]
+
+    def test_same_key_is_a_no_op(self, session, song):
+        make_run(session, song, [("A", False)])
+        assert songs.rename_section(session, song.id, "A", "A") == 0
+
+
+class TestRunsForDay:
+    def test_uses_the_days_timezone(self, session, song):
+        # 23:30 in New York is 03:30 UTC the next day, and belongs to the NY day
+        late = pendulum.datetime(2026, 9, 18, 23, 30, tz="America/New_York")
+        make_run(session, song, [("Chorus", True), ("Bridge", False)], when=late.in_timezone("UTC"))
+        day = pendulum.datetime(2026, 9, 18, tz="America/New_York")
+        runs = songs.runs_for_day(session, day)
+        assert len(runs) == 1
+        assert runs[0].song_name == "Paper Lanterns"
+        assert runs[0].stumbled == ["Chorus"]
+        assert songs.runs_for_day(session, day.add(days=1)) == []
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec backend pytest tests/test_songs.py -v`
+Expected: FAIL with `ImportError: cannot import name 'songs' from 'mydiary'`
+
+- [ ] **Step 3: Write the module**
+
+Create `backend/mydiary/songs.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+DESCRIPTION = """Database reads and writes for song arrangements and practice runs.
+
+The level rules are pure and live in song_practice.py; this module only
+gathers their inputs. Sheets are opaque ChordPro text here -- the frontend owns
+parsing them, and practice runs arrive already keyed by section label."""
+
+from datetime import datetime
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import pendulum
+from sqlalchemy import desc, func
+from sqlmodel import Session, select
+
+from .models import (
+    PerformSong,
+    PracticeRun,
+    PracticeRunSection,
+    SectionLevelOverride,
+    SongArrangement,
+)
+from .song_practice import (
+    LevelOverride,
+    RunSummary,
+    SectionLevel,
+    SectionResult,
+    section_level,
+    validate_level,
+)
+
+INSTRUMENTS = ("guitar", "ukulele")
+
+
+class ArrangementExists(Exception):
+    """A song already has an arrangement for that instrument."""
+
+
+def _utcnow() -> datetime:
+    return pendulum.now("UTC")
+
+
+def arrangements_for_song(session: Session, song_id: int) -> List[SongArrangement]:
+    return list(
+        session.exec(
+            select(SongArrangement)
+            .where(SongArrangement.perform_song_id == song_id)
+            .order_by(SongArrangement.instrument)
+        )
+    )
+
+
+def create_arrangement(
+    session: Session,
+    song: PerformSong,
+    instrument: str,
+    key: Optional[str] = None,
+    capo: Optional[int] = None,
+    sheet: str = "",
+    source: str = "manual",
+) -> SongArrangement:
+    if instrument not in INSTRUMENTS:
+        raise ValueError(f"unknown instrument {instrument!r}; expected one of {INSTRUMENTS}")
+    existing = session.exec(
+        select(SongArrangement)
+        .where(SongArrangement.perform_song_id == song.id)
+        .where(SongArrangement.instrument == instrument)
+    ).first()
+    if existing is not None:
+        raise ArrangementExists(f"{song.name} already has a {instrument} arrangement")
+    # PerformSong.key/capo have always described what is played on guitar
+    if instrument == "guitar":
+        key = song.key if key is None else key
+        capo = song.capo if capo is None else capo
+    now = _utcnow()
+    arrangement = SongArrangement(
+        perform_song_id=song.id,
+        instrument=instrument,
+        key=key,
+        capo=capo,
+        sheet=sheet,
+        source=source,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(arrangement)
+    session.commit()
+    session.refresh(arrangement)
+    return arrangement
+
+
+def update_arrangement(
+    session: Session, arrangement: SongArrangement, changes: dict
+) -> SongArrangement:
+    arrangement.sqlmodel_update(changes)
+    arrangement.updated_at = _utcnow()
+    session.add(arrangement)
+    session.commit()
+    session.refresh(arrangement)
+    return arrangement
+
+
+def delete_arrangement(session: Session, arrangement: SongArrangement) -> None:
+    # runs belong to the song, not the sheet: keep them, minus the pointer
+    for run in session.exec(
+        select(PracticeRun).where(PracticeRun.arrangement_id == arrangement.id)
+    ):
+        run.arrangement_id = None
+        session.add(run)
+    session.delete(arrangement)
+    session.commit()
+
+
+def create_run(
+    session: Session,
+    song_id: int,
+    sections: List[Tuple[str, bool]],
+    arrangement: Optional[SongArrangement] = None,
+    practiced_at: Optional[datetime] = None,
+    note: Optional[str] = None,
+) -> PracticeRun:
+    """Record one run. `sections` is (section_key, stumbled) in sheet order,
+    for the sections actually played."""
+    if not sections:
+        raise ValueError("a run needs at least one section")
+    keys = [k for k, _ in sections]
+    if len(set(keys)) != len(keys):
+        raise ValueError("a section can only appear once in a run")
+    run = PracticeRun(
+        perform_song_id=song_id,
+        arrangement_id=arrangement.id if arrangement else None,
+        instrument=arrangement.instrument if arrangement else None,
+        practiced_at=practiced_at or _utcnow(),
+        note=note,
+    )
+    session.add(run)
+    session.flush()
+    for position, (key, stumbled) in enumerate(sections):
+        session.add(
+            PracticeRunSection(
+                run_id=run.id, section_key=key, stumbled=stumbled, position=position
+            )
+        )
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def sections_for_runs(
+    session: Session, run_ids: Iterable[int]
+) -> Dict[int, List[PracticeRunSection]]:
+    run_ids = list(run_ids)
+    out: Dict[int, List[PracticeRunSection]] = {i: [] for i in run_ids}
+    if not run_ids:
+        return out
+    for sec in session.exec(
+        select(PracticeRunSection)
+        .where(PracticeRunSection.run_id.in_(run_ids))
+        .order_by(PracticeRunSection.run_id, PracticeRunSection.position)
+    ):
+        out[sec.run_id].append(sec)
+    return out
+
+
+def runs_for_song(session: Session, song_id: int) -> List[PracticeRun]:
+    return list(
+        session.exec(
+            select(PracticeRun)
+            .where(PracticeRun.perform_song_id == song_id)
+            .order_by(desc(PracticeRun.practiced_at))
+        )
+    )
+
+
+def last_practiced(session: Session, song_id: int) -> Optional[datetime]:
+    return session.exec(
+        select(func.max(PracticeRun.practiced_at)).where(
+            PracticeRun.perform_song_id == song_id
+        )
+    ).one()
+
+
+def levels_for_song(session: Session, song_id: int) -> Dict[str, SectionLevel]:
+    """Levels for every section with runs or an override. A section with
+    neither is at `full`, and the frontend assumes so without asking."""
+    rows = session.exec(
+        select(
+            PracticeRunSection.section_key,
+            PracticeRun.practiced_at,
+            PracticeRunSection.stumbled,
+        )
+        .join(PracticeRun, PracticeRun.id == PracticeRunSection.run_id)
+        .where(PracticeRun.perform_song_id == song_id)
+    ).all()
+    by_key: Dict[str, List[SectionResult]] = {}
+    for key, practiced_at, stumbled in rows:
+        by_key.setdefault(key, []).append(SectionResult(practiced_at, stumbled))
+    overrides = {
+        o.section_key: LevelOverride(level=o.level, set_at=o.set_at)
+        for o in session.exec(
+            select(SectionLevelOverride).where(
+                SectionLevelOverride.perform_song_id == song_id
+            )
+        )
+    }
+    keys = sorted(set(by_key) | set(overrides))
+    return {k: section_level(by_key.get(k, []), overrides.get(k)) for k in keys}
+
+
+def set_override(
+    session: Session, song_id: int, section_key: str, level: str
+) -> SectionLevelOverride:
+    validate_level(level)
+    override = session.merge(
+        SectionLevelOverride(
+            perform_song_id=song_id,
+            section_key=section_key,
+            level=level,
+            set_at=_utcnow(),
+        )
+    )
+    session.commit()
+    return override
+
+
+def clear_override(session: Session, song_id: int, section_key: str) -> bool:
+    override = session.get(SectionLevelOverride, (song_id, section_key))
+    if override is None:
+        return False
+    session.delete(override)
+    session.commit()
+    return True
+
+
+def rename_section(session: Session, song_id: int, from_key: str, to_key: str) -> int:
+    """Move a section's history to a new label, after the sheet renamed it.
+
+    A run that already has the new label keeps one row, stumbled if either
+    was. Returns how many run rows were moved."""
+    if from_key == to_key:
+        return 0
+    run_ids = session.exec(
+        select(PracticeRun.id).where(PracticeRun.perform_song_id == song_id)
+    ).all()
+    moved = 0
+    if run_ids:
+        rows = session.exec(
+            select(PracticeRunSection)
+            .where(PracticeRunSection.run_id.in_(run_ids))
+            .where(PracticeRunSection.section_key == from_key)
+        ).all()
+        for row in rows:
+            existing = session.get(PracticeRunSection, (row.run_id, to_key))
+            if existing is not None:
+                existing.stumbled = existing.stumbled or row.stumbled
+                session.add(existing)
+            else:
+                session.add(
+                    PracticeRunSection(
+                        run_id=row.run_id,
+                        section_key=to_key,
+                        stumbled=row.stumbled,
+                        position=row.position,
+                    )
+                )
+            session.delete(row)
+            moved += 1
+
+    old = session.get(SectionLevelOverride, (song_id, from_key))
+    if old is not None:
+        if session.get(SectionLevelOverride, (song_id, to_key)) is None:
+            session.add(
+                SectionLevelOverride(
+                    perform_song_id=song_id,
+                    section_key=to_key,
+                    level=old.level,
+                    set_at=old.set_at,
+                )
+            )
+        session.delete(old)
+    session.commit()
+    return moved
+
+
+def runs_for_day(session: Session, dt: datetime) -> List[RunSummary]:
+    """The runs of the calendar day `dt` falls on, in `dt`'s own timezone."""
+    dt = pendulum.instance(dt)
+    start = dt.start_of("day").in_timezone("UTC")
+    end = dt.end_of("day").in_timezone("UTC")
+    rows = session.exec(
+        select(PracticeRun, PerformSong.name)
+        .join(PerformSong, PerformSong.id == PracticeRun.perform_song_id)
+        .where(PracticeRun.practiced_at >= start)
+        .where(PracticeRun.practiced_at <= end)
+        .order_by(PracticeRun.practiced_at)
+    ).all()
+    sections = sections_for_runs(session, [run.id for run, _ in rows])
+    return [
+        RunSummary(
+            song_name=name,
+            instrument=run.instrument,
+            stumbled=[s.section_key for s in sections[run.id] if s.stumbled],
+            practiced_at=run.practiced_at,
+        )
+        for run, name in rows
+    ]
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec backend pytest tests/test_songs.py -v`
+Expected: all pass. If `test_runs_for_song_newest_first` fails on the `last_practiced` comparison, SQLite has returned the value naive. Compare against `b.practiced_at.replace(tzinfo=None)` on both sides, which is what the test does. Don't make the query timezone-aware.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/mydiary/songs.py backend/tests/test_songs.py
+git commit -m "songs: DB layer for arrangements, runs, levels and history moves"
+```
+
+---
+
+### Task 4: Arrangement and practice routes
+
+**Files:**
+- Modify: `backend/mydiary/api.py` (imports near line 36-96; models after `class PerformSongUpdate`, ~line 210; routes directly after `delete_perform_song`, ~line 1775)
+- Test: `backend/tests/test_song_practice_api.py`
+
+**Interfaces:**
+- Consumes: `songs.*` (Task 3), `SongArrangementBase`, `PracticeRunBase` (Task 1).
+- Produces (routes, `operation_id` in brackets, which become Orval function names):
+  - `GET /performsongs/{perform_song_id}/arrangements` [`listSongArrangements`] → `List[SongArrangementRead]`
+  - `POST /performsongs/{perform_song_id}/arrangements` [`createSongArrangement`], body `SongArrangementCreate` → `SongArrangementRead`; 404 no song, 409 exists, 422 bad instrument
+  - `GET /arrangements/{arrangement_id}` [`readSongArrangement`]
+  - `PATCH /arrangements/{arrangement_id}` [`updateSongArrangement`], body `SongArrangementUpdate`
+  - `DELETE /arrangements/{arrangement_id}` [`deleteSongArrangement`] → `{"ok": true}`
+  - `POST /practice/runs` [`createPracticeRun`], body `PracticeRunCreate` → `PracticeRunRead`
+  - `GET /performsongs/{perform_song_id}/practice/runs` [`listPracticeRunsForSong`] → `List[PracticeRunRead]`
+  - `GET /performsongs/{perform_song_id}/practice/levels` [`readSectionLevels`] → `List[SectionLevelRead]`
+  - `PUT /performsongs/{perform_song_id}/practice/levels` [`setSectionLevelOverride`], body `SectionLevelOverrideIn` → `List[SectionLevelRead]`
+  - `DELETE /performsongs/{perform_song_id}/practice/levels?section_key=…` [`clearSectionLevelOverride`] → `List[SectionLevelRead]`
+  - `POST /performsongs/{perform_song_id}/practice/rename` [`renamePracticeSection`], body `SectionRename` → `SectionRenameResult`
+  - `GET /practice/learning` [`listLearningSongs`] → `List[LearningSongRead]`
+  - Model fields exactly as in Step 3.
+
+The spec also listed "practice runs for a date". Nothing in the UI needs it, since the diary reads runs through `songs.runs_for_day`, so it is left out (YAGNI).
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `backend/tests/test_song_practice_api.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.pool import StaticPool
+
+from mydiary.api import app, get_session
+from mydiary.models import PerformSong
+
+SHEET = "[Verse 1]\n[C]Paper lanterns [G]on the line\n\n[Chorus]\n[F]Hold the light"
+
+
+@pytest.fixture(name="session")
+def session_fixture():
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+
+
+@pytest.fixture(name="client")
+def client_fixture(session: Session):
+    app.dependency_overrides[get_session] = lambda: session
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def song(session: Session) -> PerformSong:
+    s = PerformSong(name="Paper Lanterns", artist_name="The Invented Band", learned=False, key="Ab", capo=8)
+    session.add(s)
+    session.commit()
+    session.refresh(s)
+    return s
+
+
+def create_guitar(client, song):
+    r = client.post(
+        f"/performsongs/{song.id}/arrangements",
+        json={"instrument": "guitar", "sheet": SHEET, "source": "paste"},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+class TestArrangementRoutes:
+    def test_create_list_read(self, client, song):
+        arr = create_guitar(client, song)
+        assert (arr["key"], arr["capo"], arr["source"]) == ("Ab", 8, "paste")
+        listed = client.get(f"/performsongs/{song.id}/arrangements").json()
+        assert [a["id"] for a in listed] == [arr["id"]]
+        assert client.get(f"/arrangements/{arr['id']}").json()["sheet"] == SHEET
+
+    def test_duplicate_is_409(self, client, song):
+        create_guitar(client, song)
+        r = client.post(f"/performsongs/{song.id}/arrangements", json={"instrument": "guitar"})
+        assert r.status_code == 409
+
+    def test_bad_instrument_is_422(self, client, song):
+        r = client.post(f"/performsongs/{song.id}/arrangements", json={"instrument": "banjo"})
+        assert r.status_code == 422
+
+    def test_missing_song_is_404(self, client):
+        r = client.post("/performsongs/999/arrangements", json={"instrument": "guitar"})
+        assert r.status_code == 404
+
+    def test_patch_and_delete(self, client, song):
+        arr = create_guitar(client, song)
+        r = client.patch(f"/arrangements/{arr['id']}", json={"capo": 0, "key": "C"})
+        assert (r.json()["key"], r.json()["capo"], r.json()["sheet"]) == ("C", 0, SHEET)
+        assert client.delete(f"/arrangements/{arr['id']}").json() == {"ok": True}
+        assert client.get(f"/arrangements/{arr['id']}").status_code == 404
+
+
+class TestPracticeRoutes:
+    def post_run(self, client, song, arrangement_id=None, stumble=False):
+        return client.post(
+            "/practice/runs",
+            json={
+                "perform_song_id": song.id,
+                "arrangement_id": arrangement_id,
+                "sections": [
+                    {"section_key": "Verse 1", "stumbled": stumble},
+                    {"section_key": "Chorus", "stumbled": False},
+                ],
+            },
+        )
+
+    def test_create_run_and_levels(self, client, song):
+        arr = create_guitar(client, song)
+        for _ in range(3):
+            r = self.post_run(client, song, arr["id"])
+            assert r.status_code == 200, r.text
+        run = r.json()
+        assert run["instrument"] == "guitar"
+        assert [s["section_key"] for s in run["sections"]] == ["Verse 1", "Chorus"]
+        levels = {l["section_key"]: l for l in client.get(f"/performsongs/{song.id}/practice/levels").json()}
+        assert levels["Chorus"]["level"] == "letters"
+        assert levels["Chorus"]["num_runs"] == 3
+
+    def test_lyrics_only_run(self, client, song):
+        run = self.post_run(client, song).json()
+        assert run["arrangement_id"] is None and run["instrument"] is None
+
+    def test_run_with_another_songs_arrangement_is_422(self, client, song, session):
+        other = PerformSong(name="Other", learned=False)
+        session.add(other)
+        session.commit()
+        arr = create_guitar(client, song)
+        r = client.post(
+            "/practice/runs",
+            json={"perform_song_id": other.id, "arrangement_id": arr["id"], "sections": [{"section_key": "A"}]},
+        )
+        assert r.status_code == 422
+
+    def test_run_without_sections_is_422(self, client, song):
+        r = client.post("/practice/runs", json={"perform_song_id": song.id, "sections": []})
+        assert r.status_code == 422
+
+    def test_list_runs(self, client, song):
+        self.post_run(client, song, stumble=True)
+        runs = client.get(f"/performsongs/{song.id}/practice/runs").json()
+        assert runs[0]["sections"][0] == {"section_key": "Verse 1", "stumbled": True}
+
+    def test_override_set_and_clear(self, client, song):
+        r = client.put(
+            f"/performsongs/{song.id}/practice/levels",
+            json={"section_key": "Bridge", "level": "memorized"},
+        )
+        assert {l["section_key"]: l["level"] for l in r.json()}["Bridge"] == "memorized"
+        r = client.delete(f"/performsongs/{song.id}/practice/levels", params={"section_key": "Bridge"})
+        assert "Bridge" not in {l["section_key"] for l in r.json()}
+
+    def test_override_bad_level_is_422(self, client, song):
+        r = client.put(
+            f"/performsongs/{song.id}/practice/levels",
+            json={"section_key": "Bridge", "level": "mostly"},
+        )
+        assert r.status_code == 422
+
+    def test_rename(self, client, song):
+        self.post_run(client, song)
+        r = client.post(
+            f"/performsongs/{song.id}/practice/rename",
+            json={"from_key": "Verse 1", "to_key": "First verse"},
+        )
+        assert r.json() == {"moved": 1}
+
+    def test_learning_queue(self, client, song, session):
+        learned = PerformSong(name="Old Favourite", learned=True)
+        never = PerformSong(name="Never Played", learned=False)
+        session.add(learned)
+        session.add(never)
+        session.commit()
+        create_guitar(client, song)
+        self.post_run(client, song)
+        rows = client.get("/practice/learning").json()
+        # never practiced first, then oldest practiced; learned songs excluded
+        assert [r["song"]["name"] for r in rows] == ["Never Played", "Paper Lanterns"]
+        assert rows[1]["instruments"] == ["guitar"]
+        assert rows[1]["sheet"] == SHEET
+        assert rows[1]["last_practiced_at"] is not None
+        assert rows[0]["sheet"] is None
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec backend pytest tests/test_song_practice_api.py -v`
+Expected: FAIL (404s on every new route)
+
+- [ ] **Step 3: Add imports, request/response models and routes**
+
+In `api.py`'s `from .models import (…)` block add `SongArrangementBase`, `SongArrangement`, `PracticeRunBase`, `PracticeRun`. Next to `from . import spelling_bee` add:
+
+```python
+from . import songs
+```
+
+Directly after `class PerformSongUpdate(SQLModel): …` add:
+
+```python
+class SongArrangementRead(SongArrangementBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SongArrangementCreate(SQLModel):
+    instrument: str
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    sheet: str = ""
+    source: str = "manual"
+
+
+class SongArrangementUpdate(SQLModel):
+    # instrument is fixed once created: a ukulele copy is a new arrangement
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    sheet: Optional[str] = None
+    source: Optional[str] = None
+
+
+class PracticeRunSectionIn(SQLModel):
+    section_key: str
+    stumbled: bool = False
+
+
+class PracticeRunCreate(SQLModel):
+    perform_song_id: int
+    arrangement_id: Optional[int] = None  # none for practice away from the instrument
+    practiced_at: Optional[datetime] = None  # defaults to now
+    note: Optional[str] = None
+    sections: List[PracticeRunSectionIn]
+
+
+class PracticeRunSectionRead(SQLModel):
+    section_key: str
+    stumbled: bool
+
+
+class PracticeRunRead(PracticeRunBase):
+    id: int
+    sections: List[PracticeRunSectionRead]
+
+
+class SectionLevelRead(SQLModel):
+    section_key: str
+    level: str
+    clean_streak: int
+    num_runs: int
+    last_practiced_at: Optional[datetime] = None
+    overridden: bool
+
+
+class SectionLevelOverrideIn(SQLModel):
+    section_key: str
+    level: str
+
+
+class SectionRename(SQLModel):
+    from_key: str
+    to_key: str
+
+
+class SectionRenameResult(SQLModel):
+    moved: int
+
+
+class LearningSongRead(SQLModel):
+    song: PerformSongRead
+    instruments: List[str]
+    # the sheet whose section order the queue card shows: guitar's if there is one
+    sheet: Optional[str] = None
+    levels: List[SectionLevelRead]
+    last_practiced_at: Optional[datetime] = None
+```
+
+Directly after the `delete_perform_song` route add:
+
+```python
+def _get_song_or_404(session: Session, perform_song_id: int) -> PerformSong:
+    song = session.get(PerformSong, perform_song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="PerformSong not found")
+    return song
+
+
+def _get_arrangement_or_404(session: Session, arrangement_id: int) -> SongArrangement:
+    arrangement = session.get(SongArrangement, arrangement_id)
+    if not arrangement:
+        raise HTTPException(status_code=404, detail="Arrangement not found")
+    return arrangement
+
+
+def _levels_read(session: Session, song_id: int) -> List[SectionLevelRead]:
+    return [
+        SectionLevelRead(section_key=key, **asdict(level))
+        for key, level in songs.levels_for_song(session, song_id).items()
+    ]
+
+
+def _run_read(run: PracticeRun, sections) -> PracticeRunRead:
+    return PracticeRunRead(
+        **run.model_dump(),
+        sections=[
+            PracticeRunSectionRead(section_key=s.section_key, stumbled=s.stumbled)
+            for s in sections
+        ],
+    )
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/arrangements",
+    operation_id="listSongArrangements",
+    response_model=List[SongArrangementRead],
+)
+def list_song_arrangements(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    return songs.arrangements_for_song(session, perform_song_id)
+
+
+@app.post(
+    "/performsongs/{perform_song_id}/arrangements",
+    operation_id="createSongArrangement",
+    response_model=SongArrangementRead,
+)
+def create_song_arrangement(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    arrangement: SongArrangementCreate,
+):
+    song = _get_song_or_404(session, perform_song_id)
+    try:
+        return songs.create_arrangement(session, song, **arrangement.model_dump())
+    except songs.ArrangementExists as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.get(
+    "/arrangements/{arrangement_id}",
+    operation_id="readSongArrangement",
+    response_model=SongArrangementRead,
+)
+def read_song_arrangement(
+    *, session: Session = Depends(get_session), arrangement_id: int
+):
+    return _get_arrangement_or_404(session, arrangement_id)
+
+
+@app.patch(
+    "/arrangements/{arrangement_id}",
+    operation_id="updateSongArrangement",
+    response_model=SongArrangementRead,
+)
+def update_song_arrangement(
+    *,
+    session: Session = Depends(get_session),
+    arrangement_id: int,
+    arrangement: SongArrangementUpdate,
+):
+    db_arrangement = _get_arrangement_or_404(session, arrangement_id)
+    return songs.update_arrangement(
+        session, db_arrangement, arrangement.model_dump(exclude_unset=True)
+    )
+
+
+@app.delete("/arrangements/{arrangement_id}", operation_id="deleteSongArrangement")
+def delete_song_arrangement(
+    *, session: Session = Depends(get_session), arrangement_id: int
+):
+    songs.delete_arrangement(session, _get_arrangement_or_404(session, arrangement_id))
+    return {"ok": True}
+
+
+@app.post(
+    "/practice/runs", operation_id="createPracticeRun", response_model=PracticeRunRead
+)
+def create_practice_run(
+    *, session: Session = Depends(get_session), run: PracticeRunCreate
+):
+    _get_song_or_404(session, run.perform_song_id)
+    arrangement = None
+    if run.arrangement_id is not None:
+        arrangement = _get_arrangement_or_404(session, run.arrangement_id)
+        if arrangement.perform_song_id != run.perform_song_id:
+            raise HTTPException(
+                status_code=422, detail="That arrangement belongs to another song"
+            )
+    try:
+        db_run = songs.create_run(
+            session,
+            run.perform_song_id,
+            [(s.section_key, s.stumbled) for s in run.sections],
+            arrangement=arrangement,
+            practiced_at=run.practiced_at,
+            note=run.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _run_read(db_run, songs.sections_for_runs(session, [db_run.id])[db_run.id])
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/practice/runs",
+    operation_id="listPracticeRunsForSong",
+    response_model=List[PracticeRunRead],
+)
+def list_practice_runs_for_song(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    runs = songs.runs_for_song(session, perform_song_id)
+    sections = songs.sections_for_runs(session, [r.id for r in runs])
+    return [_run_read(r, sections[r.id]) for r in runs]
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="readSectionLevels",
+    response_model=List[SectionLevelRead],
+)
+def read_section_levels(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    return _levels_read(session, perform_song_id)
+
+
+@app.put(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="setSectionLevelOverride",
+    response_model=List[SectionLevelRead],
+)
+def set_section_level_override(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    override: SectionLevelOverrideIn,
+):
+    _get_song_or_404(session, perform_song_id)
+    try:
+        songs.set_override(session, perform_song_id, override.section_key, override.level)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _levels_read(session, perform_song_id)
+
+
+@app.delete(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="clearSectionLevelOverride",
+    response_model=List[SectionLevelRead],
+)
+def clear_section_level_override(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    section_key: str,
+):
+    _get_song_or_404(session, perform_song_id)
+    songs.clear_override(session, perform_song_id, section_key)
+    return _levels_read(session, perform_song_id)
+
+
+@app.post(
+    "/performsongs/{perform_song_id}/practice/rename",
+    operation_id="renamePracticeSection",
+    response_model=SectionRenameResult,
+)
+def rename_practice_section(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    rename: SectionRename,
+):
+    _get_song_or_404(session, perform_song_id)
+    moved = songs.rename_section(
+        session, perform_song_id, rename.from_key, rename.to_key
+    )
+    return SectionRenameResult(moved=moved)
+
+
+@app.get(
+    "/practice/learning",
+    operation_id="listLearningSongs",
+    response_model=List[LearningSongRead],
+)
+def list_learning_songs(*, session: Session = Depends(get_session)):
+    """The learning queue: never-practiced songs first, then the longest idle."""
+    queue = session.exec(
+        select(PerformSong).where(PerformSong.learned == False)  # noqa: E712
+    ).all()
+    rows = []
+    for song in queue:
+        arrangements = songs.arrangements_for_song(session, song.id)
+        by_instrument = {a.instrument: a for a in arrangements}
+        primary = by_instrument.get("guitar") or (arrangements[0] if arrangements else None)
+        rows.append(
+            LearningSongRead(
+                song=PerformSongRead.model_validate(song),
+                instruments=[a.instrument for a in arrangements],
+                sheet=primary.sheet if primary else None,
+                levels=_levels_read(session, song.id),
+                last_practiced_at=songs.last_practiced(session, song.id),
+            )
+        )
+    rows.sort(
+        key=lambda r: (
+            r.last_practiced_at is not None,
+            r.last_practiced_at or datetime.min,
+            r.song.name.lower(),
+        )
+    )
+    return rows
+```
+
+`asdict` is already imported from `dataclasses` in `api.py`.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec backend pytest tests/test_song_practice_api.py tests/test_api.py -v`
+Expected: all pass, including the existing `test_api.py`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/mydiary/api.py backend/tests/test_song_practice_api.py
+git commit -m "songs: routes for arrangements, practice runs, levels and the learning queue"
+```
+
+---
+
+### Task 5: LRCLIB lookup
+
+**Files:**
+- Create: `backend/mydiary/lrclib_connector.py`
+- Modify: `backend/mydiary/api.py` (import; model; route after `list_learning_songs`)
+- Test: `backend/tests/test_lrclib.py`
+
+**Interfaces:**
+- Produces:
+  - `LrclibLyrics(track_name: str, artist_name: str, duration: Optional[float], plain_lyrics: str)`, a dataclass
+  - `fetch_lyrics(track_name: str, artist_name: Optional[str], duration_s: Optional[float] = None, timeout: int = DEFAULT_TIMEOUT) -> Optional[LrclibLyrics]`
+  - Route `GET /performsongs/{perform_song_id}/lyrics/lrclib` [`lookupLrclibLyrics`] → `LrclibLyricsRead {track_name, artist_name, duration, plain_lyrics}`; 404 when not found, 502 when LRCLIB is unreachable.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `backend/tests/test_lrclib.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+from unittest.mock import patch
+
+import pytest
+import requests
+
+from mydiary import lrclib_connector
+from mydiary.lrclib_connector import LrclibLyrics, fetch_lyrics
+
+LYRICS = "Paper lanterns on the line\nHold the light\n\nHold the light"
+
+
+class FakeResponse:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(str(self.status_code))
+
+
+def record(duration=200.0, plain=LYRICS, artist="The Invented Band", instrumental=False):
+    return {
+        "trackName": "Paper Lanterns",
+        "artistName": artist,
+        "duration": duration,
+        "plainLyrics": plain,
+        "instrumental": instrumental,
+    }
+
+
+def routed(get_response, search_response):
+    def fake_get(url, params=None, headers=None, timeout=None):
+        assert "mydiary" in headers["User-Agent"]
+        return get_response if url.endswith("/get") else search_response
+
+    return fake_get
+
+
+class TestFetchLyrics:
+    def test_exact_get_match(self):
+        with patch.object(lrclib_connector.requests, "get", side_effect=routed(FakeResponse(200, record()), None)):
+            found = fetch_lyrics("Paper Lanterns", "The Invented Band", 200.4)
+        assert found == LrclibLyrics("Paper Lanterns", "The Invented Band", 200.0, LYRICS)
+
+    def test_falls_back_to_search_closest_duration(self):
+        results = [record(duration=320.0, plain="long version"), record(duration=199.0)]
+        with patch.object(
+            lrclib_connector.requests, "get",
+            side_effect=routed(FakeResponse(404, {}), FakeResponse(200, results)),
+        ):
+            found = fetch_lyrics("Paper Lanterns", "The Invented Band", 200.0)
+        assert found.duration == 199.0
+
+    def test_search_without_duration_prefers_matching_artist(self):
+        results = [record(artist="A Cover Band", plain="cover"), record()]
+        with patch.object(lrclib_connector.requests, "get", side_effect=routed(None, FakeResponse(200, results))):
+            found = fetch_lyrics("Paper Lanterns", "The Invented Band", None)
+        assert found.plain_lyrics == LYRICS
+
+    def test_skips_instrumental_and_empty(self):
+        results = [record(instrumental=True), record(plain="")]
+        with patch.object(lrclib_connector.requests, "get", side_effect=routed(None, FakeResponse(200, results))):
+            assert fetch_lyrics("Paper Lanterns", "The Invented Band") is None
+
+    def test_server_error_raises(self):
+        with patch.object(lrclib_connector.requests, "get", side_effect=routed(None, FakeResponse(500, {}))):
+            with pytest.raises(requests.HTTPError):
+                fetch_lyrics("Paper Lanterns", "The Invented Band")
+
+
+@pytest.mark.external_api
+def test_live_lookup():
+    # a real request, but only the shape is checked -- no lyrics are asserted
+    found = fetch_lyrics("Bohemian Rhapsody", "Queen")
+    assert found is not None and found.plain_lyrics
+```
+
+Append to `backend/tests/test_song_practice_api.py`:
+
+```python
+from unittest.mock import patch
+
+from mydiary.lrclib_connector import LrclibLyrics
+
+
+class TestLrclibRoute:
+    def test_found(self, client, song):
+        found = LrclibLyrics("Paper Lanterns", "The Invented Band", 200.0, "la la")
+        with patch("mydiary.api._spotify_duration_s", return_value=None), patch(
+            "mydiary.lrclib_connector.fetch_lyrics", return_value=found
+        ) as fetch:
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.json()["plain_lyrics"] == "la la"
+        fetch.assert_called_once_with("Paper Lanterns", "The Invented Band", None)
+
+    def test_uses_spotify_duration(self, client, song, session):
+        song.spotify_id = "abc123"
+        session.add(song)
+        session.commit()
+        with patch("mydiary.api._spotify_duration_s", return_value=201.5), patch(
+            "mydiary.lrclib_connector.fetch_lyrics", return_value=None
+        ) as fetch:
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.status_code == 404
+        fetch.assert_called_once_with("Paper Lanterns", "The Invented Band", 201.5)
+
+    def test_unreachable_is_502(self, client, song):
+        import requests
+
+        with patch("mydiary.lrclib_connector.fetch_lyrics", side_effect=requests.ConnectionError("down")):
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.status_code == 502
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec backend pytest tests/test_lrclib.py tests/test_song_practice_api.py::TestLrclibRoute -v`
+Expected: FAIL with `ImportError: cannot import name 'lrclib_connector'`
+
+- [ ] **Step 3: Write the connector**
+
+Create `backend/mydiary/lrclib_connector.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+DESCRIPTION = """Look up a song's plain lyrics on LRCLIB (lrclib.net).
+
+LRCLIB is open data with no key. It asks clients to identify themselves in the
+User-Agent. `/api/get` matches on track, artist and duration and returns one
+record or 404; `/api/search` is the looser fallback. Lookups are on demand only
+(starting a sheet), and nothing is cached: the lyrics end up in the sheet the
+user edits."""
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+import requests
+
+import logging
+
+root_logger = logging.getLogger()
+logger = root_logger.getChild(__name__)
+
+LRCLIB_API_URL = "https://lrclib.net/api"
+USER_AGENT = "mydiary (https://github.com/h1-the-swan/mydiary)"
+# the route calling this is sync, so a hang would pin a worker thread
+DEFAULT_TIMEOUT = 10
+
+
+@dataclass
+class LrclibLyrics:
+    track_name: str
+    artist_name: str
+    duration: Optional[float]  # seconds
+    plain_lyrics: str
+
+
+def _usable(record: dict) -> bool:
+    return bool(record.get("plainLyrics")) and not record.get("instrumental")
+
+
+def _to_lyrics(record: dict) -> LrclibLyrics:
+    duration = record.get("duration")
+    return LrclibLyrics(
+        track_name=record.get("trackName") or "",
+        artist_name=record.get("artistName") or "",
+        duration=float(duration) if duration is not None else None,
+        plain_lyrics=record["plainLyrics"],
+    )
+
+
+def _pick(records: List[dict], artist_name: Optional[str], duration_s: Optional[float]) -> Optional[dict]:
+    usable = [r for r in records if _usable(r)]
+    if artist_name:
+        # search matches covers too; the artist's own recording wins when there is one
+        same_artist = [
+            r for r in usable if (r.get("artistName") or "").lower() == artist_name.lower()
+        ]
+        usable = same_artist or usable
+    if not usable:
+        return None
+    if duration_s is not None:
+        return min(usable, key=lambda r: abs(float(r.get("duration") or 0) - duration_s))
+    return usable[0]
+
+
+def fetch_lyrics(
+    track_name: str,
+    artist_name: Optional[str],
+    duration_s: Optional[float] = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> Optional[LrclibLyrics]:
+    """Plain lyrics for a song, or None if LRCLIB has none usable."""
+    headers = {"User-Agent": USER_AGENT}
+    if artist_name and duration_s is not None:
+        resp = requests.get(
+            f"{LRCLIB_API_URL}/get",
+            params={
+                "track_name": track_name,
+                "artist_name": artist_name,
+                "duration": round(duration_s),
+            },
+            headers=headers,
+            timeout=timeout,
+        )
+        if resp.status_code == 200 and _usable(resp.json()):
+            return _to_lyrics(resp.json())
+        if resp.status_code not in (200, 404):
+            resp.raise_for_status()
+
+    params = {"track_name": track_name}
+    if artist_name:
+        params["artist_name"] = artist_name
+    resp = requests.get(
+        f"{LRCLIB_API_URL}/search", params=params, headers=headers, timeout=timeout
+    )
+    resp.raise_for_status()
+    picked = _pick(resp.json() or [], artist_name, duration_s)
+    if picked is None:
+        logger.debug("no usable LRCLIB lyrics for %s / %s", track_name, artist_name)
+        return None
+    return _to_lyrics(picked)
+```
+
+- [ ] **Step 4: Add the route**
+
+In `api.py` add `from . import lrclib_connector` next to `from . import songs`. After `class LearningSongRead` add:
+
+```python
+class LrclibLyricsRead(SQLModel):
+    track_name: str
+    artist_name: str
+    duration: Optional[float] = None
+    plain_lyrics: str
+```
+
+After the `list_learning_songs` route add:
+
+```python
+def _spotify_duration_s(spotify_id: str) -> Optional[float]:
+    # best effort: without a duration the LRCLIB match is only looser
+    try:
+        from .spotify_connector import MyDiarySpotify
+
+        return MyDiarySpotify().sp.track(spotify_id)["duration_ms"] / 1000
+    except Exception as e:
+        logger.warning(f"no Spotify duration for {spotify_id}: {e}")
+        return None
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/lyrics/lrclib",
+    operation_id="lookupLrclibLyrics",
+    response_model=LrclibLyricsRead,
+)
+def lookup_lrclib_lyrics(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    song = _get_song_or_404(session, perform_song_id)
+    duration = _spotify_duration_s(song.spotify_id) if song.spotify_id else None
+    try:
+        found = lrclib_connector.fetch_lyrics(song.name, song.artist_name, duration)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"LRCLIB lookup failed: {e}")
+    if found is None:
+        raise HTTPException(status_code=404, detail="No lyrics found on LRCLIB")
+    return LrclibLyricsRead(**asdict(found))
+```
+
+`requests` is already imported at the top of `api.py`.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `docker compose exec backend pytest tests/test_lrclib.py tests/test_song_practice_api.py -v`
+Expected: all pass, with `test_live_lookup` deselected.
+
+Run: `docker compose exec backend pytest tests/test_lrclib.py -m external_api -v`
+Expected: `test_live_lookup` passes (a live network call).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/mydiary/lrclib_connector.py backend/mydiary/api.py backend/tests/test_lrclib.py backend/tests/test_song_practice_api.py
+git commit -m "songs: fetch starting lyrics from LRCLIB"
+```
+
+---
+
+### Task 6: The diary's Practice section
+
+**Files:**
+- Modify: `backend/mydiary/mydiary_day.py` (`__init__` ~line 40, `from_dt` ~line 83, `init_markdown` ~line 188, `update_joplin_note` ~line 288)
+- Test: `backend/tests/test_mydiary_day_practice.py`
+
+**Interfaces:**
+- Consumes: `songs.runs_for_day` (Task 3), `practice_markdown`, `RunSummary` (Task 2), `MarkdownDoc.ensure_section(title, after_title)`.
+- Produces: `MyDiaryDay(practice_runs: List[RunSummary] = [])`, `MyDiaryDay.practice_markdown() -> str`, and a `## Practice` section after `## Spotify tracks` on days with runs.
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `backend/tests/test_mydiary_day_practice.py`:
+
+```python
+# -*- coding: utf-8 -*-
+
+from types import SimpleNamespace
+
+import pendulum
+import pytest
+
+from mydiary.mydiary_day import MyDiaryDay
+from mydiary.song_practice import RunSummary
+
+from tests.fakes import FakeJoplin, make_note
+
+DT = pendulum.datetime(2026, 9, 18, tz="America/New_York")
+RUN = RunSummary("Paper Lanterns", "ukulele", ["Bridge"], DT.add(hours=20))
+
+
+@pytest.fixture(autouse=True)
+def no_pocket_db(monkeypatch):
+    # init_markdown asks the real database for the Pocket cutoff; these days are
+    # well after it either way
+    monkeypatch.setattr(
+        "mydiary.pocket_connector.get_pocket_section_cutoff",
+        lambda session=None: pendulum.datetime(2025, 7, 8),
+    )
+
+
+def test_practice_section_after_spotify():
+    md = MyDiaryDay(dt=DT, practice_runs=[RUN]).init_markdown()
+    assert "## Practice\n\n- #song:paper-lanterns, ukulele: stumbled on Bridge" in md
+    assert md.index("## Spotify tracks") < md.index("## Practice")
+
+
+def test_no_section_without_runs():
+    assert "## Practice" not in MyDiaryDay(dt=DT, practice_runs=[]).init_markdown()
+
+
+class RecordingJoplin(FakeJoplin):
+    def __init__(self, notes):
+        super().__init__(notes)
+        self.bodies = {}
+
+    def update_note_body(self, note_id, body):
+        self.bodies[note_id] = body
+        return SimpleNamespace(status_code=200)
+
+
+def test_update_adds_section_to_an_existing_note(monkeypatch):
+    monkeypatch.setattr(MyDiaryDay, "save_note_and_words_to_db", lambda self, session: None)
+    body = (
+        "# Sep 18, 2026\n\ntimezone: America/New_York\n\n## Words\n\n## Images\n\n"
+        "## Google Calendar events\n\nNone\n\n## Spotify tracks\n\nNone\n"
+    )
+    note = make_note("2026-09-18", body, note_id="n1")
+    joplin = RecordingJoplin([note])
+    day = MyDiaryDay(dt=DT, practice_runs=[RUN], joplin_note_id="n1")
+    day.update_joplin_note(session=None, joplin_connector=joplin)
+    new_body = joplin.bodies["n1"]
+    assert "## Practice" in new_body
+    assert "stumbled on Bridge" in new_body
+    assert new_body.index("## Spotify tracks") < new_body.index("## Practice")
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec backend pytest tests/test_mydiary_day_practice.py -v`
+Expected: FAIL with `TypeError: … unexpected keyword argument 'practice_runs'`
+
+- [ ] **Step 3: Implement**
+
+In `mydiary_day.py`:
+
+1. Add the import `from .song_practice import RunSummary, practice_markdown` with the other module imports at the top.
+2. In `__init__`, after the `owntracks_day_maps` parameter, add:
+
+```python
+        practice_runs: List[
+            RunSummary
+        ] = [],  # song practice runs recorded on this day
+```
+
+   and in the body, after `self.owntracks_day_maps = owntracks_day_maps`:
+
+```python
+        self.practice_runs = practice_runs
+```
+
+3. In `from_dt`, before `return cls(`:
+
+```python
+        from .songs import runs_for_day
+
+        practice_runs = runs_for_day(session, dt)
+```
+
+   and pass `practice_runs=practice_runs,` in the `cls(...)` call.
+
+4. In `init_markdown`, directly after the `md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"` line:
+
+```python
+        # like Location, only days with practice get the section
+        if self.practice_runs:
+            md += f"## Practice\n\n{self.practice_markdown()}\n\n"
+```
+
+5. Add the method next to `spotify_tracks_markdown`:
+
+```python
+    def practice_markdown(self) -> str:
+        return practice_markdown(self.practice_runs)
+```
+
+6. In `update_joplin_note`, directly after `md_new = MarkdownDoc(self.init_markdown())`:
+
+```python
+        # a note initialized before the day's first practice run has no
+        # Practice section, and the loop below only refreshes existing ones
+        if self.practice_runs:
+            md_note.ensure_section("Practice", after_title="Spotify tracks")
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec backend pytest tests/test_mydiary_day_practice.py tests/test_markdown.py -v`
+Expected: all pass
+
+Run: `docker compose exec backend pytest`
+Expected: the whole default suite passes. Tests that need a live Joplin fail in exactly the same way on `main`, so compare with a run there before blaming this change.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/mydiary/mydiary_day.py backend/tests/test_mydiary_day_practice.py
+git commit -m "diary: Practice section listing the day's practice runs"
+```
+
+---
+### Task 7: Regenerate the client, add frontend dependencies and a test runner
+
+**Files:**
+- Modify: `mydiary-vuetify/src/api.ts` (generated), `mydiary-vuetify/package.json`, `mydiary-vuetify/package-lock.json`
+- Create: `mydiary-vuetify/vitest.config.ts`, `mydiary-vuetify/src/smoke.test.ts` (deleted again in Step 5)
+
+**Interfaces:**
+- Produces: Orval functions `listSongArrangements`, `createSongArrangement`, `readSongArrangement`, `updateSongArrangement`, `deleteSongArrangement`, `createPracticeRun`, `listPracticeRunsForSong`, `readSectionLevels`, `setSectionLevelOverride`, `clearSectionLevelOverride`, `renamePracticeSection`, `listLearningSongs`, `lookupLrclibLyrics`. Types `SongArrangementRead`, `SongArrangementCreate`, `SongArrangementUpdate`, `PracticeRunCreate`, `PracticeRunRead`, `SectionLevelRead`, `LearningSongRead`, `LrclibLyricsRead`. Also `npm test` (vitest).
+
+- [ ] **Step 1: Regenerate `api.ts`**
+
+The backend container reloads on file changes. Confirm it picked up Tasks 4-5:
+
+Run: `curl -s http://localhost:$PORT/api/openapi.json | python3 -c "import json,sys; print(sorted(o['operationId'] for p in json.load(sys.stdin)['paths'].values() for o in p.values() if 'Practice' in o['operationId'] or 'Arrangement' in o['operationId'] or 'Lrclib' in o['operationId'] or 'Learning' in o['operationId'] or 'SectionLevel' in o['operationId']))"`
+Expected: the 13 operation ids listed under Interfaces. If it's missing some, run `docker compose restart backend` and retry.
+
+Run: `docker compose exec mydiary-vuetify npm run generateClientAPI`
+Expected: `src/api.ts` gains the functions above. Check with `grep -c "export const listLearningSongs\|export const createPracticeRun" mydiary-vuetify/src/api.ts`, which should print `2`.
+
+- [ ] **Step 2: Add the dependencies**
+
+Run: `docker compose exec mydiary-vuetify npm install svguitar@^2.6.2 @tombatossals/chords-db@^0.5.1`
+Run: `docker compose exec mydiary-vuetify npm install -D vitest@^5`
+
+Then add to the `scripts` block of `mydiary-vuetify/package.json`:
+
+```json
+        "test": "vitest run",
+```
+
+- [ ] **Step 3: Configure vitest**
+
+Create `mydiary-vuetify/vitest.config.ts`:
+
+```ts
+// Unit tests for the plain TS modules (chordpro.ts, chords.ts). Kept apart from
+// vite.config.ts so tests don't load the Vuetify plugin they never use.
+import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+    resolve: {
+        alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    },
+    test: {
+        include: ['src/**/*.test.ts'],
+        environment: 'node',
+    },
+})
+```
+
+- [ ] **Step 4: Prove the runner works**
+
+Create `mydiary-vuetify/src/smoke.test.ts`:
+
+```ts
+import { expect, it } from 'vitest'
+
+it('runs', () => {
+    expect(1 + 1).toBe(2)
+})
+```
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: `1 passed`
+
+- [ ] **Step 5: Remove the smoke test and commit**
+
+```bash
+rm mydiary-vuetify/src/smoke.test.ts
+git add mydiary-vuetify/src/api.ts mydiary-vuetify/package.json mydiary-vuetify/package-lock.json mydiary-vuetify/vitest.config.ts
+git commit -m "frontend: client for the practice routes; svguitar, chords-db and vitest"
+```
+
+---
+
+### Task 8: `chordpro.ts`: parsing and structure
+
+**Files:**
+- Create: `mydiary-vuetify/src/chordpro.ts`
+- Test: `mydiary-vuetify/src/chordpro.test.ts`
+
+**Interfaces:**
+- Produces (all exported from `@/chordpro`):
+  - `LEVELS = ['full','letters','cues','memorized'] as const`, `type Level`
+  - `IMPLICIT_SECTION = 'Song'`
+  - `interface ChordAt { chord: string; index: number }`
+  - `interface SheetLine { text: string; chords: ChordAt[]; comment?: boolean }`
+  - `interface SectionOccurrence { key: string; lines: SheetLine[]; recalled: boolean }`
+  - `interface ChordDefine { name: string; baseFret: number; frets: number[]; fingers: number[] }` (frets relative to `baseFret`, `0` open, `-1` muted, index 0 = lowest string)
+  - `interface ParsedSheet { occurrences: SectionOccurrence[]; defines: Record<string, ChordDefine>; chordNotes: Record<string, string>; chords: string[]; meta: Record<string, string> }`
+  - `interface StructureItem { key: string; abbr: string; count: number; index: number }`
+  - `isChord(token: string): boolean`
+  - `parseChordLine(raw: string): SheetLine`
+  - `parseDefine(value: string): ChordDefine | null`
+  - `parseSheet(sheet: string): ParsedSheet`
+  - `sectionKeys(parsed: ParsedSheet): string[]`
+  - `abbreviate(label: string): string`
+  - `structure(parsed: ParsedSheet): StructureItem[]`
+  - `skeleton(parsed: ParsedSheet): string`
+  - internal regexes `DIRECTIVE_RE`, `LABEL_RE` (exported for Tasks 9–10)
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `mydiary-vuetify/src/chordpro.test.ts`. All lyrics are invented.
+
+```ts
+import { describe, expect, it } from 'vitest'
+import {
+    abbreviate,
+    isChord,
+    parseChordLine,
+    parseDefine,
+    parseSheet,
+    sectionKeys,
+    skeleton,
+    structure,
+} from './chordpro'
+
+const SHEET = `{title: Paper Lanterns}
+{define: Am base-fret 1 frets 2 0 0 0 fingers 2 0 0 0}
+{x_chordnote: Bm | easy version: Bm7}
+[Verse 1]
+[C]Paper lanterns [G]on the line
+[Am]Folded paper, [F]borrowed time
+
+[Chorus]
+[F]Hold the [C]light
+[G]Hold it [Am]tight
+
+[Verse 2]
+[C]Candle wax on [G]kitchen floors
+
+[Chorus]
+
+[Bridge]
+[Bm]Somewhere else
+
+{chorus}
+`
+
+describe('isChord', () => {
+    it.each(['G', 'Am', 'F#m7', 'Bbmaj7', 'Dsus4', 'Cadd9', 'G/B', 'D/F#', 'E7b9', 'C#m7b5', 'N.C.', 'Em(maj7)', 'B7sus4', 'Ebm', 'Am7/G'])(
+        '%s is a chord',
+        (c) => expect(isChord(c)).toBe(true)
+    )
+    it.each(['Chorus', 'holding', 'Verse 1', 'x2', 'H', 'am'])('%s is not a chord', (c) =>
+        expect(isChord(c)).toBe(false)
+    )
+})
+
+describe('parseChordLine', () => {
+    it('places chords at text offsets', () => {
+        expect(parseChordLine('[C]Paper lanterns [G]on the line')).toEqual({
+            text: 'Paper lanterns on the line',
+            chords: [
+                { chord: 'C', index: 0 },
+                { chord: 'G', index: 15 },
+            ],
+        })
+    })
+})
+
+describe('parseDefine', () => {
+    it('reads base fret, frets and fingers', () => {
+        expect(parseDefine('Bm base-fret 2 frets x 1 3 3 2 1 fingers 0 1 3 4 2 1')).toEqual({
+            name: 'Bm',
+            baseFret: 2,
+            frets: [-1, 1, 3, 3, 2, 1],
+            fingers: [0, 1, 3, 4, 2, 1],
+        })
+    })
+    it('rejects a define without frets', () => {
+        expect(parseDefine('Am base-fret 1')).toBeNull()
+    })
+})
+
+describe('parseSheet', () => {
+    const parsed = parseSheet(SHEET)
+
+    it('splits sections by label and recalls empty repeats', () => {
+        expect(parsed.occurrences.map((o) => [o.key, o.recalled])).toEqual([
+            ['Verse 1', false],
+            ['Chorus', false],
+            ['Verse 2', false],
+            ['Chorus', true],
+            ['Bridge', false],
+            ['Chorus', true],
+        ])
+        expect(parsed.occurrences[3].lines).toEqual(parsed.occurrences[1].lines)
+    })
+
+    it('trims blank lines at section edges', () => {
+        expect(parsed.occurrences[0].lines.map((l) => l.text)).toEqual([
+            'Paper lanterns on the line',
+            'Folded paper, borrowed time',
+        ])
+    })
+
+    it('collects defines, chord notes, meta and chords in order', () => {
+        expect(parsed.defines.Am.frets).toEqual([2, 0, 0, 0])
+        expect(parsed.chordNotes).toEqual({ Bm: 'easy version: Bm7' })
+        expect(parsed.meta.title).toBe('Paper Lanterns')
+        expect(parsed.chords).toEqual(['C', 'G', 'Am', 'F', 'Bm'])
+    })
+
+    it('reads start_of directives with and without labels', () => {
+        const p = parseSheet('{start_of_verse: Verse 1}\nla\n{end_of_verse}\n{soc}\nhey\n{eoc}')
+        expect(p.occurrences.map((o) => o.key)).toEqual(['Verse 1', 'Chorus'])
+    })
+
+    it('puts unlabelled lines in the implicit section', () => {
+        expect(parseSheet('just words\nmore words').occurrences.map((o) => o.key)).toEqual(['Song'])
+        expect(parseSheet('').occurrences).toEqual([])
+    })
+
+    it('keeps comments as comment lines', () => {
+        const p = parseSheet('[Intro]\n{c: let ring}')
+        expect(p.occurrences[0].lines[0]).toEqual({ text: 'let ring', chords: [], comment: true })
+    })
+
+    it('treats a lone chord in brackets as a chord line, not a label', () => {
+        const p = parseSheet('[Intro]\n[G]')
+        expect(p.occurrences.map((o) => o.key)).toEqual(['Intro'])
+        expect(p.occurrences[0].lines[0].chords).toEqual([{ chord: 'G', index: 0 }])
+    })
+})
+
+describe('structure', () => {
+    it('abbreviates labels', () => {
+        expect(['Verse 1', 'Chorus', 'Pre-chorus', 'Final chorus', 'Chorus?', 'Song'].map(abbreviate)).toEqual([
+            'V1', 'C', 'PC', 'FC', 'C?', 'S',
+        ])
+    })
+
+    it('compresses consecutive repeats', () => {
+        const p = parseSheet('[Verse 1]\na\n[Verse 2]\nb\n[Chorus]\nc\n[Verse 3]\nd\n[Chorus]\n[Bridge]\ne\n[Chorus]\n[Chorus]')
+        expect(skeleton(p)).toBe('V1 V2 C V3 C B C×2')
+        expect(structure(p).at(-1)).toEqual({ key: 'Chorus', abbr: 'C', count: 2, index: 6 })
+    })
+
+    it('lists unique section keys in order', () => {
+        expect(sectionKeys(parseSheet(SHEET))).toEqual(['Verse 1', 'Chorus', 'Verse 2', 'Bridge'])
+    })
+})
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: FAIL, `Failed to resolve import "./chordpro"`
+
+- [ ] **Step 3: Write the module**
+
+Create `mydiary-vuetify/src/chordpro.ts`:
+
+```ts
+/**
+ * ChordPro for the song sheets: parsing and structure (this task), the tab
+ * paste import, transposition, directive editing and the practice fading.
+ *
+ * Only the subset the sheets use. Sections are `[Label]` lines or
+ * `{start_of_*: Label}` directives; chords sit inline as `[G]`; fingerings are
+ * `{define}` and chord notes the custom `{x_chordnote: Bm | ...}`. The backend
+ * stores sheets as opaque text, so this is the only parser.
+ */
+
+// from the most help to the least; mirrors LEVELS in the backend's song_practice.py
+export const LEVELS = ['full', 'letters', 'cues', 'memorized'] as const
+export type Level = (typeof LEVELS)[number]
+
+// lines that come before any section label belong to this one
+export const IMPLICIT_SECTION = 'Song'
+
+export interface ChordAt {
+    chord: string
+    index: number // offset into the line's text the chord sits above
+}
+
+export interface SheetLine {
+    text: string
+    chords: ChordAt[]
+    comment?: boolean
+}
+
+export interface SectionOccurrence {
+    key: string // the label as written; practice history is keyed on it
+    lines: SheetLine[]
+    recalled: boolean // an empty repeat, filled from the first with that label
+}
+
+export interface ChordDefine {
+    name: string
+    baseFret: number
+    // relative to baseFret (1 = the base fret), 0 open, -1 muted; lowest string first
+    frets: number[]
+    fingers: number[]
+}
+
+export interface ParsedSheet {
+    occurrences: SectionOccurrence[]
+    defines: Record<string, ChordDefine>
+    chordNotes: Record<string, string>
+    chords: string[] // every chord used, in order of first appearance
+    meta: Record<string, string>
+}
+
+export interface StructureItem {
+    key: string
+    abbr: string
+    count: number // consecutive repeats folded into this item
+    index: number // occurrence index of the first of them
+}
+
+const CHORD_RE =
+    /^(?:N\.?C\.?|[A-G][#b]?(?:maj|min|mi|m|M|dim|aug|sus|add|°|ø|\+|-)?\d{0,2}(?:(?:maj|sus|add|no|b|#|\+|-)\d{1,2})*(?:\([^)]*\))?(?:\/[A-G][#b]?)?)$/
+export const DIRECTIVE_RE = /^\s*\{\s*([A-Za-z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/
+export const LABEL_RE = /^\s*\[([^\]]+)\]\s*$/
+const CHORD_TOKEN_RE = /\[([^\]]*)\]/g
+
+const SECTION_DEFAULTS: Record<string, string> = {
+    chorus: 'Chorus',
+    verse: 'Verse',
+    bridge: 'Bridge',
+    tab: 'Tab',
+    grid: 'Grid',
+}
+const SHORT_START: Record<string, string> = {
+    soc: 'chorus',
+    sov: 'verse',
+    sob: 'bridge',
+    sot: 'tab',
+    sog: 'grid',
+}
+const COMMENT_DIRECTIVES = new Set(['comment', 'c', 'ci', 'comment_italic'])
+
+export function isChord(token: string): boolean {
+    return CHORD_RE.test(token.trim())
+}
+
+/** The section a directive starts, or null if it starts none. */
+export function sectionStart(name: string, value: string): string | null {
+    const kind = name.startsWith('start_of_') ? name.slice('start_of_'.length) : SHORT_START[name]
+    if (kind) return value || SECTION_DEFAULTS[kind] || kind.charAt(0).toUpperCase() + kind.slice(1)
+    if (name === 'chorus') return value || 'Chorus'
+    return null
+}
+
+export function parseChordLine(raw: string): SheetLine {
+    const chords: ChordAt[] = []
+    let text = ''
+    let last = 0
+    for (const m of raw.matchAll(CHORD_TOKEN_RE)) {
+        text += raw.slice(last, m.index)
+        chords.push({ chord: m[1].trim(), index: text.length })
+        last = m.index! + m[0].length
+    }
+    text += raw.slice(last)
+    return { text, chords }
+}
+
+export function parseDefine(value: string): ChordDefine | null {
+    const tokens = value.trim().split(/\s+/)
+    const name = tokens.shift()
+    if (!name) return null
+    let baseFret = 1
+    const frets: number[] = []
+    const fingers: number[] = []
+    let mode: 'frets' | 'fingers' | null = null
+    for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i].toLowerCase()
+        if (t === 'base-fret') {
+            baseFret = parseInt(tokens[++i] ?? '1', 10) || 1
+            mode = null
+        } else if (t === 'frets' || t === 'fingers') {
+            mode = t
+        } else if (mode === 'frets') {
+            frets.push(t === 'x' || t === 'n' ? -1 : parseInt(t, 10))
+        } else if (mode === 'fingers') {
+            fingers.push(parseInt(t, 10) || 0)
+        }
+    }
+    if (!frets.length || frets.some(Number.isNaN)) return null
+    return { name, baseFret, frets, fingers }
+}
+
+function isBlank(line: SheetLine): boolean {
+    return !line.text.trim() && !line.chords.length && !line.comment
+}
+
+function trimBlankLines(lines: SheetLine[]): SheetLine[] {
+    let start = 0
+    let end = lines.length
+    while (start < end && isBlank(lines[start])) start++
+    while (end > start && isBlank(lines[end - 1])) end--
+    return lines.slice(start, end)
+}
+
+function startSection(parsed: ParsedSheet, key: string): SectionOccurrence {
+    const occ: SectionOccurrence = { key, lines: [], recalled: false }
+    parsed.occurrences.push(occ)
+    return occ
+}
+
+export function parseSheet(sheet: string): ParsedSheet {
+    const parsed: ParsedSheet = { occurrences: [], defines: {}, chordNotes: {}, chords: [], meta: {} }
+    let current: SectionOccurrence | null = null
+
+    for (const raw of (sheet || '').replace(/\r\n?/g, '\n').split('\n')) {
+        const line = raw.replace(/\s+$/, '')
+        const directive = line.match(DIRECTIVE_RE)
+        if (directive) {
+            const name = directive[1].toLowerCase()
+            const value = (directive[2] ?? '').trim()
+            const started = sectionStart(name, value)
+            if (started) {
+                current = startSection(parsed, started)
+            } else if (name.startsWith('end_of_') || /^eo[cvbtg]$/.test(name)) {
+                // a section runs until the next label, so ends carry nothing
+            } else if (name === 'define') {
+                const d = parseDefine(value)
+                if (d) parsed.defines[d.name] = d
+            } else if (name === 'x_chordnote') {
+                const [chord, ...note] = value.split('|')
+                if (chord.trim()) parsed.chordNotes[chord.trim()] = note.join('|').trim()
+            } else if (COMMENT_DIRECTIVES.has(name)) {
+                current = current ?? startSection(parsed, IMPLICIT_SECTION)
+                current.lines.push({ text: value, chords: [], comment: true })
+            } else {
+                parsed.meta[name] = value
+            }
+            continue
+        }
+        const label = line.match(LABEL_RE)
+        if (label && !isChord(label[1])) {
+            current = startSection(parsed, label[1].trim())
+            continue
+        }
+        if (!current) {
+            if (!line.trim()) continue
+            current = startSection(parsed, IMPLICIT_SECTION)
+        }
+        current.lines.push(parseChordLine(line))
+    }
+
+    const firstLines: Record<string, SheetLine[]> = {}
+    for (const occ of parsed.occurrences) {
+        occ.lines = trimBlankLines(occ.lines)
+        if (occ.lines.length && !(occ.key in firstLines)) firstLines[occ.key] = occ.lines
+    }
+    for (const occ of parsed.occurrences) {
+        if (!occ.lines.length && firstLines[occ.key]) {
+            occ.lines = firstLines[occ.key]
+            occ.recalled = true
+        }
+    }
+
+    const seen = new Set<string>()
+    for (const occ of parsed.occurrences) {
+        for (const line of occ.lines) {
+            for (const { chord } of line.chords) {
+                if (chord && !seen.has(chord)) {
+                    seen.add(chord)
+                    parsed.chords.push(chord)
+                }
+            }
+        }
+    }
+    return parsed
+}
+
+export function sectionKeys(parsed: ParsedSheet): string[] {
+    return [...new Set(parsed.occurrences.map((o) => o.key))]
+}
+
+/** "Verse 1" -> "V1", "Pre-chorus" -> "PC", "Chorus?" -> "C?". */
+export function abbreviate(label: string): string {
+    const question = label.trim().endsWith('?') ? '?' : ''
+    const words = label.trim().replace(/\?$/, '').split(/[\s-]+/).filter(Boolean)
+    const letters = words.filter((w) => !/^\d+$/.test(w)).map((w) => w[0].toUpperCase()).join('')
+    const digits = words.filter((w) => /^\d+$/.test(w)).join('')
+    return letters + digits + question
+}
+
+export function structure(parsed: ParsedSheet): StructureItem[] {
+    const items: StructureItem[] = []
+    parsed.occurrences.forEach((occ, index) => {
+        const last = items.at(-1)
+        if (last && last.key === occ.key) last.count += 1
+        else items.push({ key: occ.key, abbr: abbreviate(occ.key), count: 1, index })
+    })
+    return items
+}
+
+export function skeleton(parsed: ParsedSheet): string {
+    return structure(parsed)
+        .map((s) => (s.count > 1 ? `${s.abbr}×${s.count}` : s.abbr))
+        .join(' ')
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: all pass
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add mydiary-vuetify/src/chordpro.ts mydiary-vuetify/src/chordpro.test.ts
+git commit -m "frontend: ChordPro parser and song structure"
+```
+
+---
+
+### Task 9: `chordpro.ts`: importing a sheet
+
+**Files:**
+- Modify: `mydiary-vuetify/src/chordpro.ts` (append)
+- Test: `mydiary-vuetify/src/chordpro.test.ts` (append)
+
+**Interfaces:**
+- Consumes: `isChord`, `DIRECTIVE_RE`, `LABEL_RE`, `ChordAt` (Task 8).
+- Produces:
+  - `convertChordsOverLyrics(paste: string): string`: a tab-site paste to ChordPro
+  - `suggestSections(plain: string): string`: plain lyrics to labelled ChordPro, with repeated blocks as `[Chorus?]` written once and recalled after
+  - `bracketedNonChords(sheet: string): string[]`: bracketed text that isn't a chord and isn't a label line
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `mydiary-vuetify/src/chordpro.test.ts` (and add the three names to its import from `./chordpro`):
+
+```ts
+describe('convertChordsOverLyrics', () => {
+    it('merges chord lines into the lyric below', () => {
+        const paste = ['[Verse 1]', 'C              G', 'Paper lanterns on the line', '', 'Chorus:', 'F        C', 'Hold the light'].join('\n')
+        expect(convertChordsOverLyrics(paste)).toBe(
+            ['[Verse 1]', '[C]Paper lanterns [G]on the line', '', '[Chorus]', '[F]Hold the [C]light', ''].join('\n')
+        )
+    })
+
+    it('pads a lyric shorter than its chords', () => {
+        expect(convertChordsOverLyrics('G       D\nOh')).toBe('[G]Oh      [D]\n')
+    })
+
+    it('keeps a chord line with no lyric as chords', () => {
+        expect(convertChordsOverLyrics('[Intro]\nG  D  Em  C\n\n[Verse]\nwords')).toBe('[Intro]\n[G] [D] [Em] [C]\n\n[Verse]\nwords\n')
+    })
+
+    it('ignores bar lines and repeat marks when detecting chord lines', () => {
+        expect(convertChordsOverLyrics('| G | D | x2')).toBe('[G] [D]\n')
+    })
+
+    it('strips tab-site markup', () => {
+        expect(convertChordsOverLyrics('[tab][ch]G[/ch]\nhello[/tab]')).toBe('[G]hello\n')
+    })
+
+    it('does not mistake a lyric for chords', () => {
+        expect(convertChordsOverLyrics('Am I wrong')).toBe('Am I wrong\n')
+    })
+})
+
+describe('suggestSections', () => {
+    it('labels verses and writes a repeated block once', () => {
+        const plain = ['First verse line', 'second line', '', 'Hold the light', 'Hold it tight', '', 'Another verse', '', 'Hold the light', 'Hold it tight!'].join('\n')
+        expect(suggestSections(plain)).toBe(
+            ['[Verse 1]', 'First verse line', 'second line', '', '[Chorus?]', 'Hold the light', 'Hold it tight', '', '[Verse 2]', 'Another verse', '', '[Chorus?]', ''].join('\n')
+        )
+    })
+
+    it('names a second repeated block differently', () => {
+        const plain = 'a\n\nb\n\na\n\nb'
+        expect(parseSheet(suggestSections(plain)).occurrences.map((o) => o.key)).toEqual(['Chorus?', 'Repeat 2?', 'Chorus?', 'Repeat 2?'])
+    })
+})
+
+describe('bracketedNonChords', () => {
+    it('finds alternate-lyric brackets but not chords or labels', () => {
+        const sheet = '[Verse 1]\nFolding [holding] paper [G]cranes\n[Chorus]'
+        expect(bracketedNonChords(sheet)).toEqual(['holding'])
+    })
+})
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: FAIL, `convertChordsOverLyrics is not a function` (or an import error)
+
+- [ ] **Step 3: Implement**
+
+Append to `mydiary-vuetify/src/chordpro.ts`:
+
+```ts
+// --- importing a sheet ------------------------------------------------------
+
+const SECTION_WORDS =
+    'intro|verse|pre-?chorus|chorus|post-?chorus|bridge|outro|refrain|interlude|solo|instrumental|coda|hook|break|tag'
+const PASTE_LABEL_RE = new RegExp(`^\\s*\\[?\\s*((?:${SECTION_WORDS})(?:\\s*\\d+)?)\\s*\\]?\\s*:?\\s*$`, 'i')
+// tokens a tab puts on a chord line that are not chords
+const NOISE_TOKEN_RE = /^(?:\||\/|-+|x\d+|\(x\d+\)|\.{2,3})$/i
+
+function chordColumns(line: string): ChordAt[] | null {
+    const out: ChordAt[] = []
+    for (const m of line.matchAll(/\S+/g)) {
+        if (NOISE_TOKEN_RE.test(m[0])) continue
+        if (!isChord(m[0])) return null
+        out.push({ chord: m[0], index: m.index! })
+    }
+    return out.length ? out : null
+}
+
+function tidyLabel(label: string): string {
+    const t = label.trim().replace(/\s+/g, ' ')
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()
+}
+
+function placeChords(lyric: string, chords: ChordAt[]): string {
+    let out = lyric
+    for (const { chord, index } of [...chords].sort((a, b) => b.index - a.index)) {
+        out = out.padEnd(index, ' ')
+        out = out.slice(0, index) + `[${chord}]` + out.slice(index)
+    }
+    return out.replace(/\s+$/, '')
+}
+
+/** A chords-over-lyrics paste from a tab site, as ChordPro. */
+export function convertChordsOverLyrics(paste: string): string {
+    const lines = (paste || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\[\/?(?:ch|tab)\]/g, '')
+        .split('\n')
+        .map((l) => l.replace(/\t/g, '    ').replace(/\s+$/, ''))
+    const out: string[] = []
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const label = line.match(PASTE_LABEL_RE)
+        if (label) {
+            out.push(`[${tidyLabel(label[1])}]`)
+            continue
+        }
+        const chords = chordColumns(line)
+        if (!chords) {
+            out.push(line)
+            continue
+        }
+        const next = lines[i + 1]
+        if (next !== undefined && next.trim() && !chordColumns(next) && !PASTE_LABEL_RE.test(next)) {
+            out.push(placeChords(next, chords))
+            i++
+        } else {
+            out.push(chords.map((c) => `[${c.chord}]`).join(' '))
+        }
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
+}
+
+function normalizeBlock(lines: string[]): string {
+    return lines
+        .map((l) => l.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, '').replace(/\s+/g, ' ').trim())
+        .join('\n')
+}
+
+/**
+ * Plain lyrics (e.g. from LRCLIB) as labelled ChordPro. Stanzas are the
+ * blank-line blocks; a block that appears more than once is probably a chorus,
+ * so it is written once and later appearances are bare labels that recall it.
+ * Labels end in "?" until the user confirms them.
+ */
+export function suggestSections(plain: string): string {
+    const blocks = (plain || '')
+        .replace(/\r\n?/g, '\n')
+        .split(/\n\s*\n/)
+        .map((b) => b.split('\n').map((l) => l.trim()).filter(Boolean))
+        .filter((b) => b.length)
+    const counts = new Map<string, number>()
+    for (const b of blocks) {
+        const n = normalizeBlock(b)
+        counts.set(n, (counts.get(n) ?? 0) + 1)
+    }
+    const labels = new Map<string, string>()
+    let verses = 0
+    let repeats = 0
+    const sections: string[] = []
+    for (const b of blocks) {
+        const n = normalizeBlock(b)
+        const known = labels.get(n)
+        if (known) {
+            sections.push(`[${known}]`)
+            continue
+        }
+        let label: string
+        if ((counts.get(n) ?? 0) > 1) {
+            repeats += 1
+            label = repeats === 1 ? 'Chorus?' : `Repeat ${repeats}?`
+        } else {
+            verses += 1
+            label = `Verse ${verses}`
+        }
+        labels.set(n, label)
+        sections.push([`[${label}]`, ...b].join('\n'))
+    }
+    return sections.join('\n\n') + '\n'
+}
+
+/** Bracketed text ChordPro would read as a chord but isn't one, e.g. an alternate lyric. */
+export function bracketedNonChords(sheet: string): string[] {
+    const found = new Set<string>()
+    for (const line of (sheet || '').split('\n')) {
+        if (DIRECTIVE_RE.test(line) || LABEL_RE.test(line)) continue
+        for (const m of line.matchAll(/\[([^\]]*)\]/g)) {
+            if (!isChord(m[1])) found.add(m[1])
+        }
+    }
+    return [...found]
+}
+```
+
+`LABEL_RE` matches any bracket-only line. A lone non-chord `[holding]` on its own line is therefore a label, which is correct: it starts a section.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: all pass
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add mydiary-vuetify/src/chordpro.ts mydiary-vuetify/src/chordpro.test.ts
+git commit -m "frontend: import tab pastes and plain lyrics as ChordPro"
+```
+
+---
+
+### Task 10: `chordpro.ts`: keys, transposition, chord directives, fading
+
+**Files:**
+- Modify: `mydiary-vuetify/src/chordpro.ts` (append)
+- Test: `mydiary-vuetify/src/chordpro.test.ts` (append)
+
+**Interfaces:**
+- Consumes: Task 8's types and regexes.
+- Produces:
+  - `interface KeyInfo { pc: number; minor: boolean }`
+  - `parseKey(key?: string | null): KeyInfo | null`, `keyName(k: KeyInfo): string`, `usesFlats(key?: string | null): boolean`
+  - `transposeNote(note: string, semitones: number, flats: boolean): string`, `transposeChord(chord: string, semitones: number, flats: boolean): string`
+  - `shapeKey(key?: string | null, capo?: number | null): string | null`
+  - `describeKey(key?: string | null, capo?: number | null): string`, e.g. `"Sounds in Ab · C shapes · capo 8"`
+  - `transposeSheet(sheet: string, semitones: number, flats: boolean): string`
+  - `stripChordDirectives(sheet: string): string`
+  - `copySheet(sheet: string, from: { key?: string | null; capo?: number | null }, to: { key?: string | null; capo?: number | null }): string`
+  - `formatDefine(d: ChordDefine): string`, `setChordDefine(sheet: string, chord: string, d: ChordDefine | null): string`, `setChordNote(sheet: string, chord: string, note: string | null): string`
+  - `parseFretString(s: string, strings: number): number[] | null` (absolute frets, `-1` muted), `defineFromAbsoluteFrets(name: string, abs: number[]): ChordDefine`
+  - `interface Run { text: string; hidden: boolean }`, `interface Segment { chord: string | null; runs: Run[] }`
+  - `visibleMask(text: string, level: Level): boolean[]`, `lineSegments(line: SheetLine, level: Level): Segment[]`
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `mydiary-vuetify/src/chordpro.test.ts` (extend the import from `./chordpro` with every name used below):
+
+```ts
+describe('keys', () => {
+    it('parses and names keys', () => {
+        expect(parseKey('Ab')).toEqual({ pc: 8, minor: false })
+        expect(parseKey('F#m')).toEqual({ pc: 6, minor: true })
+        expect(parseKey('H')).toBeNull()
+        expect(keyName({ pc: 1, minor: false })).toBe('Db')
+        expect(keyName({ pc: 1, minor: true })).toBe('C#m')
+    })
+
+    it('knows flat keys', () => {
+        expect(['F', 'Bb', 'Ab', 'Dm', 'Ebm'].map(usesFlats)).toEqual([true, true, true, true, true])
+        expect(['G', 'E', 'F#m', 'C'].map(usesFlats)).toEqual([false, false, false, false])
+    })
+
+    it('derives the shape key from sounding key and capo', () => {
+        expect(shapeKey('Ab', 8)).toBe('C')
+        expect(shapeKey('A', 2)).toBe('G')
+        expect(shapeKey('F#m', 2)).toBe('Em')
+        expect(shapeKey('G', null)).toBe('G')
+        expect(shapeKey(null, 2)).toBeNull()
+    })
+
+    it('describes an arrangement', () => {
+        expect(describeKey('Ab', 8)).toBe('Sounds in Ab · C shapes · capo 8')
+        expect(describeKey('G', 0)).toBe('Key of G')
+        expect(describeKey(null, 3)).toBe('Capo 3')
+        expect(describeKey(null, null)).toBe('')
+    })
+})
+
+describe('transposition', () => {
+    it('moves roots and bass notes', () => {
+        expect(transposeChord('G/B', 2, false)).toBe('A/C#')
+        expect(transposeChord('F#m7', -1, false)).toBe('Fm7')
+        expect(transposeChord('C', 3, true)).toBe('Eb')
+        expect(transposeChord('N.C.', 3, true)).toBe('N.C.')
+    })
+
+    it('transposes chords in a sheet but not labels or directives', () => {
+        const sheet = '{title: X}\n[Chorus]\n[G]Hold the [D/F#]light'
+        expect(transposeSheet(sheet, 5, false)).toBe('{title: X}\n[Chorus]\n[C]Hold the [G/B]light')
+    })
+
+    it('copies a guitar sheet to ukulele by shape key and drops fingerings', () => {
+        const sheet = '{define: C base-fret 1 frets x 3 2 0 1 0}\n{x_chordnote: C | full barre}\n[Verse 1]\n[C]Paper [F]lanterns'
+        // guitar: sounds Ab with C shapes (capo 8); ukulele: plays in Ab, no capo
+        expect(copySheet(sheet, { key: 'Ab', capo: 8 }, { key: 'Ab', capo: 0 })).toBe('[Verse 1]\n[Ab]Paper [Db]lanterns')
+    })
+
+    it('only strips directives when a key is unknown', () => {
+        expect(copySheet('{define: C base-fret 1 frets 0 0 0 3}\n[C]x', { key: null }, { key: 'G' })).toBe('[C]x')
+    })
+})
+
+describe('chord directives', () => {
+    const def = { name: 'Am', baseFret: 1, frets: [2, 0, 0, 0], fingers: [2, 0, 0, 0] }
+
+    it('formats a define', () => {
+        expect(formatDefine({ ...def, frets: [-1, 0, 2, 2, 1, 0], fingers: [] })).toBe('{define: Am base-fret 1 frets x 0 2 2 1 0}')
+    })
+
+    it('adds, replaces and removes a define at the top of the sheet', () => {
+        const sheet = '{title: X}\n[Verse 1]\n[Am]words'
+        const added = setChordDefine(sheet, 'Am', def)
+        expect(added).toBe('{title: X}\n{define: Am base-fret 1 frets 2 0 0 0 fingers 2 0 0 0}\n[Verse 1]\n[Am]words')
+        const replaced = setChordDefine(added, 'Am', { ...def, frets: [2, 0, 0, 3] })
+        expect(replaced).toContain('frets 2 0 0 3')
+        expect(replaced.match(/define/g)).toHaveLength(1)
+        expect(setChordDefine(replaced, 'Am', null)).toBe(sheet)
+    })
+
+    it('sets and clears a chord note', () => {
+        const withNote = setChordNote('[G]x', 'G', ' ring finger on B ')
+        expect(withNote).toBe('{x_chordnote: G | ring finger on B}\n[G]x')
+        expect(setChordNote(withNote, 'G', '')).toBe('[G]x')
+    })
+
+    it('reads fret strings', () => {
+        expect(parseFretString('x32010', 6)).toEqual([-1, 3, 2, 0, 1, 0])
+        expect(parseFretString('10 12 12 11 10 10', 6)).toEqual([10, 12, 12, 11, 10, 10])
+        expect(parseFretString('0003', 4)).toEqual([0, 0, 0, 3])
+        expect(parseFretString('000', 4)).toBeNull()
+    })
+
+    it('makes a define from absolute frets', () => {
+        expect(defineFromAbsoluteFrets('C', [-1, 3, 2, 0, 1, 0])).toEqual({ name: 'C', baseFret: 1, frets: [-1, 3, 2, 0, 1, 0], fingers: [] })
+        expect(defineFromAbsoluteFrets('Bb', [6, 8, 8, 7, 6, 6])).toEqual({ name: 'Bb', baseFret: 6, frets: [1, 3, 3, 2, 1, 1], fingers: [] })
+    })
+})
+
+describe('fading', () => {
+    const line = parseChordLine('[C]Paper lanterns [G]on the line')
+    const shown = (level: Level) =>
+        lineSegments(line, level)
+            .map((s) => s.runs.map((r) => (r.hidden ? '_'.repeat(r.text.length) : r.text)).join(''))
+            .join('|')
+
+    it('full shows everything', () => {
+        expect(shown('full')).toBe('Paper lanterns |on the line')
+    })
+    // whitespace always shows, so a faded line keeps its word shapes
+    it('letters shows first letters', () => {
+        expect(shown('letters')).toBe('P____ l_______ |o_ t__ l___')
+    })
+    it('cues shows the first three words', () => {
+        expect(shown('cues')).toBe('Paper lanterns |on ___ ____')
+    })
+    it('memorized hides all text but keeps chords', () => {
+        expect(shown('memorized')).toBe('_____ ________ |__ ___ ____')
+        expect(lineSegments(line, 'memorized').map((s) => s.chord)).toEqual(['C', 'G'])
+    })
+    it('adds a chordless leading segment', () => {
+        expect(lineSegments(parseChordLine('Oh [G]yes'), 'full').map((s) => s.chord)).toEqual([null, 'G'])
+    })
+    it('never fades comments', () => {
+        expect(lineSegments({ text: 'let ring', chords: [], comment: true }, 'memorized')[0].runs).toEqual([{ text: 'let ring', hidden: false }])
+    })
+})
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: FAIL, `parseKey is not a function` (or an import error)
+
+- [ ] **Step 3: Implement**
+
+Append to `mydiary-vuetify/src/chordpro.ts`:
+
+```ts
+// --- keys and transposition --------------------------------------------------
+
+const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+const LETTER_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+// the usual spelling of each key
+const MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm']
+const FLAT_KEYS_WITHOUT_B = new Set(['F', 'Dm', 'Gm', 'Cm', 'Fm'])
+
+export interface KeyInfo {
+    pc: number // pitch class, C = 0
+    minor: boolean
+}
+
+const mod12 = (n: number) => ((n % 12) + 12) % 12
+
+function pitchClass(note: string): number | null {
+    const m = note.match(/^([A-G])([#b]?)$/)
+    if (!m) return null
+    return mod12(LETTER_PC[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0))
+}
+
+export function parseKey(key?: string | null): KeyInfo | null {
+    const m = (key || '').trim().match(/^([A-G][#b]?)\s*(m|min|minor)?$/)
+    if (!m) return null
+    const pc = pitchClass(m[1])
+    return pc === null ? null : { pc, minor: Boolean(m[2]) }
+}
+
+export function keyName(k: KeyInfo): string {
+    return (k.minor ? MINOR_KEYS : MAJOR_KEYS)[k.pc]
+}
+
+export function usesFlats(key?: string | null): boolean {
+    const k = parseKey(key)
+    if (!k) return false
+    const name = keyName(k)
+    return name.includes('b') || FLAT_KEYS_WITHOUT_B.has(name)
+}
+
+export function transposeNote(note: string, semitones: number, flats: boolean): string {
+    const pc = pitchClass(note)
+    if (pc === null) return note
+    return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(pc + semitones)]
+}
+
+export function transposeChord(chord: string, semitones: number, flats: boolean): string {
+    if (!isChord(chord) || /^N\.?C/.test(chord)) return chord
+    const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/)
+    if (!m) return chord
+    const bass = m[3] ? '/' + transposeNote(m[3], semitones, flats) : ''
+    return transposeNote(m[1], semitones, flats) + m[2] + bass
+}
+
+/** The key of the shapes fingered: sounding key minus the capo. */
+export function shapeKey(key?: string | null, capo?: number | null): string | null {
+    const k = parseKey(key)
+    if (!k) return null
+    return keyName({ pc: mod12(k.pc - (capo ?? 0)), minor: k.minor })
+}
+
+export function describeKey(key?: string | null, capo?: number | null): string {
+    const shapes = shapeKey(key, capo)
+    if (key && shapes && capo) return `Sounds in ${key} · ${shapes} shapes · capo ${capo}`
+    if (key) return `Key of ${key}`
+    if (capo) return `Capo ${capo}`
+    return ''
+}
+
+function mapLines(sheet: string, fn: (line: string) => string): string {
+    return (sheet || '').split('\n').map(fn).join('\n')
+}
+
+export function transposeSheet(sheet: string, semitones: number, flats: boolean): string {
+    return mapLines(sheet, (line) => {
+        if (DIRECTIVE_RE.test(line) || (LABEL_RE.test(line) && !isChord(line.match(LABEL_RE)![1]))) return line
+        return line.replace(CHORD_TOKEN_RE, (whole, chord: string) =>
+            isChord(chord) ? `[${transposeChord(chord.trim(), semitones, flats)}]` : whole
+        )
+    })
+}
+
+const CHORD_DIRECTIVE_RE = /^\s*\{\s*(define|x_chordnote)\s*:/i
+
+export function stripChordDirectives(sheet: string): string {
+    return (sheet || '')
+        .split('\n')
+        .filter((line) => !CHORD_DIRECTIVE_RE.test(line))
+        .join('\n')
+}
+
+type KeyAndCapo = { key?: string | null; capo?: number | null }
+
+/**
+ * One instrument's sheet made into a starting point for another. Chords move
+ * by the difference in shape key; fingerings and chord notes are dropped,
+ * since they belong to the instrument they were written for.
+ */
+export function copySheet(sheet: string, from: KeyAndCapo, to: KeyAndCapo): string {
+    const stripped = stripChordDirectives(sheet)
+    const fromShapes = parseKey(shapeKey(from.key, from.capo))
+    const toShapesName = shapeKey(to.key, to.capo)
+    const toShapes = parseKey(toShapesName)
+    if (!fromShapes || !toShapes) return stripped
+    return transposeSheet(stripped, mod12(toShapes.pc - fromShapes.pc), usesFlats(toShapesName))
+}
+
+// --- chord directives --------------------------------------------------------
+
+export function formatDefine(d: ChordDefine): string {
+    const frets = d.frets.map((f) => (f < 0 ? 'x' : String(f))).join(' ')
+    const fingers = d.fingers.length ? ` fingers ${d.fingers.join(' ')}` : ''
+    return `{define: ${d.name} base-fret ${d.baseFret} frets ${frets}${fingers}}`
+}
+
+function directiveChord(line: string, directive: string): string | null {
+    const m = line.match(DIRECTIVE_RE)
+    if (!m || m[1].toLowerCase() !== directive) return null
+    const value = (m[2] ?? '').trim()
+    return (directive === 'x_chordnote' ? value.split('|')[0] : value.split(/\s+/)[0]).trim()
+}
+
+function setChordDirective(sheet: string, directive: string, chord: string, line: string | null): string {
+    const lines = (sheet || '').split('\n')
+    const at = lines.findIndex((l) => directiveChord(l, directive) === chord)
+    if (at >= 0) {
+        if (line === null) lines.splice(at, 1)
+        else lines[at] = line
+        return lines.join('\n')
+    }
+    if (line === null) return sheet
+    // new directives join the block at the top, before the first section
+    let insert = 0
+    while (insert < lines.length) {
+        const m = lines[insert].match(DIRECTIVE_RE)
+        if (!m || sectionStart(m[1].toLowerCase(), (m[2] ?? '').trim())) break
+        insert++
+    }
+    lines.splice(insert, 0, line)
+    return lines.join('\n')
+}
+
+export function setChordDefine(sheet: string, chord: string, d: ChordDefine | null): string {
+    return setChordDirective(sheet, 'define', chord, d ? formatDefine({ ...d, name: chord }) : null)
+}
+
+export function setChordNote(sheet: string, chord: string, note: string | null): string {
+    const text = (note ?? '').trim()
+    return setChordDirective(sheet, 'x_chordnote', chord, text ? `{x_chordnote: ${chord} | ${text}}` : null)
+}
+
+/** "x32010" or "10 12 12 11 10 10" as absolute frets, lowest string first. */
+export function parseFretString(s: string, strings: number): number[] | null {
+    const t = s.trim()
+    const parts = /[\s,]/.test(t) ? t.split(/[\s,]+/) : t.split('')
+    if (parts.length !== strings) return null
+    const frets = parts.map((p) => (/^[xX-]$/.test(p) ? -1 : Number(p)))
+    return frets.some((n) => !Number.isInteger(n) || n < -1 || n > 24) ? null : frets
+}
+
+export function defineFromAbsoluteFrets(name: string, abs: number[]): ChordDefine {
+    const fretted = abs.filter((f) => f > 0)
+    const baseFret = fretted.length && Math.max(...fretted) > 4 ? Math.min(...fretted) : 1
+    return { name, baseFret, frets: abs.map((f) => (f > 0 ? f - baseFret + 1 : f)), fingers: [] }
+}
+
+// --- fading -----------------------------------------------------------------
+
+export interface Run {
+    text: string
+    hidden: boolean
+}
+
+export interface Segment {
+    chord: string | null // the chord above this stretch of text
+    runs: Run[]
+}
+
+const WORD_RE = /[\p{L}\p{N}'’]+/gu
+// how many words a line keeps at the `cues` level
+const CUE_WORDS = 3
+
+/** Which characters of a line stay visible at a level. */
+export function visibleMask(text: string, level: Level): boolean[] {
+    // whitespace is always "visible": it looks the same either way, and it
+    // keeps the hidden-text underline broken into word shapes
+    // indexed by UTF-16 unit, like the chord offsets
+    const mask: boolean[] = Array.from({ length: text.length }, (_, i) => level === 'full' || /\s/.test(text[i]))
+    if (level === 'full' || level === 'memorized') return mask
+    const words = [...text.matchAll(WORD_RE)]
+    if (level === 'letters') {
+        for (const w of words) mask[w.index!] = true
+        return mask
+    }
+    const last = words[Math.min(CUE_WORDS, words.length) - 1]
+    if (last) mask.fill(true, 0, last.index! + last[0].length)
+    return mask
+}
+
+function toRuns(text: string, mask: boolean[]): Run[] {
+    const runs: Run[] = []
+    for (let i = 0; i < text.length; i++) {
+        const hidden = !mask[i]
+        const last = runs.at(-1)
+        if (last && last.hidden === hidden) last.text += text[i]
+        else runs.push({ text: text[i], hidden })
+    }
+    return runs
+}
+
+/** A line cut at its chords, each piece's text split into shown and hidden runs.
+ *  Hidden text keeps its width, so chords stay over the right syllable. */
+export function lineSegments(line: SheetLine, level: Level): Segment[] {
+    const mask = line.comment ? new Array(line.text.length).fill(true) : visibleMask(line.text, level)
+    const bounds: { chord: string | null; from: number }[] = []
+    if (!line.chords.length || line.chords[0].index > 0) bounds.push({ chord: null, from: 0 })
+    for (const c of line.chords) bounds.push({ chord: c.chord, from: c.index })
+    return bounds.map((b, i) => {
+        const to = i + 1 < bounds.length ? bounds[i + 1].from : line.text.length
+        return { chord: b.chord, runs: toRuns(line.text.slice(b.from, to), mask.slice(b.from, to)) }
+    })
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: all pass. The `letters` expectation depends on words being `[\p{L}\p{N}'’]+`. If it fails, print the actual output and check the regex before changing the test.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add mydiary-vuetify/src/chordpro.ts mydiary-vuetify/src/chordpro.test.ts
+git commit -m "frontend: keys, transposition, chord directives and practice fading"
+```
+
+---
+
+### Task 11: Fingerings, chord diagrams, level colors
+
+**Files:**
+- Create: `mydiary-vuetify/src/chords.ts`, `mydiary-vuetify/src/chords.test.ts`, `mydiary-vuetify/src/practice.ts`, `mydiary-vuetify/src/components/ChordDiagram.vue`
+- Modify: `mydiary-vuetify/src/plugins/vuetify.ts`
+
+**Interfaces:**
+- Consumes: `ChordDefine`, `Level`, `LEVELS` (Task 8).
+- Produces:
+  - `chords.ts`: `type Instrument = 'guitar' | 'ukulele'`, `STRINGS: Record<Instrument, number>`, `interface Fingering { baseFret: number; frets: number[]; fingers: number[]; barres: number[] }`, `interface ChordDb { chords: Record<string, { key: string; suffix: string; positions: Fingering[] }[]> }`, `loadChordDb(instrument: Instrument): Promise<ChordDb>`, `lookupChord(db: ChordDb, chord: string): Fingering[]`, `fingeringFromDefine(d: ChordDefine): Fingering`, `defineFromFingering(name: string, f: Fingering): ChordDefine`, `toSvguitar(f: Fingering, strings: number): { fingers: [number, number | 'x'][]; barres: { fromString: number; toString: number; fret: number }[]; position: number }`
+  - `practice.ts`: `LEVEL_LABELS: Record<Level, string>`, `levelColor(level: Level): string` (theme color name), `levelMap(rows: { section_key: string; level: string }[]): Record<string, Level>`, `utcDate(s?: string | null): Date | null`, `shortDate(s?: string | null): string`
+  - `ChordDiagram.vue` props: `chord: string`, `instrument: Instrument`, `define?: ChordDefine`, `position?: number` (index into the library positions, default 0), `size?: number` (px width, default 96)
+  - Theme colors `level-full`, `level-letters`, `level-cues`, `level-memorized`
+
+- [ ] **Step 1: Write the failing tests**
+
+Create `mydiary-vuetify/src/chords.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest'
+import { defineFromFingering, fingeringFromDefine, loadChordDb, lookupChord, toSvguitar } from './chords'
+
+const guitar = await loadChordDb('guitar')
+const ukulele = await loadChordDb('ukulele')
+
+describe('lookupChord', () => {
+
+    it('finds a major chord by pitch class whatever the spelling', () => {
+        expect(lookupChord(ukulele, 'A')[0].frets).toEqual([2, 1, 0, 0])
+        expect(lookupChord(guitar, 'Db').length).toBeGreaterThan(0) // stored as Csharp
+        expect(lookupChord(ukulele, 'C#').length).toBeGreaterThan(0) // stored as Db
+    })
+
+    it('maps suffixes', () => {
+        expect(lookupChord(ukulele, 'Am')[0].frets).toEqual([2, 0, 0, 0])
+        expect(lookupChord(guitar, 'Cmaj7').length).toBeGreaterThan(0)
+        expect(lookupChord(ukulele, 'Esus').length).toBeGreaterThan(0) // no plain sus on ukulele: sus4
+    })
+
+    it('uses slash chords when the library has them and drops the bass otherwise', () => {
+        expect(lookupChord(guitar, 'C/E').length).toBeGreaterThan(0)
+        expect(lookupChord(ukulele, 'G/B')).toEqual(lookupChord(ukulele, 'G'))
+    })
+
+    it('returns nothing for a non-chord', () => {
+        expect(lookupChord(guitar, 'Chorus')).toEqual([])
+    })
+})
+
+describe('conversions', () => {
+    it('turns a define into a fingering and back', () => {
+        const d = { name: 'Bb', baseFret: 6, frets: [1, 3, 3, 2, 1, 1], fingers: [1, 3, 4, 2, 1, 1] }
+        const f = fingeringFromDefine(d)
+        expect(f).toEqual({ baseFret: 6, frets: [1, 3, 3, 2, 1, 1], fingers: [1, 3, 4, 2, 1, 1], barres: [] })
+        expect(defineFromFingering('Bb', f)).toEqual(d)
+    })
+
+    it('numbers strings from the highest, as svguitar does', () => {
+        const out = toSvguitar({ baseFret: 1, frets: [-1, 3, 2, 0, 1, 0], fingers: [], barres: [] }, 6)
+        expect(out.fingers).toEqual([[6, 'x'], [5, 3], [4, 2], [3, 0], [2, 1], [1, 0]])
+        expect(out.position).toBe(1)
+    })
+
+    it('spans a barre across the strings at its fret', () => {
+        const out = toSvguitar({ baseFret: 1, frets: [1, 3, 3, 2, 1, 1], fingers: [1, 3, 4, 2, 1, 1], barres: [1] }, 6)
+        expect(out.barres).toEqual([{ fromString: 6, toString: 1, fret: 1 }])
+        expect(out.fingers.filter(([, fret]) => fret === 1)).toEqual([])
+    })
+})
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: FAIL, `Failed to resolve import "./chords"`
+
+- [ ] **Step 3: Write `chords.ts`**
+
+Create `mydiary-vuetify/src/chords.ts`:
+
+```ts
+/**
+ * Chord fingerings for the sheets, from the chords-db library (MIT): guitar in
+ * standard tuning and ukulele in GCEA. A sheet's own `{define}` beats the
+ * library, which is how a fingering the user settled on gets remembered.
+ *
+ * The data is ~240 kB per instrument, so it is loaded on demand, not bundled
+ * into the main chunk.
+ */
+import type { ChordDefine } from './chordpro'
+
+export type Instrument = 'guitar' | 'ukulele'
+export const STRINGS: Record<Instrument, number> = { guitar: 6, ukulele: 4 }
+
+export interface Fingering {
+    baseFret: number
+    frets: number[] // relative to baseFret, 0 open, -1 muted, lowest string first
+    fingers: number[]
+    barres: number[] // relative frets that are barred
+}
+
+export interface ChordDb {
+    chords: Record<string, { key: string; suffix: string; positions: Fingering[] }[]>
+}
+
+const cache: Partial<Record<Instrument, Promise<ChordDb>>> = {}
+
+export function loadChordDb(instrument: Instrument): Promise<ChordDb> {
+    cache[instrument] ??=
+        instrument === 'guitar'
+            ? import('@tombatossals/chords-db/lib/guitar.json').then((m) => (m.default ?? m) as unknown as ChordDb)
+            : import('@tombatossals/chords-db/lib/ukulele.json').then((m) => (m.default ?? m) as unknown as ChordDb)
+    return cache[instrument]!
+}
+
+const LETTER_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+
+function pitchClass(note: string): number | null {
+    const m = note.match(/^([A-G])(#|b|sharp)?$/)
+    if (!m) return null
+    const shift = m[2] === 'b' ? -1 : m[2] ? 1 : 0
+    return (LETTER_PC[m[1]] + shift + 12) % 12
+}
+
+// chord-sheet suffix -> chords-db suffix, where they differ
+const SUFFIXES: Record<string, string[]> = {
+    '': ['major'],
+    m: ['minor'],
+    min: ['minor'],
+    mi: ['minor'],
+    '-': ['minor'],
+    M7: ['maj7'],
+    sus: ['sus', 'sus4'],
+    '+': ['aug'],
+    '°': ['dim'],
+}
+
+function groupFor(db: ChordDb, pc: number) {
+    for (const [name, group] of Object.entries(db.chords)) {
+        if (pitchClass(name) === pc) return group
+    }
+    return null
+}
+
+function spellings(pc: number): string[] {
+    const sharps = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    const flats = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+    return [...new Set([sharps[pc], flats[pc]])]
+}
+
+/** Every library position for a chord name, best first; [] if none. */
+export function lookupChord(db: ChordDb, chord: string): Fingering[] {
+    const m = chord.trim().match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/)
+    if (!m) return []
+    const pc = pitchClass(m[1])
+    const group = pc === null ? null : groupFor(db, pc)
+    if (!group) return []
+    const suffixes = SUFFIXES[m[2]] ?? [m[2]]
+    const find = (suffix: string) => group.find((c) => c.suffix === suffix)?.positions ?? null
+
+    if (m[3]) {
+        const bassPc = pitchClass(m[3])
+        const base = m[2] === '' ? '' : m[2] === 'm' ? 'm' : null
+        if (bassPc !== null && base !== null) {
+            for (const bass of spellings(bassPc)) {
+                const found = find(`${base}/${bass}`)
+                if (found) return found
+            }
+        }
+    }
+    for (const suffix of suffixes) {
+        const found = find(suffix)
+        if (found) return found
+    }
+    return []
+}
+
+export function fingeringFromDefine(d: ChordDefine): Fingering {
+    return { baseFret: d.baseFret, frets: [...d.frets], fingers: [...d.fingers], barres: [] }
+}
+
+export function defineFromFingering(name: string, f: Fingering): ChordDefine {
+    return { name, baseFret: f.baseFret, frets: [...f.frets], fingers: [...f.fingers] }
+}
+
+/** chords-db numbers strings from the lowest; svguitar from the highest (1). */
+export function toSvguitar(f: Fingering, strings: number) {
+    const barres = f.barres.map((fret) => {
+        const on = f.frets.map((v, i) => (v === fret ? strings - i : null)).filter((s): s is number => s !== null)
+        return { fromString: Math.max(...on), toString: Math.min(...on), fret }
+    })
+    const barred = new Set(f.barres)
+    const fingers: [number, number | 'x'][] = []
+    f.frets.forEach((fret, i) => {
+        if (barred.has(fret)) return
+        fingers.push([strings - i, fret < 0 ? 'x' : fret])
+    })
+    return { fingers, barres, position: f.baseFret }
+}
+```
+
+Check that chords-db's JSON imports resolve under vitest. If `import('@tombatossals/chords-db/lib/guitar.json')` fails with a package `exports` error, run `docker compose exec mydiary-vuetify node -e "console.log(require.resolve('@tombatossals/chords-db/lib/guitar.json'))"`. If that path resolves, the import is fine and the problem is elsewhere.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: all pass
+
+- [ ] **Step 5: Level colors and `practice.ts`**
+
+In `mydiary-vuetify/src/plugins/vuetify.ts`, after the `timeOfDay` constant:
+
+```ts
+/**
+ * How much of a section the practice sheet still shows, from all of it to none.
+ * Used for the structure line, the learning queue bars and the section labels.
+ */
+const practiceLevel = {
+    'level-full': '#b0bec5',
+    'level-letters': '#f2c14e',
+    'level-cues': '#8cc084',
+    'level-memorized': timeOfDay.morning,
+}
+```
+
+and add `...practiceLevel,` after `...timeOfDay,` in the light theme's `colors`.
+
+Create `mydiary-vuetify/src/practice.ts`:
+
+```ts
+/** Small helpers shared by the practice views. */
+import { LEVELS, type Level } from './chordpro'
+
+export const LEVEL_LABELS: Record<Level, string> = {
+    full: 'Reading',
+    letters: 'First letters',
+    cues: 'First words',
+    memorized: 'Memorized',
+}
+
+export function levelColor(level: Level): string {
+    return `level-${level}`
+}
+
+export function levelMap(rows: { section_key: string; level: string }[] | undefined): Record<string, Level> {
+    const out: Record<string, Level> = {}
+    for (const row of rows ?? []) {
+        if ((LEVELS as readonly string[]).includes(row.level)) out[row.section_key] = row.level as Level
+    }
+    return out
+}
+
+/** The backend returns UTC datetimes without a zone; read them as UTC. */
+export function utcDate(s?: string | null): Date | null {
+    if (!s) return null
+    return new Date(/[zZ]|[+-]\d\d:\d\d$/.test(s) ? s : `${s}Z`)
+}
+
+export function shortDate(s?: string | null): string {
+    const d = utcDate(s)
+    return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+}
+```
+
+- [ ] **Step 6: `ChordDiagram.vue`**
+
+Create `mydiary-vuetify/src/components/ChordDiagram.vue`:
+
+```vue
+<template>
+    <div class="chord-diagram" :style="{ width: `${size}px` }">
+        <div class="text-body-2 font-weight-medium text-center">{{ chord }}</div>
+        <div ref="target" class="chord-diagram-svg"></div>
+        <div v-if="missing" class="text-caption text-medium-emphasis text-center">
+            no fingering
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, ref, watch } from 'vue'
+import { SVGuitarChord } from 'svguitar'
+import type { ChordDefine } from '@/chordpro'
+import { STRINGS, fingeringFromDefine, loadChordDb, lookupChord, toSvguitar, type Instrument } from '@/chords'
+
+const props = withDefaults(
+    defineProps<{
+        chord: string
+        instrument: Instrument
+        /** The sheet's own fingering, which beats the library. */
+        define?: ChordDefine
+        /** Which library position to show when there is no define. */
+        position?: number
+        size?: number
+    }>(),
+    { define: undefined, position: 0, size: 96 }
+)
+
+const target = ref<HTMLDivElement>()
+const missing = ref(false)
+
+async function draw() {
+    if (!target.value) return
+    target.value.innerHTML = ''
+    const strings = STRINGS[props.instrument]
+    const fingering = props.define
+        ? fingeringFromDefine(props.define)
+        : lookupChord(await loadChordDb(props.instrument), props.chord)[props.position]
+    missing.value = !fingering
+    if (!fingering) return
+    new SVGuitarChord(target.value)
+        .configure({ strings, frets: 4, fretLabelPosition: 'left', fontFamily: 'inherit' })
+        .chord(toSvguitar(fingering, strings))
+        .draw()
+}
+
+onMounted(draw)
+watch(() => [props.chord, props.instrument, props.define, props.position], draw, { deep: true })
+</script>
+
+<style scoped>
+.chord-diagram-svg :deep(svg) {
+    width: 100%;
+    height: auto;
+}
+</style>
+```
+
+- [ ] **Step 7: Type-check and commit**
+
+Run: `docker compose exec mydiary-vuetify npm run build`
+Expected: success. If `vue-tsc` rejects the chords-db JSON import types, add `src/chords-db.d.ts` containing `declare module '@tombatossals/chords-db/lib/*.json' { const value: unknown; export default value }`.
+
+```bash
+git add mydiary-vuetify/src/chords.ts mydiary-vuetify/src/chords.test.ts mydiary-vuetify/src/practice.ts mydiary-vuetify/src/components/ChordDiagram.vue mydiary-vuetify/src/plugins/vuetify.ts
+git commit -m "frontend: chord fingerings, diagrams and practice level colors"
+```
+
+---
+### Task 12: Rendering a sheet
+
+**Files:**
+- Create: `mydiary-vuetify/src/components/SongSheet.vue`, `mydiary-vuetify/src/components/StructureLine.vue`
+- Modify: `mydiary-vuetify/src/practice.ts` (append instrument labels)
+
+**Interfaces:**
+- Consumes: `ParsedSheet`, `Level`, `SheetLine`, `lineSegments`, `structure` (Tasks 8, 10); `levelColor`, `LEVEL_LABELS` (Task 11).
+- Produces:
+  - `SongSheet.vue` props `parsed: ParsedSheet`, `levels?: Record<string, Level>` (missing keys are `full`), `showAll?: boolean`, `lyricsOnly?: boolean`, `scale?: number` (rem, default 1). Emits `chord(name: string)`. Each occurrence renders as `<section id="sheet-sec-<index>">`. A tap on a faded section peeks it for 4 s and stops the click from propagating. Any other click propagates.
+  - `StructureLine.vue` props `parsed`, `levels?`; emits `jump(index: number)`.
+  - `practice.ts`: `INSTRUMENTS: Instrument[]`, `INSTRUMENT_LABELS: Record<string, string>`.
+
+UI components get no unit tests. There is no component test setup, and the logic they use is already covered by Tasks 8–11. Each UI task checks a type-checked build and the lint count, and Task 16 checks the rendered result.
+
+- [ ] **Step 1: Record the lint baseline**
+
+Run: `docker compose exec mydiary-vuetify npm run lint 2>&1 | tail -3`
+Note the error count (about 27). Every later UI task must end with the same count.
+
+- [ ] **Step 2: Instrument labels**
+
+Append to `mydiary-vuetify/src/practice.ts`:
+
+```ts
+import type { Instrument } from './chords'
+
+export const INSTRUMENTS: Instrument[] = ['guitar', 'ukulele']
+export const INSTRUMENT_LABELS: Record<string, string> = { guitar: 'Guitar', ukulele: 'Ukulele' }
+```
+
+(Move the new `import` line up next to the existing import.)
+
+- [ ] **Step 3: `SongSheet.vue`**
+
+Create `mydiary-vuetify/src/components/SongSheet.vue`:
+
+```vue
+<template>
+    <div class="song-sheet" :style="{ fontSize: `${scale}rem` }">
+        <section
+            v-for="(occ, i) in parsed.occurrences"
+            :id="`sheet-sec-${i}`"
+            :key="i"
+            class="sheet-section"
+        >
+            <div class="sheet-label text-overline">
+                <span class="level-dot" :class="`bg-${levelColor(levelOf(occ.key))}`"></span>
+                {{ occ.key }}
+            </div>
+            <div
+                class="sheet-lines"
+                :class="{ faded: shownLevel(occ.key) !== 'full' }"
+                @click="onSectionClick($event, occ.key)"
+            >
+                <template v-for="(line, j) in occ.lines" :key="j">
+                    <div
+                        v-if="showLine(line)"
+                        class="sheet-line"
+                        :class="{ comment: line.comment, blank: isBlankLine(line) }"
+                    >
+                        <span
+                            v-for="(seg, k) in lineSegments(line, shownLevel(occ.key))"
+                            :key="k"
+                            class="seg"
+                        >
+                            <span
+                                v-if="withChords(line)"
+                                class="chord"
+                                @click.stop="seg.chord && emit('chord', seg.chord)"
+                                >{{ seg.chord ?? ' ' }}</span
+                            >
+                            <span class="seg-text"
+                                ><span
+                                    v-for="(run, r) in seg.runs"
+                                    :key="r"
+                                    :class="{ 'hidden-text': run.hidden }"
+                                    >{{ run.text }}</span
+                                ></span
+                            >
+                        </span>
+                    </div>
+                </template>
+            </div>
+        </section>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
+import { lineSegments, type Level, type ParsedSheet, type SheetLine } from '@/chordpro'
+import { levelColor } from '@/practice'
+
+const props = withDefaults(
+    defineProps<{
+        parsed: ParsedSheet
+        levels?: Record<string, Level>
+        /** Ignore levels and show every word. */
+        showAll?: boolean
+        /** Hide chords, for practice away from the instrument. */
+        lyricsOnly?: boolean
+        /** Font size in rem. */
+        scale?: number
+    }>(),
+    { levels: () => ({}), showAll: false, lyricsOnly: false, scale: 1 }
+)
+const emit = defineEmits<{ chord: [name: string] }>()
+
+// how long a tapped faded section stays fully shown
+const PEEK_MS = 4000
+const peeked = ref(new Set<string>())
+const timers: number[] = []
+
+function levelOf(key: string): Level {
+    return props.levels[key] ?? 'full'
+}
+
+function shownLevel(key: string): Level {
+    return props.showAll || peeked.value.has(key) ? 'full' : levelOf(key)
+}
+
+function isBlankLine(line: SheetLine): boolean {
+    return !line.text.trim() && !line.chords.length && !line.comment
+}
+
+function withChords(line: SheetLine): boolean {
+    return !props.lyricsOnly && line.chords.length > 0
+}
+
+function showLine(line: SheetLine): boolean {
+    // a chords-only line has nothing to show without its chords
+    return !(props.lyricsOnly && line.chords.length && !line.text.trim())
+}
+
+function onSectionClick(event: MouseEvent, key: string) {
+    if (shownLevel(key) === 'full') return
+    // a peek, not a page turn: keep the tap from reaching the scroll handler
+    event.stopPropagation()
+    peeked.value = new Set([...peeked.value, key])
+    timers.push(
+        window.setTimeout(() => {
+            const next = new Set(peeked.value)
+            next.delete(key)
+            peeked.value = next
+        }, PEEK_MS)
+    )
+}
+
+onBeforeUnmount(() => timers.forEach((t) => window.clearTimeout(t)))
+</script>
+
+<style scoped>
+.song-sheet {
+    line-height: 1.35;
+}
+.sheet-section {
+    margin-bottom: 1.25em;
+    break-inside: avoid;
+}
+.sheet-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    line-height: 1.8;
+}
+.level-dot {
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    border-radius: 50%;
+}
+.sheet-lines.faded {
+    cursor: pointer;
+}
+.sheet-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.sheet-line.blank {
+    height: 0.75em;
+}
+.sheet-line.comment {
+    font-style: italic;
+    color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+}
+/* a chord stacked over the text it starts; the pair is as wide as the wider */
+.seg {
+    display: inline-flex;
+    flex-direction: column;
+    max-width: 100%;
+}
+.chord {
+    padding-right: 0.35em;
+    font-size: 0.9em;
+    font-weight: 700;
+    color: rgb(var(--v-theme-primary));
+    white-space: pre;
+    cursor: pointer;
+}
+/* not Markdown: these are plain text runs whose spaces carry the chord offsets */
+.seg-text {
+    white-space: pre-wrap;
+}
+.hidden-text {
+    color: transparent;
+    text-decoration: underline dotted;
+    text-decoration-color: rgba(var(--v-theme-on-surface), 0.35);
+}
+</style>
+```
+
+- [ ] **Step 4: `StructureLine.vue`**
+
+Create `mydiary-vuetify/src/components/StructureLine.vue`:
+
+```vue
+<template>
+    <div class="d-flex flex-wrap ga-1">
+        <v-chip
+            v-for="item in items"
+            :key="item.index"
+            :color="levelColor(levelOf(item.key))"
+            :title="`${item.key}: ${LEVEL_LABELS[levelOf(item.key)]}`"
+            variant="flat"
+            label
+            @click="emit('jump', item.index)"
+        >
+            {{ item.count > 1 ? `${item.abbr}×${item.count}` : item.abbr }}
+        </v-chip>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { structure, type Level, type ParsedSheet } from '@/chordpro'
+import { LEVEL_LABELS, levelColor } from '@/practice'
+
+const props = withDefaults(
+    defineProps<{ parsed: ParsedSheet; levels?: Record<string, Level> }>(),
+    { levels: () => ({}) }
+)
+const emit = defineEmits<{ jump: [index: number] }>()
+
+const items = computed(() => structure(props.parsed))
+
+function levelOf(key: string): Level {
+    return props.levels[key] ?? 'full'
+}
+</script>
+```
+
+- [ ] **Step 5: Build, lint, commit**
+
+Run: `docker compose exec mydiary-vuetify npm run build`
+Expected: success
+
+Run: `docker compose exec mydiary-vuetify npm run lint 2>&1 | tail -3`
+Expected: same count as Step 1
+
+```bash
+git add mydiary-vuetify/src/components/SongSheet.vue mydiary-vuetify/src/components/StructureLine.vue mydiary-vuetify/src/practice.ts
+git commit -m "frontend: render a song sheet at its section levels"
+```
+
+---
+
+### Task 13: Starting and editing arrangements on the song page
+
+**Files:**
+- Create: `mydiary-vuetify/src/components/SongArrangements.vue`, `NewArrangementDialog.vue`, `ArrangementEditor.vue`, `ChordPanel.vue` (all in `src/components/`)
+- Modify: `mydiary-vuetify/src/views/PerformSongs.vue`
+
+**Interfaces:**
+- Consumes: Orval `listSongArrangements(performSongId)`, `createSongArrangement(performSongId, body)`, `updateSongArrangement(arrangementId, body)`, `deleteSongArrangement(arrangementId)`, `readSectionLevels(performSongId)`, `renamePracticeSection(performSongId, body)`, `lookupLrclibLyrics(performSongId)`. **Check these signatures in `src/api.ts` before writing the calls**: Orval orders path params, then the body, then query params. Also consumes the Task 8–11 helpers and `SongSheet`.
+- Produces:
+  - `SongArrangements.vue` props `performSong: PerformSongRead`. It is rendered with `id="arrangements"` on the song page, so `hash: '#arrangements'` links land on it.
+  - `NewArrangementDialog.vue` props `performSong`, `instrument: Instrument`, `arrangements: SongArrangementRead[]`; emits `close`, `created(a: SongArrangementRead)`.
+  - `ArrangementEditor.vue` props `arrangement: SongArrangementRead`, `otherSheets: string[]`; emits `saved(a)`, `deleted`.
+  - `ChordPanel.vue` props `sheet: string`, `instrument: Instrument`; emits `update:sheet(sheet: string)`.
+
+- [ ] **Step 1: `ChordPanel.vue`**
+
+```vue
+<template>
+    <div>
+        <p v-if="!parsed.chords.length" class="text-body-2 text-medium-emphasis">
+            No chords in the sheet yet.
+        </p>
+        <div class="d-flex flex-wrap ga-4">
+            <v-card v-for="chord in parsed.chords" :key="chord" border class="chord-card pa-3">
+                <div class="d-flex justify-center">
+                    <ChordDiagram
+                        :chord="chord"
+                        :instrument="instrument"
+                        :define="parsed.defines[chord]"
+                        :size="110"
+                    />
+                </div>
+                <div class="d-flex flex-wrap align-center ga-1 my-2">
+                    <v-btn
+                        v-for="(_, i) in positions(chord).slice(0, 4)"
+                        :key="i"
+                        size="x-small"
+                        :variant="matchesPosition(chord, i) ? 'flat' : 'tonal'"
+                        :color="matchesPosition(chord, i) ? 'primary' : undefined"
+                        @click="usePosition(chord, i)"
+                    >
+                        {{ i + 1 }}
+                    </v-btn>
+                    <v-btn
+                        v-if="parsed.defines[chord]"
+                        size="x-small"
+                        variant="text"
+                        @click="emit('update:sheet', setChordDefine(sheet, chord, null))"
+                    >
+                        Default
+                    </v-btn>
+                </div>
+                <v-text-field
+                    :model-value="fretDrafts[chord] ?? ''"
+                    :label="`Frets (e.g. ${instrument === 'guitar' ? 'x32010' : '0003'})`"
+                    :error-messages="fretErrors[chord]"
+                    density="compact"
+                    hide-details="auto"
+                    class="mb-2"
+                    @update:model-value="fretDrafts[chord] = $event"
+                    @keydown.enter="applyFrets(chord)"
+                    @blur="applyFrets(chord)"
+                />
+                <v-text-field
+                    :model-value="parsed.chordNotes[chord] ?? ''"
+                    label="Note"
+                    density="compact"
+                    hide-details
+                    @change="emit('update:sheet', setChordNote(sheet, chord, ($event.target as HTMLInputElement).value))"
+                />
+            </v-card>
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue'
+import ChordDiagram from '@/components/ChordDiagram.vue'
+import {
+    defineFromAbsoluteFrets,
+    parseFretString,
+    parseSheet,
+    setChordDefine,
+    setChordNote,
+} from '@/chordpro'
+import {
+    STRINGS,
+    defineFromFingering,
+    loadChordDb,
+    lookupChord,
+    type ChordDb,
+    type Fingering,
+    type Instrument,
+} from '@/chords'
+
+const props = defineProps<{ sheet: string; instrument: Instrument }>()
+const emit = defineEmits<{ 'update:sheet': [sheet: string] }>()
+
+const parsed = computed(() => parseSheet(props.sheet))
+const db = ref<ChordDb>()
+const fretDrafts = reactive<Record<string, string>>({})
+const fretErrors = reactive<Record<string, string>>({})
+
+watch(
+    () => props.instrument,
+    async (instrument) => {
+        db.value = await loadChordDb(instrument)
+    },
+    { immediate: true }
+)
+
+function positions(chord: string): Fingering[] {
+    return db.value ? lookupChord(db.value, chord) : []
+}
+
+function matchesPosition(chord: string, i: number): boolean {
+    const d = parsed.value.defines[chord]
+    const p = positions(chord)[i]
+    return Boolean(d && p && d.baseFret === p.baseFret && d.frets.join() === p.frets.join())
+}
+
+function usePosition(chord: string, i: number) {
+    emit('update:sheet', setChordDefine(props.sheet, chord, defineFromFingering(chord, positions(chord)[i])))
+}
+
+function applyFrets(chord: string) {
+    const draft = (fretDrafts[chord] ?? '').trim()
+    if (!draft) return
+    const frets = parseFretString(draft, STRINGS[props.instrument])
+    if (!frets) {
+        fretErrors[chord] = `Needs ${STRINGS[props.instrument]} values: a fret number, 0 or x`
+        return
+    }
+    fretErrors[chord] = ''
+    fretDrafts[chord] = ''
+    emit('update:sheet', setChordDefine(props.sheet, chord, defineFromAbsoluteFrets(chord, frets)))
+}
+</script>
+
+<style scoped>
+.chord-card {
+    width: 200px;
+}
+</style>
+```
+
+- [ ] **Step 2: `ArrangementEditor.vue`**
+
+```vue
+<template>
+    <div>
+        <div class="d-flex flex-wrap align-center ga-3 mb-4">
+            <v-text-field v-model="key" label="Sounds in" hide-details class="key-field" />
+            <v-text-field
+                v-model.number="capo"
+                label="Capo"
+                type="number"
+                min="0"
+                hide-details
+                class="key-field"
+            />
+            <span class="text-body-2 text-medium-emphasis">{{ describeKey(key, capo) }}</span>
+            <v-spacer />
+            <v-btn variant="text" color="error" @click="remove">Delete</v-btn>
+            <v-btn color="primary" variant="flat" :disabled="!dirty" :loading="saving" @click="save">
+                Save
+            </v-btn>
+        </div>
+
+        <v-alert
+            v-if="nonChords.length"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+        >
+            These brackets will show as chords: {{ nonChords.map((t) => `[${t}]`).join(', ') }}.
+            Use parentheses for alternate lyrics.
+        </v-alert>
+
+        <v-btn-toggle v-if="narrow" v-model="pane" mandatory density="compact" class="mb-3">
+            <v-btn value="edit">Edit</v-btn>
+            <v-btn value="preview">Preview</v-btn>
+        </v-btn-toggle>
+        <div class="d-flex ga-4">
+            <v-textarea
+                v-show="!narrow || pane === 'edit'"
+                v-model="sheet"
+                class="sheet-editor flex-1-1"
+                label="Sheet (ChordPro)"
+                auto-grow
+                rows="20"
+                spellcheck="false"
+            />
+            <div v-show="!narrow || pane === 'preview'" class="flex-1-1 sheet-preview">
+                <SongSheet :parsed="parsed" show-all />
+            </div>
+        </div>
+
+        <section-header label="Chords" :meta="`${parsed.chords.length}`" class="mt-6" />
+        <ChordPanel :sheet="sheet" :instrument="arrangement.instrument as Instrument" @update:sheet="sheet = $event" />
+
+        <v-dialog v-model="renameDialog" max-width="560">
+            <v-card>
+                <v-card-title>Keep practice history?</v-card-title>
+                <v-card-text>
+                    <p class="mb-4">
+                        These sections have practice history but aren't in any sheet any
+                        more. Move each one's history to a section that is, or leave it as
+                        it is.
+                    </p>
+                    <v-select
+                        v-for="r in renames"
+                        :key="r.from"
+                        v-model="r.to"
+                        :label="`History for “${r.from}”`"
+                        :items="[{ title: 'Leave it', value: null }, ...newKeys.map((k) => ({ title: k, value: k }))]"
+                        class="mb-2"
+                    />
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="renameDialog = false">Cancel</v-btn>
+                    <v-btn color="primary" variant="flat" @click="confirmRenames">Save</v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useDisplay } from 'vuetify'
+import ChordPanel from '@/components/ChordPanel.vue'
+import SectionHeader from '@/components/SectionHeader.vue'
+import SongSheet from '@/components/SongSheet.vue'
+import { bracketedNonChords, describeKey, parseSheet, sectionKeys } from '@/chordpro'
+import type { Instrument } from '@/chords'
+import {
+    SongArrangementRead,
+    deleteSongArrangement,
+    readSectionLevels,
+    renamePracticeSection,
+    updateSongArrangement,
+} from '@/api'
+
+const props = defineProps<{
+    arrangement: SongArrangementRead
+    /** The song's other arrangements' sheets: their sections still count as in use. */
+    otherSheets: string[]
+}>()
+const emit = defineEmits<{ saved: [a: SongArrangementRead]; deleted: [] }>()
+
+const { smAndDown: narrow } = useDisplay()
+const pane = ref<'edit' | 'preview'>('edit')
+const sheet = ref(props.arrangement.sheet)
+const key = ref(props.arrangement.key ?? '')
+const capo = ref<number | null>(props.arrangement.capo ?? null)
+const saving = ref(false)
+
+const parsed = computed(() => parseSheet(sheet.value))
+const newKeys = computed(() => sectionKeys(parsed.value))
+const nonChords = computed(() => bracketedNonChords(sheet.value))
+const dirty = computed(
+    () =>
+        sheet.value !== props.arrangement.sheet ||
+        (key.value || null) !== (props.arrangement.key ?? null) ||
+        (capo.value ?? null) !== (props.arrangement.capo ?? null)
+)
+
+const renameDialog = ref(false)
+const renames = ref<{ from: string; to: string | null }[]>([])
+
+async function save() {
+    const history = (await readSectionLevels(props.arrangement.perform_song_id)).data
+    const inUse = new Set([...newKeys.value, ...props.otherSheets.flatMap((s) => sectionKeys(parseSheet(s)))])
+    const orphaned = history.map((l) => l.section_key).filter((k) => !inUse.has(k))
+    if (orphaned.length) {
+        renames.value = orphaned.map((from) => ({ from, to: null }))
+        renameDialog.value = true
+        return
+    }
+    await persist()
+}
+
+async function confirmRenames() {
+    for (const r of renames.value) {
+        if (r.to) {
+            await renamePracticeSection(props.arrangement.perform_song_id, { from_key: r.from, to_key: r.to })
+        }
+    }
+    renameDialog.value = false
+    await persist()
+}
+
+async function persist() {
+    saving.value = true
+    try {
+        const saved = (
+            await updateSongArrangement(props.arrangement.id, {
+                sheet: sheet.value,
+                key: key.value || null,
+                capo: capo.value === null || Number.isNaN(capo.value) ? null : capo.value,
+            })
+        ).data
+        emit('saved', saved)
+    } finally {
+        saving.value = false
+    }
+}
+
+async function remove() {
+    if (!window.confirm(`Delete the ${props.arrangement.instrument} sheet? Practice history is kept.`)) return
+    await deleteSongArrangement(props.arrangement.id)
+    emit('deleted')
+}
+</script>
+
+<style scoped>
+.key-field {
+    max-width: 130px;
+}
+.sheet-editor :deep(textarea) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+}
+.sheet-preview {
+    min-width: 0;
+}
+</style>
+```
+
+- [ ] **Step 3: `NewArrangementDialog.vue`**
+
+```vue
+<template>
+    <v-dialog :model-value="true" max-width="960" scrollable @update:model-value="emit('close')">
+        <v-card>
+            <v-card-title>New {{ INSTRUMENT_LABELS[instrument].toLowerCase() }} sheet</v-card-title>
+            <v-card-text>
+                <v-radio-group v-model="mode" inline hide-details class="mb-4">
+                    <v-radio label="Paste a tab" value="paste" />
+                    <v-radio label="Lyrics from LRCLIB" value="lrclib" />
+                    <v-radio v-if="sources.length" :label="`Copy the ${INSTRUMENT_LABELS[sources[0].instrument].toLowerCase()} sheet`" value="copy" />
+                    <v-radio label="Blank" value="blank" />
+                </v-radio-group>
+
+                <div class="d-flex flex-wrap ga-3 mb-4">
+                    <v-text-field v-model="key" label="Sounds in" hide-details class="key-field" />
+                    <v-text-field v-model.number="capo" label="Capo" type="number" min="0" hide-details class="key-field" />
+                    <span class="align-self-center text-body-2 text-medium-emphasis">{{ describeKey(key, capo) }}</span>
+                </div>
+
+                <v-textarea
+                    v-if="mode === 'paste'"
+                    v-model="pasteText"
+                    label="Chords over lyrics, as copied from a tab site"
+                    rows="10"
+                    class="mono"
+                />
+                <div v-else-if="mode === 'lrclib'" class="mb-4">
+                    <v-btn :loading="fetching" prepend-icon="mdi-download" @click="fetchLyrics">
+                        Fetch lyrics
+                    </v-btn>
+                    <span v-if="lrclibMessage" class="ml-3 text-body-2">{{ lrclibMessage }}</span>
+                </div>
+                <v-textarea
+                    v-else-if="mode === 'blank'"
+                    v-model="blankText"
+                    label="Sheet (ChordPro)"
+                    rows="10"
+                    class="mono"
+                />
+
+                <v-alert v-if="nonChords.length" type="warning" variant="tonal" density="compact" class="mb-4">
+                    These brackets will show as chords: {{ nonChords.map((t) => `[${t}]`).join(', ') }}.
+                    Change them to parentheses after creating the sheet.
+                </v-alert>
+
+                <div v-if="draft.trim()" class="preview pa-3">
+                    <SongSheet :parsed="parseSheet(draft)" show-all />
+                </div>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" @click="emit('close')">Cancel</v-btn>
+                <v-btn color="primary" variant="flat" :loading="creating" @click="create">Create</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { isAxiosError } from 'axios'
+import SongSheet from '@/components/SongSheet.vue'
+import {
+    bracketedNonChords,
+    convertChordsOverLyrics,
+    copySheet,
+    describeKey,
+    parseSheet,
+    suggestSections,
+} from '@/chordpro'
+import type { Instrument } from '@/chords'
+import { INSTRUMENT_LABELS } from '@/practice'
+import {
+    PerformSongRead,
+    SongArrangementRead,
+    createSongArrangement,
+    lookupLrclibLyrics,
+} from '@/api'
+
+const props = defineProps<{
+    performSong: PerformSongRead
+    instrument: Instrument
+    arrangements: SongArrangementRead[]
+}>()
+const emit = defineEmits<{ close: []; created: [a: SongArrangementRead] }>()
+
+type Mode = 'paste' | 'lrclib' | 'copy' | 'blank'
+const sources = computed(() => props.arrangements.filter((a) => a.instrument !== props.instrument))
+const mode = ref<Mode>(sources.value.length ? 'copy' : 'paste')
+
+// a guitar sheet starts from the song's own key and capo, which have always been
+// the guitar's; another instrument starts in the key the song already sounds in
+const key = ref<string>(
+    (props.instrument === 'guitar' ? props.performSong.key : sources.value[0]?.key ?? props.performSong.key) ?? ''
+)
+const capo = ref<number | null>(props.instrument === 'guitar' ? props.performSong.capo ?? null : 0)
+
+const pasteText = ref('')
+const blankText = ref(props.performSong.lyrics ?? '')
+const fetched = ref('')
+const fetching = ref(false)
+const lrclibMessage = ref('')
+const creating = ref(false)
+
+const draft = computed(() => {
+    switch (mode.value) {
+        case 'paste':
+            return pasteText.value.trim() ? convertChordsOverLyrics(pasteText.value) : ''
+        case 'lrclib':
+            return fetched.value ? suggestSections(fetched.value) : ''
+        case 'copy': {
+            const src = sources.value[0]
+            return src ? copySheet(src.sheet, src, { key: key.value, capo: capo.value }) : ''
+        }
+        default:
+            return blankText.value
+    }
+})
+const nonChords = computed(() => bracketedNonChords(draft.value))
+
+async function fetchLyrics() {
+    fetching.value = true
+    lrclibMessage.value = ''
+    try {
+        const found = (await lookupLrclibLyrics(props.performSong.id)).data
+        fetched.value = found.plain_lyrics
+        lrclibMessage.value = `Found “${found.track_name}” by ${found.artist_name}. Check the suggested sections.`
+    } catch (e) {
+        fetched.value = ''
+        lrclibMessage.value =
+            isAxiosError(e) && e.response?.status === 404
+                ? 'LRCLIB has no lyrics for this song.'
+                : "LRCLIB couldn't be reached. Try again later."
+    } finally {
+        fetching.value = false
+    }
+}
+
+async function create() {
+    creating.value = true
+    try {
+        const source =
+            mode.value === 'copy' ? `copied:${sources.value[0].id}` : mode.value === 'blank' ? 'manual' : mode.value
+        const created = (
+            await createSongArrangement(props.performSong.id, {
+                instrument: props.instrument,
+                key: key.value || null,
+                capo: capo.value === null || Number.isNaN(capo.value) ? null : capo.value,
+                sheet: draft.value,
+                source,
+            })
+        ).data
+        emit('created', created)
+    } finally {
+        creating.value = false
+    }
+}
+</script>
+
+<style scoped>
+.key-field {
+    max-width: 130px;
+}
+.mono :deep(textarea) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+}
+.preview {
+    max-height: 50vh;
+    overflow-y: auto;
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    border-radius: 8px;
+}
+</style>
+```
+
+- [ ] **Step 4: `SongArrangements.vue`**
+
+```vue
+<template>
+    <section>
+        <section-header label="Sheets" :meta="arrangements.map((a) => INSTRUMENT_LABELS[a.instrument]).join(' · ')">
+            <template #actions>
+                <v-btn
+                    v-for="inst in missing"
+                    :key="inst"
+                    size="small"
+                    prepend-icon="mdi-plus"
+                    @click="adding = inst"
+                >
+                    {{ INSTRUMENT_LABELS[inst] }}
+                </v-btn>
+                <v-btn
+                    v-if="arrangements.length"
+                    size="small"
+                    color="primary"
+                    variant="flat"
+                    prepend-icon="mdi-play"
+                    :to="{ name: 'songPractice', params: { id: performSong.id }, query: { instrument: tab } }"
+                >
+                    Practice
+                </v-btn>
+            </template>
+        </section-header>
+
+        <p v-if="loaded && !arrangements.length" class="text-body-2 text-medium-emphasis">
+            No sheet yet. Add a guitar or ukulele sheet to start practicing.
+        </p>
+        <template v-else-if="current">
+            <v-tabs v-model="tab" density="compact" class="mb-4">
+                <v-tab v-for="a in arrangements" :key="a.id" :value="a.instrument">
+                    {{ INSTRUMENT_LABELS[a.instrument] }}
+                </v-tab>
+            </v-tabs>
+            <ArrangementEditor
+                :key="current.id"
+                :arrangement="current"
+                :other-sheets="arrangements.filter((a) => a.id !== current!.id).map((a) => a.sheet)"
+                @saved="onSaved"
+                @deleted="load"
+            />
+        </template>
+
+        <NewArrangementDialog
+            v-if="adding"
+            :perform-song="performSong"
+            :instrument="adding"
+            :arrangements="arrangements"
+            @close="adding = null"
+            @created="onCreated"
+        />
+        <v-snackbar v-model="savedToast" timeout="2000">Sheet saved</v-snackbar>
+    </section>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import ArrangementEditor from '@/components/ArrangementEditor.vue'
+import NewArrangementDialog from '@/components/NewArrangementDialog.vue'
+import SectionHeader from '@/components/SectionHeader.vue'
+import type { Instrument } from '@/chords'
+import { INSTRUMENTS, INSTRUMENT_LABELS } from '@/practice'
+import { PerformSongRead, SongArrangementRead, listSongArrangements } from '@/api'
+
+const props = defineProps<{ performSong: PerformSongRead }>()
+
+const arrangements = ref<SongArrangementRead[]>([])
+const loaded = ref(false)
+const tab = ref<string>()
+const adding = ref<Instrument | null>(null)
+const savedToast = ref(false)
+
+const missing = computed(() => INSTRUMENTS.filter((i) => !arrangements.value.some((a) => a.instrument === i)))
+const current = computed(() => arrangements.value.find((a) => a.instrument === tab.value))
+
+async function load() {
+    arrangements.value = (await listSongArrangements(props.performSong.id)).data
+    loaded.value = true
+    if (!current.value) tab.value = arrangements.value[0]?.instrument
+}
+
+async function onCreated(a: SongArrangementRead) {
+    adding.value = null
+    await load()
+    tab.value = a.instrument
+}
+
+function onSaved(a: SongArrangementRead) {
+    arrangements.value = arrangements.value.map((x) => (x.id === a.id ? a : x))
+    savedToast.value = true
+}
+
+watch(() => props.performSong.id, load, { immediate: true })
+</script>
+```
+
+- [ ] **Step 5: Put it on the song page**
+
+In `mydiary-vuetify/src/views/PerformSongs.vue`, inside `<template v-if="performSong">`, between `<PerformSongCard … />` and `<PerformSongEdit … />`:
+
+```vue
+            <SongArrangements
+                id="arrangements"
+                class="mb-8"
+                :perform-song="performSong"
+            />
+```
+
+and import it in `<script setup>`:
+
+```ts
+import SongArrangements from '@/components/SongArrangements.vue'
+```
+
+- [ ] **Step 6: Build, lint, check, commit**
+
+Run: `docker compose exec mydiary-vuetify npm run build` and expect success. Run `docker compose exec mydiary-vuetify npm run lint 2>&1 | tail -3` and expect the Task 12 count.
+
+Check it in the running worktree app (Playwright MCP tools, Firefox; screenshots under `.playwright-mcp/`):
+1. Open `http://localhost:$PORT/performsongs`, pick a song, and open its page.
+2. Click **+ Guitar** → **Paste a tab**. Paste this invented tab:
+   ```
+   [Verse 1]
+   C              G
+   Paper lanterns on the line
+   [Chorus]
+   F        C
+   Hold the light
+   ```
+   The preview shows C and G over "Paper" and "on", and a Chorus section. Create it.
+3. In the chord panel, pick position 2 for C. Confirm a `{define: C …}` line appears at the top of the text and the diagram changes. Save.
+4. Rename `[Chorus]` to `[Refrain]` and Save. There's no history yet, so no dialog appears.
+5. Click **+ Ukulele** → **Copy the guitar sheet**, set "Sounds in" to the guitar's key and capo 0, and confirm the preview's chords are transposed and the `{define}` line is gone.
+
+This runs against the worktree's snapshot database, which is throwaway.
+
+```bash
+git add mydiary-vuetify/src/components/SongArrangements.vue mydiary-vuetify/src/components/NewArrangementDialog.vue mydiary-vuetify/src/components/ArrangementEditor.vue mydiary-vuetify/src/components/ChordPanel.vue mydiary-vuetify/src/views/PerformSongs.vue
+git commit -m "frontend: start, edit and transpose song sheets on the song page"
+```
+
+---
+
+### Task 14: The practice page
+
+**Files:**
+- Create: `mydiary-vuetify/src/views/SongPractice.vue`, `mydiary-vuetify/src/components/AfterRunCheck.vue`
+- Modify: `mydiary-vuetify/src/router/index.ts`
+
+**Interfaces:**
+- Consumes: `SongSheet`, `StructureLine`, `ChordDiagram`; Orval `listSongArrangements`, `readSectionLevels`, `createPracticeRun`; `useAppStore().loadPerformSongs/getPerformSongById`.
+- Produces: route `{ path: '/performsongs/:id/practice', name: 'songPractice', props: true }`, with optional query `instrument`. `AfterRunCheck.vue` props `modelValue: boolean`, `sectionKeys: string[]`; emits `update:modelValue`, `save({ sections: { section_key: string; stumbled: boolean }[]; note: string })`.
+
+- [ ] **Step 1: `AfterRunCheck.vue`**
+
+```vue
+<template>
+    <v-bottom-sheet :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
+        <v-card class="pa-4">
+            <div class="text-subtitle-1 font-weight-medium">How did that go?</div>
+            <div class="text-body-2 text-medium-emphasis mb-3">
+                Tap a section you stumbled on. Tap it again if you didn't play it.
+            </div>
+            <div class="d-flex flex-wrap ga-2 mb-4">
+                <v-chip
+                    v-for="key in sectionKeys"
+                    :key="key"
+                    size="large"
+                    :color="STATE_COLOR[states[key]]"
+                    :variant="states[key] === 'skipped' ? 'outlined' : 'flat'"
+                    :prepend-icon="STATE_ICON[states[key]]"
+                    @click="states[key] = NEXT[states[key]]"
+                >
+                    {{ key }}
+                </v-chip>
+            </div>
+            <v-text-field v-model="note" label="Note (optional)" hide-details class="mb-4" />
+            <div class="d-flex ga-2 justify-end">
+                <v-btn variant="text" @click="emit('update:modelValue', false)">Cancel</v-btn>
+                <v-btn color="primary" variant="flat" :disabled="!played.length" @click="save">
+                    Save
+                </v-btn>
+            </div>
+        </v-card>
+    </v-bottom-sheet>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+
+type State = 'clean' | 'stumbled' | 'skipped'
+const NEXT: Record<State, State> = { clean: 'stumbled', stumbled: 'skipped', skipped: 'clean' }
+const STATE_COLOR: Record<State, string | undefined> = { clean: 'success', stumbled: 'warning', skipped: undefined }
+const STATE_ICON: Record<State, string> = {
+    clean: 'mdi-check',
+    stumbled: 'mdi-alert-circle-outline',
+    skipped: 'mdi-minus',
+}
+
+const props = defineProps<{ modelValue: boolean; sectionKeys: string[] }>()
+const emit = defineEmits<{
+    'update:modelValue': [open: boolean]
+    save: [run: { sections: { section_key: string; stumbled: boolean }[]; note: string }]
+}>()
+
+const states = ref<Record<string, State>>({})
+const note = ref('')
+
+// every section starts clean, so a clean run of the whole song is Done, then Save
+watch(
+    () => props.modelValue,
+    (open) => {
+        if (!open) return
+        states.value = Object.fromEntries(props.sectionKeys.map((k) => [k, 'clean' as State]))
+        note.value = ''
+    }
+)
+
+const played = computed(() => props.sectionKeys.filter((k) => states.value[k] !== 'skipped'))
+
+function save() {
+    emit('save', {
+        sections: played.value.map((k) => ({ section_key: k, stumbled: states.value[k] === 'stumbled' })),
+        note: note.value.trim(),
+    })
+    emit('update:modelValue', false)
+}
+</script>
+```
+
+- [ ] **Step 2: `SongPractice.vue`**
+
+```vue
+<template>
+    <page-shell :eyebrow="song?.artist_name ?? ''" :title="song?.name ?? 'Practice'">
+        <template #actions>
+            <v-btn-toggle v-if="arrangements.length > 1" v-model="instrument" mandatory density="compact">
+                <v-btn v-for="a in arrangements" :key="a.id" :value="a.instrument">
+                    {{ INSTRUMENT_LABELS[a.instrument] }}
+                </v-btn>
+            </v-btn-toggle>
+            <v-btn variant="text" :to="{ name: 'performSong', params: { id }, hash: '#arrangements' }">
+                Edit sheet
+            </v-btn>
+        </template>
+
+        <p v-if="loaded && !arrangement" class="text-body-1">
+            This song has no sheet yet.
+            <router-link :to="{ name: 'performSong', params: { id }, hash: '#arrangements' }">Add one</router-link>
+            to practice it.
+        </p>
+
+        <template v-if="arrangement">
+            <div class="reading">
+                <div v-if="keyLine" class="text-body-1 text-medium-emphasis mb-3">{{ keyLine }}</div>
+                <div v-if="!lyricsOnly && parsed.chords.length" class="d-flex flex-wrap ga-2 mb-4">
+                    <ChordDiagram
+                        v-for="chord in parsed.chords"
+                        :key="chord"
+                        :chord="chord"
+                        :instrument="arrangement.instrument as Instrument"
+                        :define="parsed.defines[chord]"
+                        :size="72"
+                    />
+                </div>
+                <StructureLine :parsed="parsed" :levels="levels" class="mb-3" @jump="jump" />
+                <div class="d-flex flex-wrap align-center ga-4 mb-4">
+                    <v-switch v-model="showAll" label="Show everything" color="primary" density="compact" hide-details />
+                    <v-switch v-model="lyricsOnly" label="Lyrics only" color="primary" density="compact" hide-details />
+                    <v-spacer />
+                    <v-btn icon="mdi-format-font-size-decrease" variant="text" size="small" aria-label="Smaller text" @click="bump(-0.1)" />
+                    <v-btn icon="mdi-format-font-size-increase" variant="text" size="small" aria-label="Larger text" @click="bump(0.1)" />
+                </div>
+            </div>
+
+            <div class="practice-sheet" @click="onSheetClick">
+                <SongSheet
+                    :parsed="parsed"
+                    :levels="levels"
+                    :show-all="showAll"
+                    :lyrics-only="lyricsOnly"
+                    :scale="scale"
+                    @chord="chordShown = $event"
+                />
+            </div>
+
+            <div class="done-bar">
+                <v-btn color="primary" variant="flat" size="x-large" rounded="pill" prepend-icon="mdi-check" @click="checking = true">
+                    Done
+                </v-btn>
+            </div>
+
+            <AfterRunCheck v-model="checking" :section-keys="keys" @save="saveRun" />
+
+            <v-dialog :model-value="chordShown !== null" max-width="240" @update:model-value="chordShown = null">
+                <v-card class="pa-4 d-flex justify-center">
+                    <ChordDiagram
+                        v-if="chordShown"
+                        :chord="chordShown"
+                        :instrument="arrangement.instrument as Instrument"
+                        :define="parsed.defines[chordShown]"
+                        :size="180"
+                    />
+                </v-card>
+            </v-dialog>
+            <v-snackbar v-model="savedToast" timeout="2500">Run saved</v-snackbar>
+        </template>
+    </page-shell>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import AfterRunCheck from '@/components/AfterRunCheck.vue'
+import ChordDiagram from '@/components/ChordDiagram.vue'
+import PageShell from '@/components/PageShell.vue'
+import SongSheet from '@/components/SongSheet.vue'
+import StructureLine from '@/components/StructureLine.vue'
+import { describeKey, parseSheet, sectionKeys, type Level } from '@/chordpro'
+import type { Instrument } from '@/chords'
+import { INSTRUMENT_LABELS, levelMap } from '@/practice'
+import { useAppStore } from '@/store/app'
+import {
+    PerformSongRead,
+    SongArrangementRead,
+    createPracticeRun,
+    listSongArrangements,
+    readSectionLevels,
+} from '@/api'
+
+const props = defineProps<{ id: string | number }>()
+const route = useRoute()
+const router = useRouter()
+const app = useAppStore()
+
+const songId = computed(() => Number(props.id))
+const song = ref<PerformSongRead>()
+const arrangements = ref<SongArrangementRead[]>([])
+const levels = ref<Record<string, Level>>({})
+const loaded = ref(false)
+const instrument = ref<string>()
+const showAll = ref(false)
+const lyricsOnly = ref(false)
+const checking = ref(false)
+const savedToast = ref(false)
+const chordShown = ref<string | null>(null)
+
+const arrangement = computed(() => arrangements.value.find((a) => a.instrument === instrument.value))
+const parsed = computed(() => parseSheet(arrangement.value?.sheet ?? ''))
+const keys = computed(() => sectionKeys(parsed.value))
+const keyLine = computed(() => (arrangement.value ? describeKey(arrangement.value.key, arrangement.value.capo) : ''))
+
+// text size is a per-device preference, so it lives in this browser only
+const SCALE_KEY = 'mydiary.practice.scale'
+const DEFAULT_SCALE = 1.25
+function readScale(): number {
+    try {
+        const v = Number(localStorage.getItem(SCALE_KEY))
+        return v >= 0.8 && v <= 2.2 ? v : DEFAULT_SCALE
+    } catch {
+        return DEFAULT_SCALE
+    }
+}
+const scale = ref(readScale())
+function bump(delta: number) {
+    scale.value = Math.min(2.2, Math.max(0.8, Math.round((scale.value + delta) * 10) / 10))
+    try {
+        localStorage.setItem(SCALE_KEY, String(scale.value))
+    } catch {
+        // private window: the size just isn't remembered
+    }
+}
+
+async function loadLevels() {
+    levels.value = levelMap((await readSectionLevels(songId.value)).data)
+}
+
+async function load() {
+    await app.loadPerformSongs()
+    song.value = app.getPerformSongById(songId.value)
+    arrangements.value = (await listSongArrangements(songId.value)).data
+    const wanted = route.query.instrument
+    instrument.value = arrangements.value.some((a) => a.instrument === wanted)
+        ? (wanted as string)
+        : arrangements.value[0]?.instrument
+    await loadLevels()
+    loaded.value = true
+}
+
+watch(instrument, (inst) => {
+    if (inst && route.query.instrument !== inst) router.replace({ query: { ...route.query, instrument: inst } })
+})
+
+async function saveRun(run: { sections: { section_key: string; stumbled: boolean }[]; note: string }) {
+    if (!arrangement.value) return
+    await createPracticeRun({
+        perform_song_id: songId.value,
+        arrangement_id: lyricsOnly.value ? null : arrangement.value.id,
+        note: run.note || null,
+        sections: run.sections,
+    })
+    await loadLevels()
+    savedToast.value = true
+}
+
+function jump(index: number) {
+    document.getElementById(`sheet-sec-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function turnPage(direction: 1 | -1) {
+    window.scrollBy({ top: direction * window.innerHeight * 0.8, behavior: 'smooth' })
+}
+
+// a tap on the lower half of the sheet turns the page; SongSheet stops the
+// taps it uses itself (peeks, chord names)
+function onSheetClick(event: MouseEvent) {
+    if (event.clientY > window.innerHeight / 2) turnPage(1)
+}
+
+// page-turner pedals send PageDown/PageUp or arrow keys
+function onKey(event: KeyboardEvent) {
+    if (checking.value || (event.target as HTMLElement | null)?.closest('input, textarea')) return
+    if (['PageDown', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault()
+        turnPage(1)
+    } else if (['PageUp', 'ArrowUp', 'ArrowLeft'].includes(event.key)) {
+        event.preventDefault()
+        turnPage(-1)
+    }
+}
+
+// keep the screen on while the sheet is up; needs a secure context
+// (localhost or the tailnet HTTPS address), and quietly does nothing otherwise
+let wakeLock: WakeLockSentinel | null = null
+async function holdWakeLock() {
+    try {
+        wakeLock = (await navigator.wakeLock?.request('screen')) ?? null
+    } catch {
+        wakeLock = null
+    }
+}
+function onVisibility() {
+    if (document.visibilityState === 'visible') holdWakeLock()
+}
+
+onMounted(() => {
+    load()
+    holdWakeLock()
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('keydown', onKey)
+})
+onBeforeUnmount(() => {
+    wakeLock?.release().catch(() => {})
+    document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('keydown', onKey)
+})
+</script>
+
+<style scoped>
+.practice-sheet {
+    max-width: 900px;
+}
+@media (min-width: 900px) and (orientation: landscape) {
+    .practice-sheet {
+        max-width: none;
+    }
+    .practice-sheet :deep(.song-sheet) {
+        column-count: 2;
+        column-gap: 3rem;
+    }
+}
+.done-bar {
+    position: sticky;
+    bottom: 16px;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
+}
+</style>
+```
+
+- [ ] **Step 3: Route**
+
+In `mydiary-vuetify/src/router/index.ts`, directly after the `performSong` route object (`path: '/performsongs/:id'`):
+
+```ts
+            {
+                path: '/performsongs/:id/practice',
+                name: 'songPractice',
+                component: () =>
+                    import(
+                        /* webpackChunkName: "performsong" */ '@/views/SongPractice.vue'
+                    ),
+                props: true,
+            },
+```
+
+- [ ] **Step 4: Build, lint, check, commit**
+
+Build and lint as in Task 12, and expect the same count.
+
+Check it in the worktree app with Playwright at 390×844:
+1. From the song made in Task 13, click **Practice**. The sheet shows at full, with the chord strip, structure line and a Done button pinned at the bottom.
+2. Click **Done** → **Save** three times. After the third save, the structure chips turn to the `letters` color and the sheet shows first letters with chords in place.
+3. Tap a faded section. It shows in full for about 4 s, and the page doesn't scroll.
+4. Tap a chord name. Its diagram opens.
+5. Toggle **Lyrics only**. Chords and the chord strip disappear.
+6. Run `docker compose exec backend python -c "from mydiary.db import Session, engine; from mydiary.songs import runs_for_day; import pendulum; print(runs_for_day(Session(engine), pendulum.now('America/New_York')))"` and expect three `RunSummary` rows.
+
+```bash
+git add mydiary-vuetify/src/views/SongPractice.vue mydiary-vuetify/src/components/AfterRunCheck.vue mydiary-vuetify/src/router/index.ts
+git commit -m "frontend: practice page with fading sheet and after-run check"
+```
+
+---
+
+### Task 15: The learning queue and the new-song form
+
+**Files:**
+- Create: `mydiary-vuetify/src/components/LearningQueue.vue`
+- Modify: `mydiary-vuetify/src/views/PerformSongs.vue`, `mydiary-vuetify/src/components/PerformSongEdit.vue`
+
+**Interfaces:**
+- Consumes: Orval `listLearningSongs()` → `LearningSongRead[]`; `parseSheet`, `sectionKeys`; `levelMap`, `levelColor`, `LEVEL_LABELS`, `INSTRUMENT_LABELS`, `shortDate`.
+- Produces: the "Learning" section on `/performsongs`. New songs default to the learning queue, and saving one opens its sheets section.
+
+- [ ] **Step 1: `LearningQueue.vue`**
+
+```vue
+<template>
+    <section v-if="cards.length" class="mb-10">
+        <section-header label="Learning" :meta="`${cards.length}`" />
+        <div class="d-flex flex-column ga-3">
+            <v-card v-for="card in cards" :key="card.row.song.id" border class="pa-4">
+                <div class="d-flex flex-wrap align-center ga-3">
+                    <div class="flex-grow-1">
+                        <router-link
+                            :to="{ name: 'performSong', params: { id: card.row.song.id } }"
+                            class="text-subtitle-1 font-weight-medium"
+                        >
+                            {{ card.row.song.name }}
+                        </router-link>
+                        <div class="text-body-2 text-medium-emphasis">
+                            {{ card.row.song.artist_name }}
+                            <span v-if="card.row.instruments.length">
+                                · {{ card.row.instruments.map((i) => INSTRUMENT_LABELS[i]).join(', ') }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="text-body-2 text-medium-emphasis">
+                        {{ card.row.last_practiced_at ? `Practiced ${shortDate(card.row.last_practiced_at)}` : 'Not practiced yet' }}
+                    </div>
+                    <v-btn
+                        v-if="card.row.instruments.length"
+                        color="primary"
+                        variant="flat"
+                        prepend-icon="mdi-play"
+                        :to="{ name: 'songPractice', params: { id: card.row.song.id } }"
+                    >
+                        Practice
+                    </v-btn>
+                    <v-btn
+                        v-else
+                        prepend-icon="mdi-plus"
+                        :to="{ name: 'performSong', params: { id: card.row.song.id }, hash: '#arrangements' }"
+                    >
+                        Add a sheet
+                    </v-btn>
+                </div>
+                <div v-if="card.bars.length" class="d-flex ga-1 mt-3">
+                    <div
+                        v-for="bar in card.bars"
+                        :key="bar.key"
+                        class="level-bar"
+                        :class="`bg-${levelColor(bar.level)}`"
+                        :title="`${bar.key}: ${LEVEL_LABELS[bar.level]}`"
+                    ></div>
+                </div>
+                <div v-if="card.allMemorized" class="text-body-2 mt-2">
+                    Every section is memorized. Mark it learned when you're ready.
+                </div>
+            </v-card>
+        </div>
+    </section>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import SectionHeader from '@/components/SectionHeader.vue'
+import { parseSheet, sectionKeys } from '@/chordpro'
+import { INSTRUMENT_LABELS, LEVEL_LABELS, levelColor, levelMap, shortDate } from '@/practice'
+import { LearningSongRead, listLearningSongs } from '@/api'
+
+const rows = ref<LearningSongRead[]>([])
+
+// the backend already sorts: never practiced first, then the longest idle
+const cards = computed(() =>
+    rows.value.map((row) => {
+        const levels = levelMap(row.levels)
+        const bars = (row.sheet ? sectionKeys(parseSheet(row.sheet)) : []).map((key) => ({
+            key,
+            level: levels[key] ?? 'full',
+        }))
+        return { row, bars, allMemorized: bars.length > 0 && bars.every((b) => b.level === 'memorized') }
+    })
+)
+
+onMounted(async () => {
+    rows.value = (await listLearningSongs()).data
+})
+</script>
+
+<style scoped>
+.level-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+}
+</style>
+```
+
+- [ ] **Step 2: Put it on the songs page**
+
+In `PerformSongs.vue`, directly before `<section>` (the "All songs" one):
+
+```vue
+        <LearningQueue v-if="!performSong" />
+```
+
+and `import LearningQueue from '@/components/LearningQueue.vue'`.
+
+- [ ] **Step 3: New songs go in the queue by default**
+
+In `PerformSongEdit.vue`:
+
+1. Change `const submitPerformSong = ref<PerformSongUpdate>({})` to
+
+```ts
+// a new song is usually one about to be learned, so it starts in the queue
+const submitPerformSong = ref<PerformSongUpdate>(props.performSong ? {} : { learned: false })
+```
+
+   If `props` is declared below this line, move this line under the `defineProps` call.
+
+2. On the `Learned` checkbox add `hint="Unticked songs are in the learning queue"` and `persistent-hint`.
+
+3. In `onSave`, replace the final `router.push(...)` with:
+
+```ts
+    // a song headed for the learning queue needs a sheet next
+    const toSheets = !props.performSong && !submitted.value.learned
+    router.push({
+        name: 'performSong',
+        params: { id: submitted.value.id },
+        hash: toSheets ? '#arrangements' : undefined,
+    })
+```
+
+- [ ] **Step 4: Build, lint, check, commit**
+
+Build and lint as before, and expect the same count.
+
+Check with Playwright at 1440×900. `/performsongs` shows **Learning** above **All songs**, with the Task 13–14 song carrying colored section bars and "Practiced <today>". `/performsongs/new` shows Learned unticked. Saving a new song lands on its page scrolled to Sheets.
+
+```bash
+git add mydiary-vuetify/src/components/LearningQueue.vue mydiary-vuetify/src/views/PerformSongs.vue mydiary-vuetify/src/components/PerformSongEdit.vue
+git commit -m "frontend: learning queue on the songs page; new songs start in it"
+```
+
+---
+
+### Task 16: Docs and end-to-end check
+
+**Files:**
+- Create: `docs/song-practice.md`
+- Modify: `CLAUDE.md`
+
+- [ ] **Step 1: Write `docs/song-practice.md`**
+
+Follow the house style of `docs/tags.md`: plain prose, a few tables, and nothing personal. Cover:
+- The idea: learning a song means needing the sheet less, section by section.
+- Arrangements: one per instrument, `key` = sounding key, chords are shapes, and the shape key is derived.
+- The sheet format subset (sections, recall of empty repeats, inline chords, `{define}`, `{x_chordnote}`), and that `chordpro.ts` is the only parser. Mention that ChordSheetJS was rejected for being GPL-2.0-only.
+- Levels (table), the rules and where the thresholds live (`song_practice.py`), and that levels are computed on read.
+- Section identity is the label; renames and the history-move dialog.
+- The after-run check, and what a run row holds.
+- The diary `## Practice` section and its `ensure_section` backfill.
+- Sources: tab paste, LRCLIB (with its User-Agent), copy-and-transpose, blank.
+- Tests: where each part is tested, and that fixtures use invented lyrics only.
+
+Every lyric shown must be invented. Use the "Paper lanterns" lines from the tests.
+
+- [ ] **Step 2: Update `CLAUDE.md`**
+
+- Backend table: add rows for `song_practice.py` ("Pure functions: section level rules and the diary's Practice lines (no I/O)"), `songs.py` ("Every read/write of arrangements, practice runs and level overrides"), and `lrclib_connector.py` (under the connector sentence: "`lrclib_connector.py` is a single function over lrclib.net").
+- `models.py` row: add `SongArrangement, PracticeRun`.
+- After the tags paragraph, add one sentence: "The song-practice workflow (per-instrument ChordPro sheets, fading practice sheet, after-run check, Practice diary section) is documented in `docs/song-practice.md`."
+- Frontend key views: add `SongPractice.vue` (practice sheet), and one sentence that `chordpro.ts` owns all ChordPro handling and `chords.ts` the fingerings (chords-db data, svguitar diagrams).
+- The Development Commands frontend block: add `npm test  # vitest: chordpro.ts / chords.ts`, and to the in-container list `docker compose exec mydiary-vuetify npm test`.
+- The diary entry format sentence: add "and, on days with practice, a Practice section".
+
+- [ ] **Step 3: Full verification**
+
+Run: `docker compose exec backend pytest`
+Expected: pass, apart from any live-Joplin failures that also occur on `main`.
+
+Run: `docker compose exec mydiary-vuetify npm test`
+Expected: all pass
+
+Run: `docker compose exec mydiary-vuetify npm run build`
+Expected: success
+
+Run: `docker compose exec mydiary-vuetify npm run lint 2>&1 | tail -3`
+Expected: the Task 12 baseline count
+
+Screenshots with Playwright (Firefox, isolated), under `.playwright-mcp/`, at 1440×900 and 390×844, scrolling before full-page captures:
+- the songs page with the Learning section
+- a song page with the sheet editor and chord panel
+- the practice page at `full` and at `letters`, and in landscape at 1440×900 showing two columns
+
+- [ ] **Step 4: Sweep the staged diff before committing**
+
+```bash
+git add docs/song-practice.md CLAUDE.md
+git diff --cached main | grep "^+" | grep -oE "\b[0-9]{1,2}\.[0-9]{4,}, ?-?[0-9]{1,3}\.[0-9]{4,}"
+```
+
+Expected: no output (no coordinates). Also read the whole branch diff (`git diff main --stat`, then the docs and tests in full) and confirm that no real song's lyrics appear anywhere. Test and doc lyrics must be the invented "Paper lanterns" lines.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git commit -m "docs: song sheets and the practice loop"
+```
+
+Then hand over with superpowers:finishing-a-development-branch. The merge also needs `alembic upgrade head` against the **primary** database, after a backup (`backend/scripts/backup_db.py`), because the worktree only migrated its snapshot.

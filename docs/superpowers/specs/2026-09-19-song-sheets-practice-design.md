@@ -68,11 +68,14 @@ When a song's first guitar arrangement is created, `PerformSong.key` and
 
 ### The sheet format
 
-ChordPro, parsed and rendered by ChordSheetJS in the frontend.
+ChordPro, parsed and rendered by a small module of our own in the frontend
+(`mydiary-vuetify/src/chordpro.ts`). ChordSheetJS was considered and set aside:
+it is GPL-2.0-only, and the subset this spec uses is small enough to own and
+test outright.
 
 - Sections: `{start_of_verse: Verse 1}` … `{end_of_verse}`, or the shorthand
   `[Verse 1]` label lines, which the importer normalises.
-- Chords inline: `[G]Have you ever [D]seen the rain`.
+- Chords inline: `[C]Paper lanterns [G]on the line`.
 - Fingerings: `{define: Am base-fret 1 frets 2 0 0 0}`. A `{define}` overrides
   the built-in chord library for that chord in that arrangement.
 - Chord notes: `{x_chordnote: Bm | easy version: Bm7}`. The `x_` prefix is
@@ -150,7 +153,7 @@ the thresholds re-evaluates all history.
 On the song page, "Add guitar arrangement" / "Add ukulele arrangement" offers:
 
 1. **Paste a tab.** A chords-over-lyrics paste is converted to ChordPro by
-   ChordSheetJS. `[Verse]`/`[Chorus]` labels in the paste are kept.
+   `chordpro.ts`. `[Verse]`/`[Chorus]` labels in the paste are kept.
 2. **Fetch lyrics from LRCLIB.** A backend route looks the song up by artist,
    title and duration, getting duration from the Spotify API by `spotify_id`
    at lookup time. The request sends an identifying `User-Agent`, as LRCLIB
@@ -173,8 +176,9 @@ that sets `learned=False`, and after saving it goes to "add arrangement".
 
 - Text editor on the left, live rendered sheet on the right. On phone widths
   they stack, with a toggle between them.
-- A chord panel lists every chord in the sheet with its diagram (svguitar,
-  tuned to the arrangement's instrument). Choosing a different fingering,
+- A chord panel lists every chord in the sheet with its diagram, drawn by
+  svguitar (MIT) from the chords-db fingering data (MIT, guitar and GCEA
+  ukulele). Choosing a different fingering,
   entering frets by hand, or adding a note writes the `{define}` /
   `{x_chordnote}` lines.
 - Chords with no fingering for the instrument, either built in or defined,
@@ -280,10 +284,15 @@ Plus an alembic migration for the four new tables.
 - Changing the existing song card, edit form or repertoire table beyond the
   learning-queue toggle and the arrangement entry points.
 
-## To verify before building
+## Dependencies (checked 2026-09-19)
 
-- ChordSheetJS: current version and license, chords-over-lyrics parsing,
-  transposition, and whether it preserves `{define}` and `x_` directives.
-- svguitar: current version and license, and 4-string support.
-- A ukulele (GCEA) and guitar chord library with an open license.
-- LRCLIB: current API parameters and usage terms.
+- **svguitar** 2.6.2, MIT, actively maintained: chord diagrams for any
+  number of strings.
+- **@tombatossals/chords-db** 0.5.1, MIT: `lib/guitar.json` and
+  `lib/ukulele.json` (standard GCEA tuning), positions as frets, fingers,
+  base fret and barres. Unmaintained since 2022, but it is static data.
+- **LRCLIB**: `GET /api/get?track_name=&artist_name=&duration=` returns one
+  record or 404; `GET /api/search?track_name=&artist_name=` returns a list
+  and is the fallback. No key. Records carry `plainLyrics`, `syncedLyrics`
+  and `duration` in seconds.
+- **vitest**: added as a dev dependency so the ChordPro module can be tested.
