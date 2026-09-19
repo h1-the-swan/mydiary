@@ -89,6 +89,7 @@ import SectionHeader from '@/components/SectionHeader.vue'
 import SongSheet from '@/components/SongSheet.vue'
 import { bracketedNonChords, describeKey, parseSheet, sectionKeys } from '@/chordpro'
 import type { Instrument } from '@/chords'
+import { capoOrNull } from '@/practice'
 import {
     SongArrangementRead,
     deleteSongArrangement,
@@ -118,16 +119,22 @@ const dirty = computed(
     () =>
         sheet.value !== (props.arrangement.sheet ?? '') ||
         (key.value || null) !== (props.arrangement.key ?? null) ||
-        (capo.value ?? null) !== (props.arrangement.capo ?? null)
+        capoOrNull(capo.value) !== (props.arrangement.capo ?? null)
 )
 
 const renameDialog = ref(false)
 const renames = ref<{ from: string; to: string | null }[]>([])
 
 async function save() {
-    const history = (await readSectionLevels(props.arrangement.perform_song_id)).data
+    // warn only about sections this edit removed: comparing against the saved
+    // sheet means a history left behind once isn't raised again on every save
+    const history = new Set(
+        (await readSectionLevels(props.arrangement.perform_song_id)).data.map((l) => l.section_key)
+    )
     const inUse = new Set([...newKeys.value, ...props.otherSheets.flatMap((s) => sectionKeys(parseSheet(s)))])
-    const orphaned = history.map((l) => l.section_key).filter((k) => !inUse.has(k))
+    const orphaned = sectionKeys(parseSheet(props.arrangement.sheet ?? '')).filter(
+        (k) => history.has(k) && !inUse.has(k)
+    )
     if (orphaned.length) {
         renames.value = orphaned.map((from) => ({ from, to: null }))
         renameDialog.value = true
@@ -153,7 +160,7 @@ async function persist() {
             await updateSongArrangement(props.arrangement.id, {
                 sheet: sheet.value,
                 key: key.value || null,
-                capo: capo.value === null || Number.isNaN(capo.value) ? null : capo.value,
+                capo: capoOrNull(capo.value),
             })
         ).data
         emit('saved', saved)

@@ -34,3 +34,14 @@ export function shortDate(s?: string | null): string {
 
 export const INSTRUMENTS: Instrument[] = ['guitar', 'ukulele']
 export const INSTRUMENT_LABELS: Record<string, string> = { guitar: 'Guitar', ukulele: 'Ukulele' }
+
+/**
+ * A capo field's value as the API wants it. A cleared number field gives '',
+ * which `v-model.number` leaves as a string, so anything that isn't a whole
+ * number reads as no capo.
+ */
+export function capoOrNull(v: unknown): number | null {
+    if (v === '' || v === null || v === undefined) return null
+    const n = Number(v)
+    return Number.isInteger(n) ? n : null
+}

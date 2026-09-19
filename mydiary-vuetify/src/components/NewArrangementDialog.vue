@@ -68,7 +68,7 @@ import {
     suggestSections,
 } from '@/chordpro'
 import type { Instrument } from '@/chords'
-import { INSTRUMENT_LABELS } from '@/practice'
+import { INSTRUMENT_LABELS, capoOrNull } from '@/practice'
 import {
     PerformSongRead,
     SongArrangementRead,
@@ -144,7 +144,7 @@ async function create() {
             await createSongArrangement(props.performSong.id, {
                 instrument: props.instrument,
                 key: key.value || null,
-                capo: capo.value === null || Number.isNaN(capo.value) ? null : capo.value,
+                capo: capoOrNull(capo.value),
                 sheet: draft.value,
                 source,
             })
