@@ -151,6 +151,7 @@ onBeforeUnmount(() => timers.forEach((t) => window.clearTimeout(t)))
     display: inline-flex;
     flex-direction: column;
     max-width: 100%;
+    min-width: 0;
 }
 .chord {
     padding-right: 0.35em;
@@ -163,6 +164,7 @@ onBeforeUnmount(() => timers.forEach((t) => window.clearTimeout(t)))
 /* not Markdown: these are plain text runs whose spaces carry the chord offsets */
 .seg-text {
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 .hidden-text {
     color: transparent;
