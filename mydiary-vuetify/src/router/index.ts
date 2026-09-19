@@ -63,6 +63,15 @@ const routes = [
                 props: true,
             },
             {
+                path: '/performsongs/:id/practice',
+                name: 'songPractice',
+                component: () =>
+                    import(
+                        /* webpackChunkName: "performsong" */ '@/views/SongPractice.vue'
+                    ),
+                props: true,
+            },
+            {
                 path: '/tags',
                 name: 'tags',
                 component: () =>
