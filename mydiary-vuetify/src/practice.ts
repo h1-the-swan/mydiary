@@ -1,4 +1,5 @@
 /** Small helpers shared by the practice views. */
+import type { Instrument } from './chords'
 import { LEVELS, type Level } from './chordpro'
 
 export const LEVEL_LABELS: Record<Level, string> = {
@@ -30,3 +31,6 @@ export function shortDate(s?: string | null): string {
     const d = utcDate(s)
     return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 }
+
+export const INSTRUMENTS: Instrument[] = ['guitar', 'ukulele']
+export const INSTRUMENT_LABELS: Record<string, string> = { guitar: 'Guitar', ukulele: 'Ukulele' }
