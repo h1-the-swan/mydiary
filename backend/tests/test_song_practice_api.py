@@ -164,3 +164,37 @@ class TestPracticeRoutes:
         assert rows[1]["sheet"] == SHEET
         assert rows[1]["last_practiced_at"] is not None
         assert rows[0]["sheet"] is None
+
+
+from unittest.mock import patch
+
+from mydiary.lrclib_connector import LrclibLyrics
+
+
+class TestLrclibRoute:
+    def test_found(self, client, song):
+        found = LrclibLyrics("Paper Lanterns", "The Invented Band", 200.0, "la la")
+        with patch("mydiary.api._spotify_duration_s", return_value=None), patch(
+            "mydiary.lrclib_connector.fetch_lyrics", return_value=found
+        ) as fetch:
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.json()["plain_lyrics"] == "la la"
+        fetch.assert_called_once_with("Paper Lanterns", "The Invented Band", None)
+
+    def test_uses_spotify_duration(self, client, song, session):
+        song.spotify_id = "abc123"
+        session.add(song)
+        session.commit()
+        with patch("mydiary.api._spotify_duration_s", return_value=201.5), patch(
+            "mydiary.lrclib_connector.fetch_lyrics", return_value=None
+        ) as fetch:
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.status_code == 404
+        fetch.assert_called_once_with("Paper Lanterns", "The Invented Band", 201.5)
+
+    def test_unreachable_is_502(self, client, song):
+        import requests
+
+        with patch("mydiary.lrclib_connector.fetch_lyrics", side_effect=requests.ConnectionError("down")):
+            r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
+        assert r.status_code == 502

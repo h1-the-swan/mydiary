@@ -90,6 +90,7 @@ from .models import (
 from .nextcloud_connector import MyDiaryNextcloud
 from . import spelling_bee
 from . import songs
+from . import lrclib_connector
 from .dictionary_connector import fetch_definition
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
@@ -289,6 +290,13 @@ class LearningSongRead(SQLModel):
     sheet: Optional[str] = None
     levels: List[SectionLevelRead]
     last_practiced_at: Optional[datetime] = None
+
+
+class LrclibLyricsRead(SQLModel):
+    track_name: str
+    artist_name: str
+    duration: Optional[float] = None
+    plain_lyrics: str
 
 
 class MyDiaryImageRead(MyDiaryImageBase):
@@ -2093,6 +2101,36 @@ def list_learning_songs(*, session: Session = Depends(get_session)):
         )
     )
     return rows
+
+
+def _spotify_duration_s(spotify_id: str) -> Optional[float]:
+    # best effort: without a duration the LRCLIB match is only looser
+    try:
+        from .spotify_connector import MyDiarySpotify
+
+        return MyDiarySpotify().sp.track(spotify_id)["duration_ms"] / 1000
+    except Exception as e:
+        logger.warning(f"no Spotify duration for {spotify_id}: {e}")
+        return None
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/lyrics/lrclib",
+    operation_id="lookupLrclibLyrics",
+    response_model=LrclibLyricsRead,
+)
+def lookup_lrclib_lyrics(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    song = _get_song_or_404(session, perform_song_id)
+    duration = _spotify_duration_s(song.spotify_id) if song.spotify_id else None
+    try:
+        found = lrclib_connector.fetch_lyrics(song.name, song.artist_name, duration)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"LRCLIB lookup failed: {e}")
+    if found is None:
+        raise HTTPException(status_code=404, detail="No lyrics found on LRCLIB")
+    return LrclibLyricsRead(**asdict(found))
 
 
 @app.post("/dogs/", operation_id="createDog", response_model=DogRead)
