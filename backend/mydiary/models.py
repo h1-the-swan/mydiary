@@ -209,6 +209,66 @@ class PerformSong(PerformSongBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
+class SongArrangementBase(SQLModel):
+    # one instrument's version of a song. `key` is what it sounds in; the chords
+    # written in `sheet` (ChordPro text, parsed only by the frontend) are the
+    # shapes fingered, so with a capo the two differ
+    perform_song_id: int = Field(foreign_key="performsong.id", index=True)
+    instrument: str = Field(index=True)  # "guitar" or "ukulele"
+    key: Optional[str] = Field(default=None)
+    capo: Optional[int] = Field(default=None)  # fret, 0 for none
+    sheet: str = Field(default="")
+    # where the sheet started: paste, lrclib, manual, or copied:<arrangement id>
+    source: str = Field(default="manual")
+
+
+class SongArrangement(SongArrangementBase, table=True):
+    __table_args__ = (
+        UniqueConstraint(
+            "perform_song_id", "instrument", name="uix_songarrangement_song_instrument"
+        ),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    created_at: datetime  # stored in the database in UTC timezone
+    updated_at: datetime  # stored in the database in UTC timezone
+
+
+class PracticeRunBase(SQLModel):
+    # one play-through (or part of one), recorded by the after-run check
+    perform_song_id: int = Field(foreign_key="performsong.id", index=True)
+    # null for practice away from the instrument ("lyrics only"), and for runs
+    # whose arrangement was later deleted -- the run still belongs to the song
+    arrangement_id: Optional[int] = Field(
+        default=None, foreign_key="songarrangement.id", index=True
+    )
+    instrument: Optional[str] = Field(default=None)
+    practiced_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    note: Optional[str] = Field(default=None)
+
+
+class PracticeRun(PracticeRunBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class PracticeRunSection(SQLModel, table=True):
+    # one row per section actually played; a section skipped gets no row, so it
+    # neither helps nor hurts that section's level. keyed by the section label
+    # as written in the sheet, which is shared by all of a song's arrangements
+    run_id: int = Field(foreign_key="practicerun.id", primary_key=True)
+    section_key: str = Field(primary_key=True)
+    stumbled: bool = Field(default=False)
+    position: int = Field(default=0)  # order in the sheet, for the diary line
+
+
+class SectionLevelOverride(SQLModel, table=True):
+    # a level set by hand. the level rules continue from it with the runs
+    # recorded after set_at (see song_practice.py)
+    perform_song_id: int = Field(foreign_key="performsong.id", primary_key=True)
+    section_key: str = Field(primary_key=True)
+    level: str
+    set_at: datetime  # stored in the database in UTC timezone
+
+
 class PocketStatusEnum(IntEnum):
     UNREAD = 0
     ARCHIVED = 1
