@@ -378,3 +378,227 @@ export function bracketedNonChords(sheet: string): string[] {
     }
     return [...found]
 }
+
+// --- keys and transposition --------------------------------------------------
+
+const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+const LETTER_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+// the usual spelling of each key
+const MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
+const MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm']
+const FLAT_KEYS_WITHOUT_B = new Set(['F', 'Dm', 'Gm', 'Cm', 'Fm'])
+
+export interface KeyInfo {
+    pc: number // pitch class, C = 0
+    minor: boolean
+}
+
+const mod12 = (n: number) => ((n % 12) + 12) % 12
+
+function pitchClass(note: string): number | null {
+    const m = note.match(/^([A-G])([#b]?)$/)
+    if (!m) return null
+    return mod12(LETTER_PC[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0))
+}
+
+export function parseKey(key?: string | null): KeyInfo | null {
+    const m = (key || '').trim().match(/^([A-G][#b]?)\s*(m|min|minor)?$/)
+    if (!m) return null
+    const pc = pitchClass(m[1])
+    return pc === null ? null : { pc, minor: Boolean(m[2]) }
+}
+
+export function keyName(k: KeyInfo): string {
+    return (k.minor ? MINOR_KEYS : MAJOR_KEYS)[k.pc]
+}
+
+export function usesFlats(key?: string | null): boolean {
+    const k = parseKey(key)
+    if (!k) return false
+    const name = keyName(k)
+    return name.includes('b') || FLAT_KEYS_WITHOUT_B.has(name)
+}
+
+export function transposeNote(note: string, semitones: number, flats: boolean): string {
+    const pc = pitchClass(note)
+    if (pc === null) return note
+    return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(pc + semitones)]
+}
+
+export function transposeChord(chord: string, semitones: number, flats: boolean): string {
+    if (!isChord(chord) || /^N\.?C/.test(chord)) return chord
+    const m = chord.match(/^([A-G][#b]?)(.*?)(?:\/([A-G][#b]?))?$/)
+    if (!m) return chord
+    const bass = m[3] ? '/' + transposeNote(m[3], semitones, flats) : ''
+    return transposeNote(m[1], semitones, flats) + m[2] + bass
+}
+
+/** The key of the shapes fingered: sounding key minus the capo. */
+export function shapeKey(key?: string | null, capo?: number | null): string | null {
+    const k = parseKey(key)
+    if (!k) return null
+    return keyName({ pc: mod12(k.pc - (capo ?? 0)), minor: k.minor })
+}
+
+export function describeKey(key?: string | null, capo?: number | null): string {
+    const shapes = shapeKey(key, capo)
+    if (key && shapes && capo) return `Sounds in ${key} · ${shapes} shapes · capo ${capo}`
+    if (key) return `Key of ${key}`
+    if (capo) return `Capo ${capo}`
+    return ''
+}
+
+function mapLines(sheet: string, fn: (line: string) => string): string {
+    return (sheet || '').split('\n').map(fn).join('\n')
+}
+
+export function transposeSheet(sheet: string, semitones: number, flats: boolean): string {
+    return mapLines(sheet, (line) => {
+        if (DIRECTIVE_RE.test(line) || (LABEL_RE.test(line) && !isChord(line.match(LABEL_RE)![1]))) return line
+        return line.replace(CHORD_TOKEN_RE, (whole, chord: string) =>
+            isChord(chord) ? `[${transposeChord(chord.trim(), semitones, flats)}]` : whole
+        )
+    })
+}
+
+const CHORD_DIRECTIVE_RE = /^\s*\{\s*(define|x_chordnote)\s*:/i
+
+export function stripChordDirectives(sheet: string): string {
+    return (sheet || '')
+        .split('\n')
+        .filter((line) => !CHORD_DIRECTIVE_RE.test(line))
+        .join('\n')
+}
+
+type KeyAndCapo = { key?: string | null; capo?: number | null }
+
+/**
+ * One instrument's sheet made into a starting point for another. Chords move
+ * by the difference in shape key; fingerings and chord notes are dropped,
+ * since they belong to the instrument they were written for.
+ */
+export function copySheet(sheet: string, from: KeyAndCapo, to: KeyAndCapo): string {
+    const stripped = stripChordDirectives(sheet)
+    const fromShapes = parseKey(shapeKey(from.key, from.capo))
+    const toShapesName = shapeKey(to.key, to.capo)
+    const toShapes = parseKey(toShapesName)
+    if (!fromShapes || !toShapes) return stripped
+    return transposeSheet(stripped, mod12(toShapes.pc - fromShapes.pc), usesFlats(toShapesName))
+}
+
+// --- chord directives --------------------------------------------------------
+
+export function formatDefine(d: ChordDefine): string {
+    const frets = d.frets.map((f) => (f < 0 ? 'x' : String(f))).join(' ')
+    const fingers = d.fingers.length ? ` fingers ${d.fingers.join(' ')}` : ''
+    return `{define: ${d.name} base-fret ${d.baseFret} frets ${frets}${fingers}}`
+}
+
+function directiveChord(line: string, directive: string): string | null {
+    const m = line.match(DIRECTIVE_RE)
+    if (!m || m[1].toLowerCase() !== directive) return null
+    const value = (m[2] ?? '').trim()
+    return (directive === 'x_chordnote' ? value.split('|')[0] : value.split(/\s+/)[0]).trim()
+}
+
+function setChordDirective(sheet: string, directive: string, chord: string, line: string | null): string {
+    const lines = (sheet || '').split('\n')
+    const at = lines.findIndex((l) => directiveChord(l, directive) === chord)
+    if (at >= 0) {
+        if (line === null) lines.splice(at, 1)
+        else lines[at] = line
+        return lines.join('\n')
+    }
+    if (line === null) return sheet
+    // new directives join the block at the top, before the first section
+    let insert = 0
+    while (insert < lines.length) {
+        const m = lines[insert].match(DIRECTIVE_RE)
+        if (!m || sectionStart(m[1].toLowerCase(), (m[2] ?? '').trim())) break
+        insert++
+    }
+    lines.splice(insert, 0, line)
+    return lines.join('\n')
+}
+
+export function setChordDefine(sheet: string, chord: string, d: ChordDefine | null): string {
+    return setChordDirective(sheet, 'define', chord, d ? formatDefine({ ...d, name: chord }) : null)
+}
+
+export function setChordNote(sheet: string, chord: string, note: string | null): string {
+    const text = (note ?? '').trim()
+    return setChordDirective(sheet, 'x_chordnote', chord, text ? `{x_chordnote: ${chord} | ${text}}` : null)
+}
+
+/** "x32010" or "10 12 12 11 10 10" as absolute frets, lowest string first. */
+export function parseFretString(s: string, strings: number): number[] | null {
+    const t = s.trim()
+    const parts = /[\s,]/.test(t) ? t.split(/[\s,]+/) : t.split('')
+    if (parts.length !== strings) return null
+    const frets = parts.map((p) => (/^[xX-]$/.test(p) ? -1 : Number(p)))
+    return frets.some((n) => !Number.isInteger(n) || n < -1 || n > 24) ? null : frets
+}
+
+export function defineFromAbsoluteFrets(name: string, abs: number[]): ChordDefine {
+    const fretted = abs.filter((f) => f > 0)
+    const baseFret = fretted.length && Math.max(...fretted) > 4 ? Math.min(...fretted) : 1
+    return { name, baseFret, frets: abs.map((f) => (f > 0 ? f - baseFret + 1 : f)), fingers: [] }
+}
+
+// --- fading -----------------------------------------------------------------
+
+export interface Run {
+    text: string
+    hidden: boolean
+}
+
+export interface Segment {
+    chord: string | null // the chord above this stretch of text
+    runs: Run[]
+}
+
+const WORD_RE = /[\p{L}\p{N}'’]+/gu
+// how many words a line keeps at the `cues` level
+const CUE_WORDS = 3
+
+/** Which characters of a line stay visible at a level. */
+export function visibleMask(text: string, level: Level): boolean[] {
+    // whitespace is always "visible": it looks the same either way, and it
+    // keeps the hidden-text underline broken into word shapes
+    // indexed by UTF-16 unit, like the chord offsets
+    const mask: boolean[] = Array.from({ length: text.length }, (_, i) => level === 'full' || /\s/.test(text[i]))
+    if (level === 'full' || level === 'memorized') return mask
+    const words = [...text.matchAll(WORD_RE)]
+    if (level === 'letters') {
+        for (const w of words) mask[w.index!] = true
+        return mask
+    }
+    const last = words[Math.min(CUE_WORDS, words.length) - 1]
+    if (last) mask.fill(true, 0, last.index! + last[0].length)
+    return mask
+}
+
+function toRuns(text: string, mask: boolean[]): Run[] {
+    const runs: Run[] = []
+    for (let i = 0; i < text.length; i++) {
+        const hidden = !mask[i]
+        const last = runs.at(-1)
+        if (last && last.hidden === hidden) last.text += text[i]
+        else runs.push({ text: text[i], hidden })
+    }
+    return runs
+}
+
+/** A line cut at its chords, each piece's text split into shown and hidden runs.
+ *  Hidden text keeps its width, so chords stay over the right syllable. */
+export function lineSegments(line: SheetLine, level: Level): Segment[] {
+    const mask = line.comment ? new Array(line.text.length).fill(true) : visibleMask(line.text, level)
+    const bounds: { chord: string | null; from: number }[] = []
+    if (!line.chords.length || line.chords[0].index > 0) bounds.push({ chord: null, from: 0 })
+    for (const c of line.chords) bounds.push({ chord: c.chord, from: c.index })
+    return bounds.map((b, i) => {
+        const to = i + 1 < bounds.length ? bounds[i + 1].from : line.text.length
+        return { chord: b.chord, runs: toRuns(line.text.slice(b.from, to), mask.slice(b.from, to)) }
+    })
+}

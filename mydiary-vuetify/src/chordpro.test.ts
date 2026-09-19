@@ -3,14 +3,29 @@ import {
     abbreviate,
     bracketedNonChords,
     convertChordsOverLyrics,
+    copySheet,
+    defineFromAbsoluteFrets,
+    describeKey,
+    formatDefine,
     isChord,
+    keyName,
+    type Level,
+    lineSegments,
     parseChordLine,
     parseDefine,
+    parseFretString,
+    parseKey,
     parseSheet,
     sectionKeys,
+    setChordDefine,
+    setChordNote,
+    shapeKey,
     skeleton,
     structure,
     suggestSections,
+    transposeChord,
+    transposeSheet,
+    usesFlats,
 } from './chordpro'
 
 const SHEET = `{title: Paper Lanterns}
@@ -210,5 +225,124 @@ describe('bracketedNonChords', () => {
     it('finds alternate-lyric brackets but not chords or labels', () => {
         const sheet = '[Verse 1]\nFolding [holding] paper [G]cranes\n[Chorus]'
         expect(bracketedNonChords(sheet)).toEqual(['holding'])
+    })
+})
+
+describe('keys', () => {
+    it('parses and names keys', () => {
+        expect(parseKey('Ab')).toEqual({ pc: 8, minor: false })
+        expect(parseKey('F#m')).toEqual({ pc: 6, minor: true })
+        expect(parseKey('H')).toBeNull()
+        expect(keyName({ pc: 1, minor: false })).toBe('Db')
+        expect(keyName({ pc: 1, minor: true })).toBe('C#m')
+    })
+
+    it('knows flat keys', () => {
+        expect(['F', 'Bb', 'Ab', 'Dm', 'Ebm'].map(usesFlats)).toEqual([true, true, true, true, true])
+        expect(['G', 'E', 'F#m', 'C'].map(usesFlats)).toEqual([false, false, false, false])
+    })
+
+    it('derives the shape key from sounding key and capo', () => {
+        expect(shapeKey('Ab', 8)).toBe('C')
+        expect(shapeKey('A', 2)).toBe('G')
+        expect(shapeKey('F#m', 2)).toBe('Em')
+        expect(shapeKey('G', null)).toBe('G')
+        expect(shapeKey(null, 2)).toBeNull()
+    })
+
+    it('describes an arrangement', () => {
+        expect(describeKey('Ab', 8)).toBe('Sounds in Ab · C shapes · capo 8')
+        expect(describeKey('G', 0)).toBe('Key of G')
+        expect(describeKey(null, 3)).toBe('Capo 3')
+        expect(describeKey(null, null)).toBe('')
+    })
+})
+
+describe('transposition', () => {
+    it('moves roots and bass notes', () => {
+        expect(transposeChord('G/B', 2, false)).toBe('A/C#')
+        expect(transposeChord('F#m7', -1, false)).toBe('Fm7')
+        expect(transposeChord('C', 3, true)).toBe('Eb')
+        expect(transposeChord('N.C.', 3, true)).toBe('N.C.')
+    })
+
+    it('transposes chords in a sheet but not labels or directives', () => {
+        const sheet = '{title: X}\n[Chorus]\n[G]Hold the [D/F#]light'
+        expect(transposeSheet(sheet, 5, false)).toBe('{title: X}\n[Chorus]\n[C]Hold the [G/B]light')
+    })
+
+    it('copies a guitar sheet to ukulele by shape key and drops fingerings', () => {
+        const sheet = '{define: C base-fret 1 frets x 3 2 0 1 0}\n{x_chordnote: C | full barre}\n[Verse 1]\n[C]Paper [F]lanterns'
+        // guitar: sounds Ab with C shapes (capo 8); ukulele: plays in Ab, no capo
+        expect(copySheet(sheet, { key: 'Ab', capo: 8 }, { key: 'Ab', capo: 0 })).toBe('[Verse 1]\n[Ab]Paper [Db]lanterns')
+    })
+
+    it('only strips directives when a key is unknown', () => {
+        expect(copySheet('{define: C base-fret 1 frets 0 0 0 3}\n[C]x', { key: null }, { key: 'G' })).toBe('[C]x')
+    })
+})
+
+describe('chord directives', () => {
+    const def = { name: 'Am', baseFret: 1, frets: [2, 0, 0, 0], fingers: [2, 0, 0, 0] }
+
+    it('formats a define', () => {
+        expect(formatDefine({ ...def, frets: [-1, 0, 2, 2, 1, 0], fingers: [] })).toBe('{define: Am base-fret 1 frets x 0 2 2 1 0}')
+    })
+
+    it('adds, replaces and removes a define at the top of the sheet', () => {
+        const sheet = '{title: X}\n[Verse 1]\n[Am]words'
+        const added = setChordDefine(sheet, 'Am', def)
+        expect(added).toBe('{title: X}\n{define: Am base-fret 1 frets 2 0 0 0 fingers 2 0 0 0}\n[Verse 1]\n[Am]words')
+        const replaced = setChordDefine(added, 'Am', { ...def, frets: [2, 0, 0, 3] })
+        expect(replaced).toContain('frets 2 0 0 3')
+        expect(replaced.match(/define/g)).toHaveLength(1)
+        expect(setChordDefine(replaced, 'Am', null)).toBe(sheet)
+    })
+
+    it('sets and clears a chord note', () => {
+        const withNote = setChordNote('[G]x', 'G', ' ring finger on B ')
+        expect(withNote).toBe('{x_chordnote: G | ring finger on B}\n[G]x')
+        expect(setChordNote(withNote, 'G', '')).toBe('[G]x')
+    })
+
+    it('reads fret strings', () => {
+        expect(parseFretString('x32010', 6)).toEqual([-1, 3, 2, 0, 1, 0])
+        expect(parseFretString('10 12 12 11 10 10', 6)).toEqual([10, 12, 12, 11, 10, 10])
+        expect(parseFretString('0003', 4)).toEqual([0, 0, 0, 3])
+        expect(parseFretString('000', 4)).toBeNull()
+    })
+
+    it('makes a define from absolute frets', () => {
+        expect(defineFromAbsoluteFrets('C', [-1, 3, 2, 0, 1, 0])).toEqual({ name: 'C', baseFret: 1, frets: [-1, 3, 2, 0, 1, 0], fingers: [] })
+        expect(defineFromAbsoluteFrets('Bb', [6, 8, 8, 7, 6, 6])).toEqual({ name: 'Bb', baseFret: 6, frets: [1, 3, 3, 2, 1, 1], fingers: [] })
+    })
+})
+
+describe('fading', () => {
+    const line = parseChordLine('[C]Paper lanterns [G]on the line')
+    const shown = (level: Level) =>
+        lineSegments(line, level)
+            .map((s) => s.runs.map((r) => (r.hidden ? '_'.repeat(r.text.length) : r.text)).join(''))
+            .join('|')
+
+    it('full shows everything', () => {
+        expect(shown('full')).toBe('Paper lanterns |on the line')
+    })
+    // whitespace always shows, so a faded line keeps its word shapes
+    it('letters shows first letters', () => {
+        expect(shown('letters')).toBe('P____ l_______ |o_ t__ l___')
+    })
+    it('cues shows the first three words', () => {
+        expect(shown('cues')).toBe('Paper lanterns |on ___ ____')
+    })
+    it('memorized hides all text but keeps chords', () => {
+        expect(shown('memorized')).toBe('_____ ________ |__ ___ ____')
+        expect(lineSegments(line, 'memorized').map((s) => s.chord)).toEqual(['C', 'G'])
+    })
+    it('adds a chordless leading segment', () => {
+        expect(lineSegments(parseChordLine('Oh [G]yes'), 'full').map((s) => s.chord)).toEqual([null, 'G'])
+    })
+    it('never fades comments', () => {
+        expect(lineSegments({ text: 'let ring', chords: [], comment: true }, 'memorized')[0].runs).toEqual([{ text: 'let ring', hidden: false }])
     })
 })
