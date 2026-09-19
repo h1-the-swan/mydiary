@@ -93,6 +93,45 @@ export interface JoplinNote {
   time_last_api_sync?: string | null;
 }
 
+export interface PerformSongRead {
+  name: string;
+  artist_name?: string | null;
+  learned?: boolean;
+  spotify_id?: string | null;
+  notes?: string | null;
+  perform_url?: string | null;
+  created_at?: string | null;
+  key?: string | null;
+  capo?: number | null;
+  lyrics?: string | null;
+  learned_dt?: string | null;
+  id: number;
+}
+
+export interface SectionLevelRead {
+  section_key: string;
+  level: string;
+  clean_streak: number;
+  num_runs: number;
+  last_practiced_at?: string | null;
+  overridden: boolean;
+}
+
+export interface LearningSongRead {
+  song: PerformSongRead;
+  instruments: string[];
+  sheet?: string | null;
+  levels: SectionLevelRead[];
+  last_practiced_at?: string | null;
+}
+
+export interface LrclibLyricsRead {
+  track_name: string;
+  artist_name: string;
+  duration?: number | null;
+  plain_lyrics: string;
+}
+
 export interface MyDiaryImageRead {
   hash: string;
   name?: string | null;
@@ -119,21 +158,6 @@ export interface PerformSongCreate {
   capo?: number | null;
   lyrics?: string | null;
   learned_dt?: string | null;
-}
-
-export interface PerformSongRead {
-  name: string;
-  artist_name?: string | null;
-  learned?: boolean;
-  spotify_id?: string | null;
-  notes?: string | null;
-  perform_url?: string | null;
-  created_at?: string | null;
-  key?: string | null;
-  capo?: number | null;
-  lyrics?: string | null;
-  learned_dt?: string | null;
-  id: number;
 }
 
 export interface PerformSongUpdate {
@@ -207,6 +231,34 @@ export interface PocketArticleUpdate {
   time_last_api_sync?: string | null;
 }
 
+export interface PracticeRunSectionIn {
+  section_key: string;
+  stumbled?: boolean;
+}
+
+export interface PracticeRunCreate {
+  perform_song_id: number;
+  arrangement_id?: number | null;
+  practiced_at?: string | null;
+  note?: string | null;
+  sections: PracticeRunSectionIn[];
+}
+
+export interface PracticeRunSectionRead {
+  section_key: string;
+  stumbled: boolean;
+}
+
+export interface PracticeRunRead {
+  perform_song_id: number;
+  arrangement_id?: number | null;
+  instrument?: string | null;
+  practiced_at: string;
+  note?: string | null;
+  id: number;
+  sections: PracticeRunSectionRead[];
+}
+
 export interface RecipeCreate {
   name: string;
   upvotes?: number;
@@ -225,6 +277,47 @@ export interface ResolvedRefRead {
   id: string;
   label: string;
   frontend_route?: string | null;
+}
+
+export interface SectionLevelOverrideIn {
+  section_key: string;
+  level: string;
+}
+
+export interface SectionRename {
+  from_key: string;
+  to_key: string;
+}
+
+export interface SectionRenameResult {
+  moved: number;
+}
+
+export interface SongArrangementCreate {
+  instrument: string;
+  key?: string | null;
+  capo?: number | null;
+  sheet?: string;
+  source?: string;
+}
+
+export interface SongArrangementRead {
+  perform_song_id: number;
+  instrument: string;
+  key?: string | null;
+  capo?: number | null;
+  sheet?: string;
+  source?: string;
+  id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SongArrangementUpdate {
+  key?: string | null;
+  capo?: number | null;
+  sheet?: string | null;
+  source?: string | null;
 }
 
 /**
@@ -572,6 +665,10 @@ export type SyncNoteImages200 = { [key: string]: unknown };
 export type ReadPerformSongsListParams = {
 offset?: number;
 limit?: number;
+};
+
+export type ClearSectionLevelOverrideParams = {
+section_key: string;
 };
 
 export type ReadDogsListParams = {
@@ -1288,6 +1385,162 @@ export const deletePerformSong = (
   }
 
 /**
+ * @summary List Song Arrangements
+ */
+export const listSongArrangements = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SongArrangementRead[]>> => {
+    return axios.get(
+      `/performsongs/${performSongId}/arrangements`,options
+    );
+  }
+
+/**
+ * @summary Create Song Arrangement
+ */
+export const createSongArrangement = (
+    performSongId: number,
+    songArrangementCreate: SongArrangementCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SongArrangementRead>> => {
+    return axios.post(
+      `/performsongs/${performSongId}/arrangements`,
+      songArrangementCreate,options
+    );
+  }
+
+/**
+ * @summary Read Song Arrangement
+ */
+export const readSongArrangement = (
+    arrangementId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SongArrangementRead>> => {
+    return axios.get(
+      `/arrangements/${arrangementId}`,options
+    );
+  }
+
+/**
+ * @summary Update Song Arrangement
+ */
+export const updateSongArrangement = (
+    arrangementId: number,
+    songArrangementUpdate: SongArrangementUpdate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SongArrangementRead>> => {
+    return axios.patch(
+      `/arrangements/${arrangementId}`,
+      songArrangementUpdate,options
+    );
+  }
+
+/**
+ * @summary Delete Song Arrangement
+ */
+export const deleteSongArrangement = (
+    arrangementId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<unknown>> => {
+    return axios.delete(
+      `/arrangements/${arrangementId}`,options
+    );
+  }
+
+/**
+ * @summary Create Practice Run
+ */
+export const createPracticeRun = (
+    practiceRunCreate: PracticeRunCreate, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PracticeRunRead>> => {
+    return axios.post(
+      `/practice/runs`,
+      practiceRunCreate,options
+    );
+  }
+
+/**
+ * @summary List Practice Runs For Song
+ */
+export const listPracticeRunsForSong = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<PracticeRunRead[]>> => {
+    return axios.get(
+      `/performsongs/${performSongId}/practice/runs`,options
+    );
+  }
+
+/**
+ * @summary Read Section Levels
+ */
+export const readSectionLevels = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SectionLevelRead[]>> => {
+    return axios.get(
+      `/performsongs/${performSongId}/practice/levels`,options
+    );
+  }
+
+/**
+ * @summary Set Section Level Override
+ */
+export const setSectionLevelOverride = (
+    performSongId: number,
+    sectionLevelOverrideIn: SectionLevelOverrideIn, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SectionLevelRead[]>> => {
+    return axios.put(
+      `/performsongs/${performSongId}/practice/levels`,
+      sectionLevelOverrideIn,options
+    );
+  }
+
+/**
+ * @summary Clear Section Level Override
+ */
+export const clearSectionLevelOverride = (
+    performSongId: number,
+    params: ClearSectionLevelOverrideParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SectionLevelRead[]>> => {
+    return axios.delete(
+      `/performsongs/${performSongId}/practice/levels`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * @summary Rename Practice Section
+ */
+export const renamePracticeSection = (
+    performSongId: number,
+    sectionRename: SectionRename, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SectionRenameResult>> => {
+    return axios.post(
+      `/performsongs/${performSongId}/practice/rename`,
+      sectionRename,options
+    );
+  }
+
+/**
+ * The learning queue: never-practiced songs first, then the longest idle.
+ * @summary List Learning Songs
+ */
+export const listLearningSongs = (
+     options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<LearningSongRead[]>> => {
+    return axios.get(
+      `/practice/learning`,options
+    );
+  }
+
+/**
+ * @summary Lookup Lrclib Lyrics
+ */
+export const lookupLrclibLyrics = (
+    performSongId: number, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<LrclibLyricsRead>> => {
+    return axios.get(
+      `/performsongs/${performSongId}/lyrics/lrclib`,options
+    );
+  }
+
+/**
  * @summary Create Dog
  */
 export const createDog = (
@@ -1642,6 +1895,19 @@ export type PerformSongCountResult = AxiosResponse<number>
 export type ReadPerformSongResult = AxiosResponse<PerformSongRead>
 export type UpdatePerformSongResult = AxiosResponse<PerformSongRead>
 export type DeletePerformSongResult = AxiosResponse<unknown>
+export type ListSongArrangementsResult = AxiosResponse<SongArrangementRead[]>
+export type CreateSongArrangementResult = AxiosResponse<SongArrangementRead>
+export type ReadSongArrangementResult = AxiosResponse<SongArrangementRead>
+export type UpdateSongArrangementResult = AxiosResponse<SongArrangementRead>
+export type DeleteSongArrangementResult = AxiosResponse<unknown>
+export type CreatePracticeRunResult = AxiosResponse<PracticeRunRead>
+export type ListPracticeRunsForSongResult = AxiosResponse<PracticeRunRead[]>
+export type ReadSectionLevelsResult = AxiosResponse<SectionLevelRead[]>
+export type SetSectionLevelOverrideResult = AxiosResponse<SectionLevelRead[]>
+export type ClearSectionLevelOverrideResult = AxiosResponse<SectionLevelRead[]>
+export type RenamePracticeSectionResult = AxiosResponse<SectionRenameResult>
+export type ListLearningSongsResult = AxiosResponse<LearningSongRead[]>
+export type LookupLrclibLyricsResult = AxiosResponse<LrclibLyricsRead>
 export type CreateDogResult = AxiosResponse<DogRead>
 export type ReadDogsListResult = AxiosResponse<DogRead[]>
 export type ReadDogResult = AxiosResponse<DogRead>
