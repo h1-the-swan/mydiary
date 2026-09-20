@@ -18,7 +18,7 @@
         </p>
 
         <template v-if="arrangement">
-            <div class="reading">
+            <div ref="headBox" class="reading">
                 <div v-if="keyLine" class="text-body-1 text-medium-emphasis mb-3">{{ keyLine }}</div>
                 <div v-if="!lyricsOnly && parsed.chords.length" class="d-flex flex-wrap ga-2 mb-4">
                     <ChordDiagram
@@ -40,7 +40,7 @@
                 </div>
             </div>
 
-            <div class="practice-sheet" @click="onSheetClick">
+            <div ref="sheetBox" class="practice-sheet" :class="{ 'two-col': twoCol }" @click="onSheetClick">
                 <SongSheet
                     :parsed="parsed"
                     :levels="levels"
@@ -51,13 +51,19 @@
                 />
             </div>
 
-            <div class="done-bar">
+            <div ref="doneBox" class="done-bar">
                 <v-btn color="primary" variant="flat" size="x-large" rounded="pill" prepend-icon="mdi-check" @click="checking = true">
                     Done
                 </v-btn>
             </div>
 
-            <AfterRunCheck v-model="checking" :section-keys="keys" @save="saveRun" />
+            <AfterRunCheck
+                v-model="checking"
+                :section-keys="keys"
+                :saving="saving"
+                :failed="saveFailed"
+                @save="saveRun"
+            />
 
             <v-dialog :model-value="chordShown !== null" max-width="240" @update:model-value="chordShown = null">
                 <v-card class="pa-4 d-flex justify-center">
@@ -70,7 +76,8 @@
                     />
                 </v-card>
             </v-dialog>
-            <v-snackbar v-model="savedToast" timeout="2500">Run saved</v-snackbar>
+            <!-- at the top, so it never covers the Done button -->
+            <v-snackbar v-model="savedToast" timeout="2500" location="top">Run saved</v-snackbar>
         </template>
     </page-shell>
 </template>
@@ -109,6 +116,8 @@ const instrument = ref<string>()
 const showAll = ref(false)
 const lyricsOnly = ref(false)
 const checking = ref(false)
+const saving = ref(false)
+const saveFailed = ref(false)
 const savedToast = ref(false)
 const chordShown = ref<string | null>(null)
 
@@ -138,6 +147,45 @@ function bump(delta: number) {
     }
 }
 
+// Two columns only when the whole sheet fits on screen as two balanced columns.
+// Any taller and the second column begins above the fold, so reading it means
+// scrolling back up — worse than one column you scroll through once.
+const WIDE_LANDSCAPE = '(min-width: 900px) and (orientation: landscape)'
+// the sticky Done button's own height, plus its 24px margin and 16px offset
+const DONE_BAR_GAP = 40
+const sheetBox = ref<HTMLElement>()
+const headBox = ref<HTMLElement>()
+const doneBox = ref<HTMLElement>()
+const twoCol = ref(false)
+
+function fitColumns() {
+    const box = sheetBox.value
+    const sheet = box?.querySelector<HTMLElement>('.song-sheet')
+    if (!box || !sheet || !window.matchMedia(WIDE_LANDSCAPE).matches) {
+        twoCol.value = false
+        return
+    }
+    // measure the two-column height without showing it: the class goes on, the
+    // read forces a reflow, and it comes off before anything is painted
+    const on = box.classList.contains('two-col')
+    box.classList.add('two-col')
+    const columns = sheet.offsetHeight
+    box.classList.toggle('two-col', on)
+    const header = box.getBoundingClientRect().top + window.scrollY
+    const room = window.innerHeight - header - (doneBox.value?.offsetHeight ?? 0) - DONE_BAR_GAP
+    twoCol.value = columns <= room
+}
+
+// the sheet's own height changes with these; the header's is watched separately,
+// because the chord diagrams draw asynchronously
+watch([parsed, levels, lyricsOnly, showAll, scale], fitColumns, { flush: 'post' })
+
+const headSize = new ResizeObserver(() => fitColumns())
+watch(headBox, (el, prev) => {
+    if (prev) headSize.unobserve(prev)
+    if (el) headSize.observe(el)
+})
+
 async function loadLevels() {
     levels.value = levelMap((await readSectionLevels(songId.value)).data)
 }
@@ -158,16 +206,36 @@ watch(instrument, (inst) => {
     if (inst && route.query.instrument !== inst) router.replace({ query: { ...route.query, instrument: inst } })
 })
 
+// a fresh check never opens on the last run's error
+watch(checking, (open) => {
+    if (open) saveFailed.value = false
+})
+
+// The after-run check stays open until the run is stored, so nothing is lost
+// when the app can't be reached.
 async function saveRun(run: { sections: { section_key: string; stumbled: boolean }[]; note: string }) {
     if (!arrangement.value) return
-    await createPracticeRun({
-        perform_song_id: songId.value,
-        arrangement_id: lyricsOnly.value ? null : arrangement.value.id,
-        note: run.note || null,
-        sections: run.sections,
-    })
-    await loadLevels()
+    saving.value = true
+    saveFailed.value = false
+    try {
+        await createPracticeRun({
+            perform_song_id: songId.value,
+            arrangement_id: lyricsOnly.value ? null : arrangement.value.id,
+            note: run.note || null,
+            sections: run.sections,
+        })
+    } catch {
+        saveFailed.value = true
+        return
+    } finally {
+        saving.value = false
+    }
+    checking.value = false
+    // the run is stored by now, so a stale level colour must not read as a failed save
+    await loadLevels().catch(() => {})
     savedToast.value = true
+    // the next run starts at the top of the song
+    window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function jump(index: number) {
@@ -184,9 +252,20 @@ function onSheetClick(event: MouseEvent) {
     if (event.clientY > window.innerHeight / 2) turnPage(1)
 }
 
+// a tapped switch keeps focus on its checkbox, so only text entry may swallow a
+// key: the pedal has to keep working after "Show everything" is toggled
+const TYPELESS_INPUTS = ['checkbox', 'radio', 'button']
+function isTextEntry(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false
+    const field = target.closest('input, textarea, [contenteditable]')
+    if (!(field instanceof HTMLElement)) return false
+    if (field instanceof HTMLInputElement) return !TYPELESS_INPUTS.includes(field.type)
+    return true
+}
+
 // page-turner pedals send PageDown/PageUp or arrow keys
 function onKey(event: KeyboardEvent) {
-    if (checking.value || (event.target as HTMLElement | null)?.closest('input, textarea')) return
+    if (checking.value || chordShown.value !== null || isTextEntry(event.target)) return
     if (['PageDown', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
         event.preventDefault()
         turnPage(1)
@@ -215,11 +294,16 @@ onMounted(() => {
     holdWakeLock()
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', fitColumns)
+    window.addEventListener('orientationchange', fitColumns)
 })
 onBeforeUnmount(() => {
     wakeLock?.release().catch(() => {})
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('keydown', onKey)
+    window.removeEventListener('resize', fitColumns)
+    window.removeEventListener('orientationchange', fitColumns)
+    headSize.disconnect()
 })
 </script>
 
@@ -227,14 +311,12 @@ onBeforeUnmount(() => {
 .practice-sheet {
     max-width: 900px;
 }
-@media (min-width: 900px) and (orientation: landscape) {
-    .practice-sheet {
-        max-width: none;
-    }
-    .practice-sheet :deep(.song-sheet) {
-        column-count: 2;
-        column-gap: 3rem;
-    }
+.practice-sheet.two-col {
+    max-width: none;
+}
+.practice-sheet.two-col :deep(.song-sheet) {
+    column-count: 2;
+    column-gap: 3rem;
 }
 .done-bar {
     position: sticky;

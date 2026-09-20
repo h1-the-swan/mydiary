@@ -1,5 +1,9 @@
 <template>
-    <v-bottom-sheet :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)">
+    <v-bottom-sheet
+        :model-value="modelValue"
+        :persistent="saving"
+        @update:model-value="emit('update:modelValue', $event)"
+    >
         <v-card class="pa-4">
             <div class="text-subtitle-1 font-weight-medium">How did that go?</div>
             <div class="text-body-2 text-medium-emphasis mb-3">
@@ -13,15 +17,25 @@
                     :color="STATE_COLOR[states[key]]"
                     :variant="states[key] === 'skipped' ? 'outlined' : 'flat'"
                     :prepend-icon="STATE_ICON[states[key]]"
+                    :disabled="saving"
                     @click="states[key] = NEXT[states[key]]"
                 >
                     {{ key }}
                 </v-chip>
             </div>
             <v-text-field v-model="note" label="Note (optional)" hide-details class="mb-4" />
+            <v-alert v-if="failed" type="error" variant="tonal" density="compact" class="mb-4">
+                Couldn't save this run. Try again.
+            </v-alert>
             <div class="d-flex ga-2 justify-end">
-                <v-btn variant="text" @click="emit('update:modelValue', false)">Cancel</v-btn>
-                <v-btn color="primary" variant="flat" :disabled="!played.length" @click="save">
+                <v-btn variant="text" :disabled="saving" @click="emit('update:modelValue', false)">Cancel</v-btn>
+                <v-btn
+                    color="primary"
+                    variant="flat"
+                    :disabled="!played.length || saving"
+                    :loading="saving"
+                    @click="submit"
+                >
                     Save
                 </v-btn>
             </div>
@@ -41,7 +55,18 @@ const STATE_ICON: Record<State, string> = {
     skipped: 'mdi-minus',
 }
 
-const props = defineProps<{ modelValue: boolean; sectionKeys: string[] }>()
+// The parent runs the save and reports back through `saving` and `failed`, and
+// closes this sheet once the run is stored. Until then the chips and the note
+// stay exactly as they were tapped in, so a failed save can be retried.
+const props = withDefaults(
+    defineProps<{
+        modelValue: boolean
+        sectionKeys: string[]
+        saving?: boolean
+        failed?: boolean
+    }>(),
+    { saving: false, failed: false }
+)
 const emit = defineEmits<{
     'update:modelValue': [open: boolean]
     save: [run: { sections: { section_key: string; stumbled: boolean }[]; note: string }]
@@ -62,11 +87,10 @@ watch(
 
 const played = computed(() => props.sectionKeys.filter((k) => states.value[k] !== 'skipped'))
 
-function save() {
+function submit() {
     emit('save', {
         sections: played.value.map((k) => ({ section_key: k, stumbled: states.value[k] === 'stumbled' })),
         note: note.value.trim(),
     })
-    emit('update:modelValue', false)
 }
 </script>
