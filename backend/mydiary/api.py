@@ -1858,6 +1858,7 @@ def delete_perform_song(
     db_perform_song = session.get(PerformSong, perform_song_id)
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
+    songs.delete_song_practice_data(session, perform_song_id)
     session.delete(db_perform_song)
     session.commit()
     return {"ok": True}

@@ -80,9 +80,11 @@ def fetch_lyrics(
             headers=headers,
             timeout=timeout,
         )
-        if resp.status_code == 200 and _usable(resp.json()):
-            return _to_lyrics(resp.json())
-        if resp.status_code not in (200, 404):
+        if resp.status_code == 200:
+            record = resp.json()
+            if _usable(record):
+                return _to_lyrics(record)
+        elif resp.status_code != 404:
             resp.raise_for_status()
 
     params = {"track_name": track_name}

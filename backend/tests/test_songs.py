@@ -180,6 +180,37 @@ class TestRename:
         assert songs.rename_section(session, song.id, "A", "A") == 0
 
 
+class TestDeleteSongPracticeData:
+    def test_removes_every_practice_row(self, session: Session, song: PerformSong):
+        arr = songs.create_arrangement(session, song, "guitar")
+        run = make_run(session, song, [("Chorus", True)], arrangement=arr)
+        songs.set_override(session, song.id, "Chorus", "cues")
+
+        songs.delete_song_practice_data(session, song.id)
+
+        assert songs.arrangements_for_song(session, song.id) == []
+        assert songs.runs_for_song(session, song.id) == []
+        assert session.get(PracticeRun, run.id) is None
+        assert session.get(PracticeRunSection, (run.id, "Chorus")) is None
+        assert session.get(SectionLevelOverride, (song.id, "Chorus")) is None
+
+    def test_leaves_another_songs_data_alone(self, session: Session, song: PerformSong):
+        other = PerformSong(name="Other Song", learned=False)
+        session.add(other)
+        session.commit()
+        session.refresh(other)
+
+        arr = songs.create_arrangement(session, other, "guitar")
+        run = make_run(session, other, [("Chorus", False)], arrangement=arr)
+        songs.set_override(session, other.id, "Chorus", "letters")
+
+        songs.delete_song_practice_data(session, song.id)
+
+        assert [a.id for a in songs.arrangements_for_song(session, other.id)] == [arr.id]
+        assert [r.id for r in songs.runs_for_song(session, other.id)] == [run.id]
+        assert session.get(SectionLevelOverride, (other.id, "Chorus")) is not None
+
+
 class TestRunsForDay:
     def test_uses_the_days_timezone(self, session, song):
         # 23:30 in New York is 03:30 UTC the next day, and belongs to the NY day

@@ -29,7 +29,7 @@
                             <span
                                 v-if="withChords(line)"
                                 class="chord"
-                                @click.stop="seg.chord && emit('chord', seg.chord)"
+                                @click="seg.chord && onChordClick($event, seg.chord)"
                                 >{{ seg.chord ?? ' ' }}</span
                             >
                             <span class="seg-text"
@@ -92,6 +92,12 @@ function withChords(line: SheetLine): boolean {
 function showLine(line: SheetLine): boolean {
     // a chords-only line has nothing to show without its chords
     return !(props.lyricsOnly && line.chords.length && !line.text.trim())
+}
+
+function onChordClick(event: MouseEvent, chord: string) {
+    // only a real chord stops the tap reaching the peek/page-turn handlers
+    event.stopPropagation()
+    emit('chord', chord)
 }
 
 function onSectionClick(event: MouseEvent, key: string) {

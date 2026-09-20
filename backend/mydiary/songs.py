@@ -100,6 +100,35 @@ def update_arrangement(
     return arrangement
 
 
+def delete_song_practice_data(session: Session, song_id: int) -> None:
+    """Delete everything practice-related for a song, ahead of deleting the
+    song itself. SQLite foreign keys aren't enforced here (see api.py's
+    delete_perform_song), so this has to be done by hand, parent-first:
+    a run's sections, then the run, then the song's arrangements and
+    overrides."""
+    run_ids = session.exec(
+        select(PracticeRun.id).where(PracticeRun.perform_song_id == song_id)
+    ).all()
+    if run_ids:
+        for section in session.exec(
+            select(PracticeRunSection).where(PracticeRunSection.run_id.in_(run_ids))
+        ):
+            session.delete(section)
+        for run in session.exec(
+            select(PracticeRun).where(PracticeRun.id.in_(run_ids))
+        ):
+            session.delete(run)
+    for arrangement in session.exec(
+        select(SongArrangement).where(SongArrangement.perform_song_id == song_id)
+    ):
+        session.delete(arrangement)
+    for override in session.exec(
+        select(SectionLevelOverride).where(SectionLevelOverride.perform_song_id == song_id)
+    ):
+        session.delete(override)
+    session.commit()
+
+
 def delete_arrangement(session: Session, arrangement: SongArrangement) -> None:
     # runs belong to the song, not the sheet: keep them, minus the pointer
     for run in session.exec(
@@ -236,7 +265,11 @@ def rename_section(session: Session, song_id: int, from_key: str, to_key: str) -
     """Move a section's history to a new label, after the sheet renamed it.
 
     A run that already has the new label keeps one row, stumbled if either
-    was. Returns how many run rows were moved."""
+    was. Returns how many run rows were moved.
+
+    If `from_key` has an override and `to_key` already has one too, the
+    `to_key` override is left as it is and the `from_key` one is dropped:
+    overrides are not merged the way run sections are."""
     if from_key == to_key:
         return 0
     run_ids = session.exec(

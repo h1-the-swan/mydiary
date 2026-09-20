@@ -130,7 +130,7 @@ docker compose exec mydiary-vuetify npm run lint
 docker compose exec mydiary-vuetify npm test
 ```
 
-`npm run lint` currently reports ~27 pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.
+`npm run lint` currently reports ~24 pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.
 
 To see a UI change rendered, drive the running app with the Playwright MCP tools (`mcp__playwright__*`) — don't write a standalone Playwright script against the backend venv, the MCP tools already cover navigate/resize/scroll/screenshot with no script to maintain. Resize to 1440×900 and 390×844, and scroll the page before capturing: `v-img` lazy-loads via IntersectionObserver, so an unscrolled full-page screenshot shows blank gaps where photos should be. Pass `browser_take_screenshot` a `filename` under `.playwright-mcp/` (e.g. `.playwright-mcp/foo.png`) — a bare relative name saves to the repo root instead of that gitignored output directory.
 

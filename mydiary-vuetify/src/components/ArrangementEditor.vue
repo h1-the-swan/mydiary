@@ -174,6 +174,8 @@ async function remove() {
     await deleteSongArrangement(props.arrangement.id)
     emit('deleted')
 }
+
+defineExpose({ dirty })
 </script>
 
 <style scoped>

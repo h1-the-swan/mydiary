@@ -198,3 +198,66 @@ class TestLrclibRoute:
         with patch("mydiary.lrclib_connector.fetch_lyrics", side_effect=requests.ConnectionError("down")):
             r = client.get(f"/performsongs/{song.id}/lyrics/lrclib")
         assert r.status_code == 502
+
+
+from mydiary.models import PracticeRun, PracticeRunSection, SectionLevelOverride, SongArrangement
+
+
+class TestDeleteSongCascade:
+    """Deleting a song must take its practice data with it, or SQLite's
+    rowid reuse (no AUTOINCREMENT on performsong.id) lets a later song
+    inherit a deleted one's sheets and history."""
+
+    def test_delete_leaves_no_orphan_rows(self, client, song, session):
+        arr = create_guitar(client, song)
+        r = client.post(
+            "/practice/runs",
+            json={
+                "perform_song_id": song.id,
+                "arrangement_id": arr["id"],
+                "sections": [{"section_key": "Chorus", "stumbled": True}],
+            },
+        )
+        assert r.status_code == 200, r.text
+        run_id = r.json()["id"]
+        client.put(
+            f"/performsongs/{song.id}/practice/levels",
+            json={"section_key": "Chorus", "level": "cues"},
+        )
+
+        assert client.delete(f"/performsongs/{song.id}").json() == {"ok": True}
+
+        assert session.get(SongArrangement, arr["id"]) is None
+        assert session.get(PracticeRun, run_id) is None
+        assert session.get(PracticeRunSection, (run_id, "Chorus")) is None
+        assert session.get(SectionLevelOverride, (song.id, "Chorus")) is None
+
+    def test_new_song_does_not_inherit_a_deleted_songs_data(self, client, song, session):
+        """The reused-rowid scenario from the brief: delete the newest song,
+        add another, and the new song must not show the old one's sheets."""
+        arr = create_guitar(client, song)
+        client.post(
+            "/practice/runs",
+            json={
+                "perform_song_id": song.id,
+                "arrangement_id": arr["id"],
+                "sections": [{"section_key": "Chorus", "stumbled": False}],
+            },
+        )
+        assert client.delete(f"/performsongs/{song.id}").json() == {"ok": True}
+
+        new_song = PerformSong(name="A New Song", learned=False)
+        session.add(new_song)
+        session.commit()
+        session.refresh(new_song)
+
+        assert client.get(f"/performsongs/{new_song.id}/arrangements").json() == []
+        assert client.get(f"/performsongs/{new_song.id}/practice/runs").json() == []
+        assert client.get(f"/performsongs/{new_song.id}/practice/levels").json() == []
+        # creating a fresh arrangement must not answer 409 for a sheet the
+        # deleted song left behind at this id
+        r = client.post(
+            f"/performsongs/{new_song.id}/arrangements",
+            json={"instrument": "guitar"},
+        )
+        assert r.status_code == 200, r.text

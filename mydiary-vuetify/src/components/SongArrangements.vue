@@ -28,13 +28,14 @@
             No sheet yet. Add a guitar or ukulele sheet to start practicing.
         </p>
         <template v-else-if="current">
-            <v-tabs v-model="tab" density="compact" class="mb-4">
+            <v-tabs v-model="tabProxy" density="compact" class="mb-4">
                 <v-tab v-for="a in arrangements" :key="a.id" :value="a.instrument">
                     {{ INSTRUMENT_LABELS[a.instrument] }}
                 </v-tab>
             </v-tabs>
             <ArrangementEditor
                 :key="current.id"
+                ref="editorRef"
                 :arrangement="current"
                 :other-sheets="arrangements.filter((a) => a.id !== current!.id).map((a) => a.sheet ?? '')"
                 @saved="onSaved"
@@ -70,9 +71,25 @@ const loaded = ref(false)
 const tab = ref<string>()
 const adding = ref<Instrument | null>(null)
 const savedToast = ref(false)
+const editorRef = ref<InstanceType<typeof ArrangementEditor> | null>(null)
 
 const missing = computed(() => INSTRUMENTS.filter((i) => !arrangements.value.some((a) => a.instrument === i)))
 const current = computed(() => arrangements.value.find((a) => a.instrument === tab.value))
+
+// switching instruments remounts ArrangementEditor (it's keyed on current.id),
+// which would silently drop unsaved sheet/key/capo edits
+const tabProxy = computed<string | undefined>({
+    get: () => tab.value,
+    set: (value) => {
+        if (
+            editorRef.value?.dirty &&
+            !window.confirm('Unsaved changes to this sheet will be lost. Switch anyway?')
+        ) {
+            return
+        }
+        tab.value = value
+    },
+})
 
 async function load() {
     arrangements.value = (await listSongArrangements(props.performSong.id)).data
