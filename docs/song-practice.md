@@ -7,13 +7,13 @@ frontend pieces and the tests.
 
 ## The idea
 
-Learning a song means needing the sheet less. That happens unevenly: the
-chorus is solid long before the third verse is, and a bridge that was fine
-last week falls apart today. So the unit here is the **section**, not the
-song. Every play-through is recorded section by section, and each section's
-sheet fades by itself as that section gets reliable — full lyrics, then first
-letters, then the first few words of each line, then the chord line alone.
-When a song is entirely faded out, it is memorized.
+Learning a song is a matter of needing the sheet less, and that happens
+unevenly: the chorus is solid long before the third verse is, and a bridge
+that was fine last week falls apart today. The unit here is therefore the
+**section**, not the song. Every play-through is recorded section by section,
+and each section's sheet fades by itself as that section gets reliable — full
+lyrics, then first letters, then the first few words of each line, then the
+chord line alone. When a song is entirely faded out, it is memorized.
 
 Nothing about this replaces `PerformSong.learned`, which still marks a song as
 in the repertoire and is still set by hand. Songs with `learned=False` are the
@@ -90,13 +90,15 @@ different words is labelled `[Final chorus]` to make it separate. Practice
 history is keyed on that label, and therefore shared by a song's guitar and
 ukulele sheets.
 
-Renaming a label in the editor would otherwise strand the history under the old
-one. On save, `ArrangementEditor.vue` compares the **saved** sheet's sections
-against the sections now in use (this sheet plus the song's other sheets) and
-offers a dialog for each label that has history and is no longer in any sheet:
-move it to one of the current labels, or leave it. Comparing against the saved
-sheet rather than against all history is what keeps the dialog from reappearing
-on every subsequent save for a section the user already chose to leave alone.
+A label can be renamed in the editor, and the history stays under the old one
+until it is moved. On save, `ArrangementEditor.vue` takes the sections of the
+**saved** sheet, keeps those that have practice history, and drops any that
+are still in use somewhere (this sheet as edited, or one of the song's other
+sheets). What is left is the set of labels this particular edit removed, and
+each one gets a line in a dialog: move its history to one of the current
+labels, or leave it. Since the comparison starts from the saved sheet, the next
+save sees a sheet that no longer has the old label and asks nothing further
+about it.
 
 `rename_section()` in [songs.py](../backend/mydiary/songs.py) does the move. It
 rewrites `section_key` on the affected `PracticeRunSection` and
@@ -174,11 +176,12 @@ A sticky **Done** button at the foot of the practice sheet opens
 optional note. A clean run of the whole song is two taps, Done then Save.
 
 The check stays open until the run is stored. `SongPractice.vue` runs the save
-and reports back through `saving` and `failed`; the chips and the note keep
-exactly what was tapped in, so a save that fails (the app unreachable from the
-music stand, say) can be retried without reconstructing the run from memory.
-Once it is stored, the sheet closes the panel, reloads the levels, shows a
-toast at the top of the screen and scrolls back to the start of the song.
+and reports back through `saving` and `failed`; while the panel is open the
+chips and the note hold exactly what was tapped in. A failed save puts an
+error line in the panel and leaves Save active, so the same taps can be sent
+again. Once the run is stored, the sheet closes the panel, reloads the levels,
+shows a toast at the top of the screen and scrolls back to the start of the
+song.
 
 ## The practice sheet
 
@@ -209,9 +212,8 @@ section. `?instrument=` picks the arrangement and follows the toggle.
 whole sheet fits on one screen that way. `fitColumns()` measures the
 two-column height by adding the class, reading `offsetHeight` and removing it
 again before anything is painted, then compares that against the room left
-below the header. The reason for the condition is that a pedal only pages
-downward: if the second column starts above the fold, reading it means
-scrolling back up.
+below the header. Paging goes one way, downward, so the fit is what decides
+it: both columns have to begin on the screen the reader is already on.
 
 ## Starting a sheet
 
@@ -288,11 +290,11 @@ back to its plain name. Stumbles are listed in sheet order. Like Location, the
 section only appears on days that have something in it.
 
 `runs_for_day()` in `songs.py` gathers the runs; `practice_markdown()` in
-`song_practice.py` formats them. `update_joplin_note()` only refreshes sections
-a note already has, so a note initialized before the day's first run would
-never gain one. The update path calls
-`MarkdownDoc.ensure_section("Practice", after_title="Spotify tracks")` first,
-the same backfill the Location section uses.
+`song_practice.py` formats them. `update_joplin_note()` refreshes only the
+sections a note already has, so the update path first calls
+`MarkdownDoc.ensure_section("Practice", after_title="Spotify tracks")`, which
+adds the section to a note initialized before the day's first run. The
+Location section is backfilled the same way.
 
 ## Routes
 
