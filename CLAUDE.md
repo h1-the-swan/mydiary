@@ -22,20 +22,22 @@ Pocket and Google Photos were formerly data sources. The Google Photos integrati
 | File | Purpose |
 |------|---------|
 | `api.py` | FastAPI app with all route definitions; APScheduler runs the Spotify, OwnTracks and Joplin-note syncs hourly |
-| `models.py` | SQLModel database models (SpotifyTrack, PocketArticle, GoogleCalendarEvent, PerformSong, Dog, Recipe, Tag, JoplinNote, etc.) |
+| `models.py` | SQLModel database models (SpotifyTrack, PocketArticle, GoogleCalendarEvent, PerformSong, SongArrangement, PracticeRun, Dog, Recipe, Tag, JoplinNote, etc.) |
 | `db.py` | SQLite engine setup; DB file at `mydiary/database.db` (path overridable via `MYDIARY_ROOTDIR`) |
 | `mydiary_day.py` | `MyDiaryDay` class — assembles a day's data from all sources and generates Markdown |
 | `core.py` | Shared utilities: image resize, timezone inference, hash helpers |
 | `markdown_edits.py` | `MarkdownDoc` class for parsing and editing structured diary Markdown |
-| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down; `dictionary_connector.py` is a single function over dictionaryapi.dev |
+| `*_connector.py` | One connector class per external service (Spotify, Google Calendar, Joplin, Nextcloud, Habitica, Raindrop, OwnTracks); `pocket_connector.py` is database-only since the Pocket API shut down; `dictionary_connector.py` is a single function over dictionaryapi.dev, and `lrclib_connector.py` is a single function over lrclib.net |
 | `owntracks_track.py` | Pure functions turning raw location fixes into stays and links (no I/O) |
 | `spelling_bee.py` | Pure functions rebuilding a NYT Spelling Bee hive from the words missed that day (no I/O) |
+| `song_practice.py` | Pure functions: section level rules and the diary's Practice lines (no I/O) |
+| `songs.py` | Every read/write of arrangements, practice runs and level overrides |
 | `hashtags.py` | Pure functions: the `#namespace:slug` grammar, slug normalisation, hashtag extraction from Markdown (no I/O) |
 | `tags.py` | The `ENTITY_KINDS` registry (what tags attach to and may refer to) and every read/write of `Tag`/`TagLink`; see `docs/tags.md` |
 | `map_render.py` | Renders the daily location map to an image (py-staticmaps + Pillow); `RenderParams` holds size and encoding, JPEG q85 by default |
 | `owntracks_maps.py` | Puts a rendered map into its Joplin note's Location section |
 
-The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
+The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks and, on days with practice, a Practice section; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
 
 The image workflow (Nextcloud photos ↔ Joplin notes, manual uploads, thumbnail caching) is documented in `docs/image-workflow.md`.
 
@@ -43,9 +45,13 @@ The location workflow (OwnTracks recorder → database → smoothed track → re
 
 Tags are `#slug` or `#namespace:slug`, written as hashtags in a note or set by hand on a day, song or article; a namespace optionally resolves to a table (`#dog:ruffles` → a `Dog` row) through a registry, and resolution is computed on read, never stored. The whole system (grammar, tables, registry, sync, routes, UI, tests) is documented in `docs/tags.md`.
 
+The song-practice workflow (per-instrument ChordPro sheets, fading practice sheet, after-run check, Practice diary section) is documented in `docs/song-practice.md`.
+
 ### Frontend (`mydiary-vuetify/src/`)
 
-Vue 3 SPA using Vuetify 4 and Pinia for state. Key views: `MyDiaryDay.vue` (main diary view), `PerformSongs.vue` (guitar songs tracker), `Pocket.vue` (saved articles browser), `SpellingBee.vue` / `SpellingBeePractice.vue` (Spelling Bee misses and the two practice games), `Tags.vue` / `TagDetail.vue` (every tag by namespace, and one tag's targets).
+Vue 3 SPA using Vuetify 4 and Pinia for state. Key views: `MyDiaryDay.vue` (main diary view), `PerformSongs.vue` (guitar songs tracker), `SongPractice.vue` (the practice sheet for one song), `Pocket.vue` (saved articles browser), `SpellingBee.vue` / `SpellingBeePractice.vue` (Spelling Bee misses and the two practice games), `Tags.vue` / `TagDetail.vue` (every tag by namespace, and one tag's targets).
+
+`chordpro.ts` owns all ChordPro handling — parsing, importing a tab paste, transposition, the `{define}` directives and the practice fading — and `chords.ts` owns the fingerings, from chords-db data drawn as svguitar diagrams.
 
 The Spelling Bee tracker records words missed in the NYT puzzle, entered by hand. Its one non-obvious idea: every word in a puzzle is built from the same seven letters and every word contains the centre letter, so a playable hive can be reconstructed from the words alone — recording the letters (`SpellingBeePuzzle`, optional, one row per date) only makes it exact. `spelling_bee.py` owns that derivation; `SpellingBeeHive.vue` is a dumb renderer. Word helpers are mirrored in `src/spellingBee.ts` so the entry form can validate a paste as it is typed.
 
@@ -113,6 +119,7 @@ npm install
 npm run dev           # dev server on port 3001
 npm run lint          # ESLint with auto-fix
 npm run build         # type-check + production build
+npm test              # vitest: chordpro.ts / chords.ts
 ```
 
 Run `lint` and `build` **inside the container** — the host `node_modules` is incomplete (it lacks `leaflet`, so `vue-tsc` fails on `MapSection.vue` regardless of your changes):
@@ -120,6 +127,7 @@ Run `lint` and `build` **inside the container** — the host `node_modules` is i
 ```sh
 docker compose exec mydiary-vuetify npm run build
 docker compose exec mydiary-vuetify npm run lint
+docker compose exec mydiary-vuetify npm test
 ```
 
 `npm run lint` currently reports ~27 pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.
