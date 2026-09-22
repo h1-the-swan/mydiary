@@ -189,7 +189,7 @@ async function fetchInitMarkdown() {
 }
 async function onSaveNote() {
     joplinNoteId.value = (
-        await joplinInitNote(getDateStr.value, { body: initMarkdown.value })
+        await joplinInitNote(getDateStr.value, initMarkdown.value)
     ).data
     dialog.value = false
     snackbarInit.value = true

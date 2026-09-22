@@ -1072,7 +1072,7 @@ async def joplin_init_note(
     tz: str = "local",
     session: Session = Depends(get_session),
     mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
-    body: Optional[str] = None,
+    body: Optional[str] = Body(None),
 ) -> str:
     if dt == "today":
         dt = pendulum.today(tz=tz)

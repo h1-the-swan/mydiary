@@ -481,7 +481,6 @@ limit?: number;
 
 export type JoplinInitNoteParams = {
 tz?: string;
-body?: string | null;
 };
 
 export type DayInitMarkdownParams = {
@@ -943,11 +942,12 @@ export const joplinGetNoteId = (
  */
 export const joplinInitNote = (
     dt: string,
+    stringNull?: string | null,
     params?: JoplinInitNoteParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<string>> => {
     return axios.post(
       `/joplin/init_note/${dt}`,
-      undefined,{
+      stringNull,{
     ...options,
         params: {...params, ...options?.params},}
     );
