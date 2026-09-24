@@ -90,7 +90,7 @@ Upload size limit: nginx `client_max_body_size` is set in `nginx-vue/nginx.conf`
 
 The selection also flows back to the phone: an iOS Shortcut, run daily by a personal automation, collects the photos chosen for diary entries into a Photos album. iOS lets only on-device apps write the Photos library, so the phone pulls.
 
-Route: `GET /images/iphone_captures?since=YYYY-MM-DD` (`iphoneCaptureTimes`), gated by the `X-API-Key` header (`MYDIARY_API_TOKEN`, see CLAUDE.md). It returns the iPhone-sync rows (`H1phone_sync/…`) currently in a note, ordered by `created_at`, with `since` defaulting to 14 days ago. Each item has `capture_local`, `img_number` and `nextcloud_path`.
+Route: `GET /images/iphone_captures?since=YYYY-MM-DD` (`iphoneCaptureTimes`), gated by the `X-API-Key` header (`MYDIARY_API_TOKEN`, see [env-vars.md](env-vars.md)). It returns the iPhone-sync rows (`H1phone_sync/…`) currently in a note, ordered by `created_at`, with `since` defaulting to 14 days ago. Each item has `capture_local`, `img_number` and `nextcloud_path`.
 
 - `capture_local` is **naive** local wall-clock time (`2026-07-15T18:33:23`), straight from the filename and formatted without the microseconds that hold the counter. That is the contract: Shortcuts renders photo dates in the device's current timezone, which is also what the filename was written in, so the two compare directly with no conversion.
 - `img_number` is the 4-digit camera counter from the filename, or `null` when the suffix isn't one.
