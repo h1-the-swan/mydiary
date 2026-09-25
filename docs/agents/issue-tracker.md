@@ -10,20 +10,20 @@ Ideas and todos that nobody is working on yet live in `.scratch/backlog/`, one f
 - The body is free-form: the problem, what's known, rough shape, open questions. It doesn't need to be a spec.
 - There's no `Status:` line. An item that is waiting on something gets a `Revisit when: <trigger>` line under its title instead, e.g. `Revisit when: diary-note-module merges`. An item without one is live.
 - Link to other items with relative paths: `[other-slug](other-slug.md)` for backlog items, `[slug](../slug/spec.md)` for features, `../../` for repo files.
-- To start work, move the file to `.scratch/<slug>/spec.md` and turn it into a real spec. Keep the same slug for the feature directory. Issue files come after that, as below.
+- To start work, move the file to `.scratch/<slug>/spec.md` and turn it into a real spec, with `Status: in-progress` under its title. Keep the same slug for the feature directory. Issue files come after that, as below.
 - To drop an item, delete the file. Record why in the commit or conversation that decided it, if anywhere.
 - A new idea from a skill or conversation that isn't being worked on now goes here, not into a feature directory.
 
 ## Conventions
 
 - One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
+- The spec is `.scratch/<feature-slug>/spec.md`, with a `Status: in-progress | done` line under its title. A note may follow the value, e.g. `Status: done (2026-09-11)`. `grep '^Status:' .scratch/*/spec.md` lists every feature's state.
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file
 - Each issue file has these lines near the top:
   - `Status: open | claimed | resolved`
   - `Type: task | research | prototype | grilling`
   - `Blocked by: none` or `Blocked by: NN, NN`, optionally followed by a note in parentheses
-- A finished feature keeps its directory. The spec plus its resolved issues are the record of what was built and why; don't move it anywhere.
+- A finished feature keeps its directory, with its spec set to `Status: done`. The spec plus its resolved issues are the record of what was built and why; don't move it anywhere.
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
 ## Archive
