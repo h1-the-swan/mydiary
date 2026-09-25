@@ -257,7 +257,7 @@ class _StubClient:
         return "f" * 32
 
     def get_note_id_by_title(self, title, parent_notebook_id=None):
-        return "does_not_exist"
+        return None
 
     def update_note_body(self, note_id, new_body):
         r = requests.Response()
@@ -265,7 +265,7 @@ class _StubClient:
         return r
 
 
-def test_http_adapter_translates_the_sentinel_to_none():
+def test_http_adapter_missing_note_is_none():
     assert HttpJoplin(_StubClient()).get_note_id_by_date(DAY) is None
 
 

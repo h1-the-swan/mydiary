@@ -3,7 +3,7 @@ import pytest
 import requests
 from pathlib import Path
 
-from mydiary.diary_note import refresh_note_mirror
+from mydiary.diary_note import image_resource_ids_of, refresh_note_mirror
 from mydiary.image_sync import shrink_photo
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
@@ -144,7 +144,7 @@ def test_add_images(
         r_put_note.raise_for_status()
 
         note_refreshed = joplin_client.get_note(note_id)
-        assert len(note_refreshed.md_note.get_image_resource_ids()) == 2
+        assert len(image_resource_ids_of(note_refreshed.body)) == 2
 
     finally:
         for resource_id in resource_ids:

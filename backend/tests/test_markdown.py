@@ -46,14 +46,6 @@ def test_code_block_protects_headings():
     assert "heading 2" in titles    # the section containing the code block is still present
 
 
-def test_get_resource_ids():
-    sec = MarkdownSection(
-        ["## images", "", "![](:/abc123)", "", "![](:/def456)", ""],
-        title="images",
-    )
-    assert sec.get_resource_ids() == ["abc123", "def456"]
-
-
 def test_set_content_replace():
     sec = MarkdownSection(
         ["## images", "", "![](:/abc123)", "", "![](:/def456)", ""],
@@ -61,7 +53,7 @@ def test_set_content_replace():
     )
     result = sec.set_content("![](:/def456)\n\n![](:/new789)")
     assert result == "updated"
-    assert sec.get_resource_ids() == ["def456", "new789"]
+    assert sec.content == "![](:/def456)\n\n![](:/new789)"
     assert sec.lines[0] == "## images"
 
 
@@ -72,7 +64,6 @@ def test_set_content_empty_populated_section():
     )
     result = sec.set_content("")
     assert result == "updated"
-    assert sec.get_resource_ids() == []
     assert sec.content == ""
     assert sec.lines[0] == "## images"
 
@@ -109,7 +100,7 @@ def test_set_content_document_roundtrip():
     sec = md_doc.get_section_by_title("images")
     # removal of a subset preserves other refs and the rest of the document
     sec.set_content("![](:/legacy999)")
-    assert md_doc.get_image_resource_ids() == ["legacy999"]
+    assert sec.content == "![](:/legacy999)"
     assert "some words" in md_doc.txt
     assert "tail content" in md_doc.txt
     assert "abc123" not in md_doc.txt

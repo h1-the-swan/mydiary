@@ -1,6 +1,5 @@
 import os
 from datetime import datetime, date
-import re
 import requests
 import io
 import json
@@ -37,9 +36,12 @@ from .diary_note import (
     DiaryNote,
     NoteClobbered,
     WordsConflict,
+    image_resource_ids_of,
+    readable_body,
     refresh_note_mirror,
     sync_changed_notes,
     sync_one_day,
+    words_of,
 )
 from .joplin_port import HttpJoplin, JoplinPort
 from .db import Session, engine, select, func, get_db_status
@@ -1168,9 +1170,7 @@ def joplin_get_note(
         logger.exception(f"could not mirror note {note_id} to the database")
         session.rollback()
     if remove_image_refs is True:
-        note.body = re.sub(
-            r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", r"[Joplin resource_id: \1]", note.body
-        )
+        note.body = readable_body(note.body)
     return note
 
 
@@ -1182,17 +1182,14 @@ def joplin_get_note(
 def joplin_get_note_images(
     note_id: str,
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
-    if not note_id or note_id == "does_not_exist":
-        return []
-
-    note = mydiary_joplin.get_note(note_id)
+    note = joplin.get_note(note_id)
     images = [
         session.exec(
             select(MyDiaryImage).where(MyDiaryImage.joplin_resource_id == resource_id)
         ).first()
-        for resource_id in note.md_note.get_image_resource_ids()
+        for resource_id in image_resource_ids_of(note.body)
     ]
     # skip resource ids with no database row (e.g. images added by the removed
     # Google Photos integration)
@@ -1233,12 +1230,26 @@ def joplin_update_note(
     operation_id="joplinGetInfoAllDays",
     response_model=list,
 )
-async def joplin_get_info_all_days(
-    min_dt: str, max_dt: str, mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client)
+def joplin_get_info_all_days(
+    min_dt: str, max_dt: str, joplin: JoplinPort = Depends(get_joplin_port)
 ):
-    return mydiary_joplin.get_info_all_days(
-        min_dt=pendulum.parse(min_dt), max_dt=pendulum.parse(max_dt)
-    )
+    data = []
+    dt = pendulum.parse(min_dt)
+    end = pendulum.parse(max_dt)
+    while dt < end:
+        diary_note = DiaryNote.find(joplin, dt)
+        if diary_note is not None:
+            note = diary_note.read()
+            data.append(
+                {
+                    "title": note.title,
+                    "note_id": note.id,
+                    "has_words": len(words_of(note.body)) > 0,
+                    "has_images": len(image_resource_ids_of(note.body)) > 0,
+                }
+            )
+        dt = dt.add(days=1)
+    return data
 
 
 # def _modify_filepath(filepath):

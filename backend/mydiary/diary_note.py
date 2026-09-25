@@ -11,12 +11,13 @@ never the other way round. See CONTEXT.md for the terms.
 """
 
 import hashlib
+import re
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import Enum
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 import pendulum
 from sqlalchemy import update
@@ -35,6 +36,9 @@ logger = root_logger.getChild(__name__)
 
 # the first year the diary has notes for; the hourly sync lists from here
 FIRST_DIARY_YEAR = 2022
+
+# inside DiaryNote's body, `date` is the field, not the type
+_Date = date
 
 
 class WordsConflict(Exception):
@@ -183,7 +187,28 @@ def _has_open_fence(text: str) -> bool:
     return sum(1 for line in text.split("\n") if line.startswith("```")) % 2 == 1
 
 
+# How a note embeds a Joplin resource: `![](:/f04c1849b3e64b5ca151a737720c0132)`
+_RESOURCE_REF = re.compile(r"!\[[^\]]*\]\(:/([a-zA-Z0-9]+?)\)")
+
+
+def resource_ref(resource_id: str) -> str:
+    """The markdown that embeds a resource in a note."""
+    return f"![](:/{resource_id})"
+
+
+def resource_ids_in(text: Optional[str]) -> List[str]:
+    """The ids of the resources embedded in some markdown, in order."""
+    return _RESOURCE_REF.findall(text or "")
+
+
+def readable_body(body: Optional[str]) -> str:
+    """A note's body with each embedded resource replaced by a text
+    placeholder naming its id, for showing the note outside Joplin."""
+    return _RESOURCE_REF.sub(r"[Joplin resource_id: \1]", body or "")
+
+
 def _references(body: Optional[str], resource_id: str) -> bool:
+    # any mention, not only an embed: a plain `[name](:/id)` link counts too
     return f":/{resource_id}" in (body or "")
 
 
@@ -195,7 +220,7 @@ _lock_holders: Dict[str, int] = {}
 
 
 @contextmanager
-def _note_lock(note_id: str) -> Iterator[None]:
+def _note_lock(note_id: str) -> Generator[None, None, None]:
     with _locks_guard:
         lock = _note_locks.setdefault(note_id, threading.Lock())
     if _lock_holders.get(note_id) == threading.get_ident():
@@ -228,7 +253,7 @@ class DiaryNote:
     date: date
 
     @classmethod
-    def find(cls, joplin: JoplinPort, dt: date) -> Optional["DiaryNote"]:
+    def find(cls, joplin: JoplinPort, dt: _Date) -> Optional["DiaryNote"]:
         """The Diary Note for a date, or None if Joplin has none."""
         if isinstance(dt, datetime):
             dt = dt.date()
@@ -250,7 +275,7 @@ class DiaryNote:
 
     @classmethod
     def create(
-        cls, session: Session, joplin: JoplinPort, dt: date, body: str
+        cls, session: Session, joplin: JoplinPort, dt: _Date, body: str
     ) -> "DiaryNote":
         """Create the Diary Note for a date in its year's folder, then refresh
         its Note Mirror from a re-read. The body is posted as given, without
@@ -289,7 +314,7 @@ class DiaryNote:
         return refresh_note_mirror(session, self.joplin, self.read(), commit=commit)
 
     @contextmanager
-    def edit(self, session: Session) -> Iterator["NoteEdit"]:
+    def edit(self, session: Session) -> Generator["NoteEdit", None, None]:
         """The one way to write to a Diary Note.
 
         ```
@@ -528,9 +553,10 @@ def image_resource_ids_of(body: Optional[str]) -> List[str]:
     if not body:
         return []
     try:
-        return MarkdownDoc(body).get_image_resource_ids()
+        section = MarkdownDoc(body).get_section_by_title("images")
     except KeyError:
         return []
+    return resource_ids_in(section.content)
 
 
 def refresh_note_mirror(

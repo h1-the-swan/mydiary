@@ -13,7 +13,7 @@ import requests
 from sqlmodel import Session, select
 
 from .core import reduce_size_recurse
-from .diary_note import DiaryNote, image_resource_ids_of
+from .diary_note import DiaryNote, image_resource_ids_of, resource_ref
 from .joplin_port import JoplinPort
 from .models import MyDiaryImage
 from .nextcloud_connector import MyDiaryNextcloud
@@ -31,10 +31,6 @@ SECTION_TITLE = "Images"
 
 def is_upload_path(nextcloud_path: str) -> bool:
     return nextcloud_path.startswith(f"{UPLOADS_BASEDIR}/")
-
-
-def image_ref(resource_id: str) -> str:
-    return f"![](:/{resource_id})"
 
 
 @dataclass(frozen=True)
@@ -192,7 +188,7 @@ def sync_note_images(
         # can appear twice; keep the first occurrence only
         final_refs = list(dict.fromkeys(final_refs))
         edit.set_section(
-            SECTION_TITLE, "\n\n".join(image_ref(rid) for rid in final_refs)
+            SECTION_TITLE, "\n\n".join(resource_ref(rid) for rid in final_refs)
         )
 
         for rid, img in to_remove.items():

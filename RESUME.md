@@ -18,19 +18,21 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 - [x] 4. Map sync on `edit()`
 - [x] 5. Photo sync on `edit()`
 - [x] 6. Section registry, refresh and creation
-- [ ] 7. Cleanup (sentinels, readable body, shrink script, fakes, docs)
+- [ ] 7. Cleanup, in two commits:
+  - [x] 7a. Code: sentinels, readable body, one ref syntax, shrink script, inline fake, dead client methods
+  - [ ] 7b. Docs: `docs/architecture.md`, `CONTEXT.md` check, renumber our ADR to 0002
 - [ ] Verification: the manual checks listed in issues 04, 05 and 06, in the worktree stack against `mydiary_test`
 
 ## Next action
 
-Step 7: set issue 07's `Status:` to `claimed` and do the cleanup (sentinels, readable body, one ref syntax, delete the shrink script, fold the fakes into `InMemoryJoplin`, docs).
+Step 7b (issue 07 is `claimed`): rename `docs/adr/0001-diary-note-sections-have-one-owner.md` to `0002-…` and update every `ADR-0001` reference to it (diary_note.py, markdown_edits.py, mydiary_day.py, CONTEXT.md, this file); update `docs/architecture.md` (backend file table: `diary_note.py`, `joplin_port.py`; the port and `InMemoryJoplin`); check `CONTEXT.md` against the code; move lasting Notes below into the docs. Then resolve issue 07 and do the Verification step.
 
 ## Notes
 
 - Joplin safety: the backend container points at the `mydiary_test` notebook through the untracked `docker-compose.local.yaml`. Host-run code reads `backend/.env`, a symlink to the primary checkout's, which points at the real diary. Run anything that writes to Joplin in the container only. Ask before copying real note bodies into `mydiary_test`.
 - Never commit `.scratch/` or `docker-compose.local.yaml` (both in `.git/info/exclude`).
 - Baseline before step 1: 351 passed, 12 deselected (`external_api`) in the container.
-- Step 1 deviation: `MyDiaryJoplin` doesn't implement the port directly. Four port names (`get_note_id_by_date`, `update_note_body`, `create_resource`, `delete_resource`) collide with client methods whose return values (the sentinel, a `requests.Response`) legacy callers still read, so `HttpJoplin` in `mydiary/joplin_port.py` wraps the client. Fold it into the client in step 7, once nothing calls the legacy forms.
+- Step 1 deviation: `MyDiaryJoplin` doesn't implement the port directly. Four port names (`get_note_id_by_date`, `update_note_body`, `create_resource`, `delete_resource`) collide with client methods whose return values (the sentinel, a `requests.Response`) legacy callers still read, so `HttpJoplin` in `mydiary/joplin_port.py` wraps the client. (Step 7a kept it that way; see below.)
 - Spec gaps found in step 1: (a) note listing, settled in step 2 as `JoplinPort.yield_year_notes(year)`, empty for a missing year folder; (b) settled in step 3: `edit()` deletes a dropped resource only when no other note references it, going by the mirror and `JoplinPort.get_resource_note_ids`. Joplin's index lags about 4 s behind a save, so the mirror check matters.
 - Step 2: routes get the port from `get_joplin_port` (built by `open_joplin_port()` in api.py, which the hourly sync also uses). Route tests override `get_joplin_port` with an `InMemoryJoplin`; background-sync tests monkeypatch `api_module.open_joplin_port`. `get_joplin_client` is still there for the routes that haven't moved.
 - Step 2: `WordsConflict` maps to 409 through an app-wide exception handler, so any route that refreshes the mirror returns 409 on one.
@@ -58,3 +60,8 @@ Step 7: set issue 07's `Status:` to `claimed` and do the cleanup (sentinels, rea
 - Step 6: creation is `DiaryNote.create(session, joplin, dt, body)`: a Words check against a deleted note's mirror row before posting, `NoteExists` (a `RuntimeError`) if the day has a note, one in-process lock around find + folder + POST (so two creates can't make two notes for a day, or two folders for a new year), then a mirror refresh from a re-read. Anything else failing after the POST still leaves the note in Joplin unmirrored, and a retry gets `NoteExists` (as on main). `/joplin/init_note` and `/joplin/update_note` now take the port and are plain `def`s.
 - Step 6 left alone: a `MyDiaryWords` row with no note id (none exist in the live DB) would be duplicated when that day's note is created, since the mirror finds words by note id. Same as main.
 - Step 6: `MarkdownSection.update()`, `MarkdownDoc.ensure_section` and their tests are gone, with the two fixture notes only `test_update_body` read. The shrink script uses `set_content` until step 7 deletes it.
+- Rebased onto main on 2026-09-25 (picking up 1b944f0 and 2f42327) with no conflicts; 464 passed afterwards. Main's `/.scratch` ignore rule is now on the branch, so the `.git/info/exclude` entries for `.scratch` are redundant. Main already has an ADR 0001 (tailnet-only remote access), so ours becomes 0002 in step 7b.
+- Step 7a: the ref syntax lives in `diary_note.py` only (`resource_ref`, `resource_ids_in`, `readable_body`, and `image_resource_ids_of` on top of them). `MarkdownDoc.get_image_resource_ids` and `MarkdownSection.get_resource_ids` are gone. `_references` stays a plain substring test on purpose, since a plain `[x](:/id)` link also keeps a resource alive.
+- Step 7a: `HttpJoplin` stays a wrapper instead of folding into the client (the step 1 plan). The `external_api` fixtures still read the client's `requests.Response` returns, and the wrapper is where failures become `JoplinError`. The client's `get_note_id_by_title` returns `None` now; its `get_note_id_by_date` (with the notebook-root fallback), `get_info_all_days` and `joplin_reduce_image_size` are gone.
+- Step 7a: `/joplin/get_info_all_days` runs on the port and is a plain `def`. A note with no Words or Images section now counts as `false` (it was a 500), and a year with no folder has no notes (the client used to fall back to the notebook root). `/joplin/get_note_images` no longer special-cases `"does_not_exist"`: every frontend caller already skips the call for it.
+- `mydiary_test` currently has notes only in 2021 (Dec) and 2022 (2022-01-14, 2022-11-02); its 2024 folder is empty.

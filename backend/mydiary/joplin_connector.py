@@ -14,8 +14,6 @@ import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union, Generator
 
-from .core import get_hash_from_txt, reduce_image_size, reduce_size_recurse
-
 from .models import (
     JoplinNote,
     JoplinFolder,
@@ -269,7 +267,7 @@ class MyDiaryJoplin:
 
     def get_note_id_by_title(
         self, title, parent_notebook_id: Optional[str] = None
-    ) -> str:
+    ) -> Optional[str]:
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
         items = [
@@ -282,24 +280,12 @@ class MyDiaryJoplin:
             logger.debug(
                 f"no note found with title {title} (parent_notebook_id={parent_notebook_id})"
             )
-            return "does_not_exist"
+            return None
 
         if len(items) > 1:
             raise RuntimeError(f"more than one note found with title {title}")
 
         return items[0]["id"]
-
-    def get_note_id_by_date(self, dt: datetime) -> str:
-        title = title_from_date(dt)
-        logger.debug(f"title: {title}")
-        subfolder_title = str(dt.year)
-        logger.debug(f"subfolder_title: {subfolder_title}")
-        subfolder_id = self.get_subfolder_id(subfolder_title)
-        logger.debug(f"subfolder_id: {subfolder_id}")
-        logger.debug(
-            f"getting note id (title={title}, parent_notebook_id={subfolder_id})"
-        )
-        return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
     def get_note(self, id: str, fields: Optional[List[str]] = None) -> JoplinNote:
         if fields is None:
@@ -407,62 +393,6 @@ class MyDiaryJoplin:
         )
         return response
 
-    # def add_image_to_note(
-    #     self,
-    #     image_bytes: bytes,
-    #     size: Tuple[int, int] = (512, 512),
-    #     bytes_threshold: int = 60000,
-    # ) -> Union[requests.Response, None]:
-    #     if len(image_bytes) > bytes_threshold:
-    #         image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-    #     r = mydiary_joplin.create_resource(data=image_bytes)
-    #     r.raise_for_status()
-    #     resource_id = r.json()["id"]
-    #     resource_ids.append(f"![](:/{resource_id})")
-    #     logger.debug(f"new resource id: {resource_id}")
-    #     return r
-
-    def joplin_reduce_image_size(
-        self,
-        resource_id: str,
-        size: Tuple[int, int] = (512, 512),
-        bytes_threshold: int = 60000,
-        delete_original: bool = False,
-    ) -> Union[requests.Response, None]:
-        # check to make sure image isn't associated with more than one note
-        r = requests.get(
-            f"{self.base_url}/resources/{resource_id}/notes",
-            params={"token": self.token},
-        )
-        r_items = r.json().get("items", [])
-        if len(r_items) > 1:
-            logger.warning(
-                f"more than one note is associated with resource {resource_id}:"
-            )
-            logger.warning(r_items)
-            if delete_original is True:
-                raise RuntimeError(
-                    f"delete_original is set to True, but this resource ({resource_id}) is associated with more than one note"
-                )
-
-        resource_file = requests.get(
-            f"{self.base_url}/resources/{resource_id}/file",
-            params={"token": self.token},
-        )
-        image_bytes: bytes = resource_file.content
-        if len(image_bytes) > bytes_threshold:
-            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-        else:
-            logger.debug(
-                f"did not reduce the size of image (resource id: {resource_id} because it was already under the threshold ({bytes_threshold} bytes)"
-            )
-            return None
-        r = self.create_resource(data=image_bytes)
-        if delete_original is True:
-            logger.debug(f"deleting original image: {resource_id}")
-            self.delete_resource(resource_id, force=True)
-        return r
-
     def delete_resource(
         self,
         resource_id: str,
@@ -501,28 +431,6 @@ class MyDiaryJoplin:
         )
         r.raise_for_status()
         return r.content
-
-    def get_info_all_days(
-        self, min_dt=pendulum.parse("2022-01-01"), max_dt=pendulum.today()
-    ) -> List[Dict]:
-        dt = min_dt
-        data = []
-        while dt < max_dt:
-            note_id = self.get_note_id_by_date(dt)
-            if note_id and note_id != "does_not_exist":
-                note = self.get_note(note_id)
-                words_content = note.md_note.get_section_by_title("words").get_content()
-                resource_ids = note.md_note.get_image_resource_ids()
-                data.append(
-                    {
-                        "title": note.title,
-                        "note_id": note_id,
-                        "has_words": len(words_content) > 0,
-                        "has_images": len(resource_ids) > 0,
-                    }
-                )
-            dt = dt.add(days=1)
-        return data
 
     def yield_notes_by_subfolder_id(
         self,

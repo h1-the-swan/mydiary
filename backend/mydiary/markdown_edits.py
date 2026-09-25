@@ -4,7 +4,6 @@ DESCRIPTION = """Split Markdown docs into `## ` sections and replace a section's
 
 from collections import OrderedDict
 from typing import Any, Generator, List, Tuple
-import re
 
 
 class MarkdownDoc:
@@ -73,11 +72,6 @@ class MarkdownDoc:
         # this_section_txt = "\n".join(this_section)
         yield this_section_title, this_section
 
-    def get_image_resource_ids(self):
-        sec = self.get_section_by_title('images')
-        resource_ids = sec.get_resource_ids()
-        return resource_ids
-
     def refresh_all_sections(self):
         for sec in self.sections:
             sec.refresh()
@@ -111,11 +105,6 @@ class MarkdownSection:
 
     def __str__(self) -> str:
         return self.txt
-
-    def get_resource_ids(self) -> List[str]:
-        # example of a resource id:
-        # "![](:/f04c1849b3e64b5ca151a737720s0132)"
-        return re.findall(r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", self.content)
 
     def set_content(self, new_content: str) -> str:
         """Replace this section's content unconditionally, preserving the heading line.

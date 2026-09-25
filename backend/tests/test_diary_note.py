@@ -10,7 +10,11 @@ from sqlmodel import Session, select
 from mydiary.diary_note import (
     DiaryNote,
     WordsConflict,
+    image_resource_ids_of,
+    readable_body,
     refresh_note_mirror,
+    resource_ids_in,
+    resource_ref,
     sync_changed_notes,
     sync_one_day,
 )
@@ -42,6 +46,38 @@ def day_tags(session: Session):
 
 def with_words(words: str) -> str:
     return f"# {DAY}\n\n## Words\n\n{words}\n\n## Images\n\n"
+
+
+class TestResourceRefs:
+    def test_ref_round_trips(self):
+        text = f"{resource_ref('abc123')}\n\n{resource_ref('def456')}"
+        assert resource_ids_in(text) == ["abc123", "def456"]
+
+    def test_alt_text_and_plain_links(self):
+        # a plain link isn't an embed
+        text = "![a photo](:/abc123) and [a file](:/def456)"
+        assert resource_ids_in(text) == ["abc123"]
+        # a web image doesn't run on into a later link
+        text = "![x](https://example.com/a.png) and [a file](:/def456)"
+        assert resource_ids_in(text) == []
+        assert readable_body(text) == text
+
+    def test_image_ids_come_from_the_images_section_only(self):
+        body = (
+            "# day\n\n## Words\n\n![](:/inwords)\n\n"
+            "## Images\n\n![](:/one)\n\n![](:/two)\n\n"
+            "## Location\n\n![](:/map)\n"
+        )
+        assert image_resource_ids_of(body) == ["one", "two"]
+        assert image_resource_ids_of("# day\n\n## Words\n\nhi\n") == []
+        assert image_resource_ids_of(None) == []
+
+    def test_readable_body(self):
+        body = "## Images\n\n![](:/abc123)\n\n![x](:/def456)\n"
+        assert readable_body(body) == (
+            "## Images\n\n[Joplin resource_id: abc123]\n\n"
+            "[Joplin resource_id: def456]\n"
+        )
 
 
 class TestFind:

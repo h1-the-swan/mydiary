@@ -8,7 +8,7 @@ from PIL import Image
 from sqlmodel import Session, select
 
 from mydiary import owntracks_maps
-from mydiary.diary_note import NoteClobbered
+from mydiary.diary_note import NoteClobbered, resource_ids_in
 from mydiary.map_render import RenderParams
 from mydiary.markdown_edits import MarkdownDoc
 from mydiary.models import JoplinNote, OwnTracksDayMap, OwnTracksLocation
@@ -128,7 +128,7 @@ def test_writes_a_location_section_into_the_note(db_with_locations, dt):
 
     md = MarkdownDoc(body_of(joplin))
     section = md.get_section_by_title("Location")
-    assert section.get_resource_ids() == list(joplin.resources)
+    assert resource_ids_in(section.content) == list(joplin.resources)
     assert "3 stops" in section.content
     assert "Arrive | Depart | Duration | Where" in section.content
 
@@ -216,7 +216,7 @@ def test_reruns_when_the_note_lost_the_map_reference(db_with_locations, dt):
     assert len(joplin.updates) == 2
     md = MarkdownDoc(body_of(joplin))
     section = md.get_section_by_title("Location")
-    assert section.get_resource_ids() == list(joplin.resources)
+    assert resource_ids_in(section.content) == list(joplin.resources)
 
 
 def test_a_map_joplin_lost_is_recreated(db_with_locations, dt):
@@ -242,7 +242,7 @@ def test_a_write_clobbered_once_is_retried(db_with_locations, dt):
     assert result == "updated"
     assert len(joplin.updates) == 2
     section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
-    assert section.get_resource_ids() == list(joplin.resources)
+    assert resource_ids_in(section.content) == list(joplin.resources)
 
 
 def test_a_write_that_keeps_being_clobbered_raises_and_leaves_nothing(
@@ -404,7 +404,7 @@ def test_a_two_area_day_writes_an_overview_plus_one_map_per_area(
     assert (result, num_maps) == ("updated", 3)
 
     section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
-    assert len(section.get_resource_ids()) == 3
+    assert len(resource_ids_in(section.content)) == 3
     # each area gets its own heading and itinerary, and the level-3 heading does
     # not split the Location section in two
     assert section.content.count("### ") == 2

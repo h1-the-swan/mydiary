@@ -16,7 +16,7 @@ import pendulum
 from sqlmodel import Session, select
 
 from .db import engine
-from .diary_note import DiaryNote
+from .diary_note import DiaryNote, resource_ref
 from .joplin_connector import MyDiaryJoplin
 from .joplin_port import HttpJoplin, JoplinPort
 from .map_render import RenderParams, render_day_map
@@ -322,7 +322,7 @@ def _panel_content(
 
     lines = []
     if resource_id:
-        lines.extend([f"![](:/{resource_id})", ""])
+        lines.extend([resource_ref(resource_id), ""])
     lines.append(summary_label(track))
     if itinerary and track.stays:
         lines.append("")

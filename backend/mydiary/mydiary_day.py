@@ -236,10 +236,12 @@ class MyDiaryDay:
         }
 
     def images_markdown(self) -> str:
+        from .diary_note import resource_ref
+
         resource_ids_md = []
         for image in self.images:
             if image.joplin_resource_id:
-                resource_ids_md.append(f"![](:/{image.joplin_resource_id})")
+                resource_ids_md.append(resource_ref(image.joplin_resource_id))
         return "\n\n".join(resource_ids_md)
 
     def build_owntracks_track(self, params=None):

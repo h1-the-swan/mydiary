@@ -7,14 +7,22 @@ subfolders notes are filed in. `HttpJoplin` implements it over the Joplin data
 API. Tests use `InMemoryJoplin` (tests/in_memory_joplin.py), which implements
 the same port without any HTTP.
 
-A missing note is `None` here. The `"does_not_exist"` sentinel the client still
-returns stops at this boundary.
+A missing note is `None` here. Only the `joplin_get_note_id` route turns that
+into the `"does_not_exist"` string the frontend reads.
 """
 
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Dict, Iterator, List, Optional, Protocol, runtime_checkable
+from typing import (
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    runtime_checkable,
+)
 
 import requests
 
@@ -90,7 +98,7 @@ class JoplinPort(Protocol):
 
 
 @contextmanager
-def _joplin_errors(what: str) -> Iterator[None]:
+def _joplin_errors(what: str) -> Generator[None, None, None]:
     try:
         yield
     except requests.RequestException as e:
@@ -98,30 +106,25 @@ def _joplin_errors(what: str) -> Iterator[None]:
 
 
 class HttpJoplin:
-    """`JoplinPort` over the Joplin data API.
+    """`JoplinPort` over the Joplin data API, by way of `MyDiaryJoplin`.
 
-    For now this wraps `MyDiaryJoplin` rather than being it. Four of the
-    port's names (`get_note_id_by_date`, `update_note_body`, `create_resource`,
-    `delete_resource`) are taken on the client by methods whose return values
-    (the sentinel, a `requests.Response`) existing callers still read. Once
-    those callers use the port, this can fold into the client."""
+    Several client methods return the raw `requests.Response`, which the
+    `external_api` test fixtures still read. This adapter turns those
+    into the port's return values, and any failed request into `JoplinError`."""
 
     def __init__(self, client: MyDiaryJoplin) -> None:
         self.client = client
 
     def get_note_id_by_date(self, dt: date) -> Optional[str]:
-        # the year's folder only: the client's own lookup falls back to the
-        # notebook root when the folder is missing
+        # the year's folder only: `get_note_id_by_title` with no folder
+        # searches the notebook root instead
         with _joplin_errors(f"finding the note for {dt}"):
             folder_id = self.client.get_subfolder_id(str(dt.year))
             if folder_id is None:
                 return None
-            note_id = self.client.get_note_id_by_title(
+            return self.client.get_note_id_by_title(
                 title_from_date(dt), parent_notebook_id=folder_id
             )
-        if note_id == "does_not_exist":
-            return None
-        return note_id
 
     def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
         with _joplin_errors(f"listing the {year} notes"):

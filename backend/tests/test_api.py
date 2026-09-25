@@ -1016,23 +1016,14 @@ class TestImages:
     def test_joplin_note_images_tolerates_unknown_resource_ids(
         self, session: Session, client: TestClient
     ):
-        import pendulum as _pendulum
-        from mydiary.api import get_joplin_client
-        from mydiary.models import JoplinNote, MyDiaryImage
+        from mydiary.api import get_joplin_port
+        from mydiary.models import MyDiaryImage
+        from tests.in_memory_joplin import InMemoryJoplin
 
-        note = JoplinNote(
-            id="note1",
-            parent_id="parent",
-            title="2026-07-15",
-            body="## Images\n\n![](:/knownres)\n\n![](:/unknownres)\n",
-            created_time=datetime(2026, 7, 15),
-            updated_time=datetime(2026, 7, 15),
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note(
+            "2026-07-15", "## Images\n\n![](:/knownres)\n\n![](:/unknownres)\n"
         )
-
-        class FakeJoplin:
-            def get_note(self, note_id):
-                return note
-
         session.add(
             MyDiaryImage(
                 hash="hash-known",
@@ -1047,11 +1038,11 @@ class TestImages:
 
         from mydiary.api import app as _app
 
-        _app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin()
+        _app.dependency_overrides[get_joplin_port] = lambda: joplin
         try:
-            response = client.get("/joplin/get_note_images/note1")
+            response = client.get(f"/joplin/get_note_images/{note_id}")
         finally:
-            del _app.dependency_overrides[get_joplin_client]
+            del _app.dependency_overrides[get_joplin_port]
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -1540,3 +1531,27 @@ class TestTags:
             assert client.get("/joplin/get_note_id/2026-09-14").text == "does_not_exist"
         finally:
             app.dependency_overrides.pop(get_joplin_port, None)
+
+    def test_get_info_all_days(self, client: TestClient):
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        joplin = InMemoryJoplin()
+        full = joplin.add_note(
+            "2026-09-12", "# d\n\n## Words\n\nhi\n\n## Images\n\n![](:/abc123)\n"
+        )
+        # no Words or Images section at all
+        bare = joplin.add_note("2026-09-14", "# d\n")
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
+        try:
+            r = client.get(
+                "/joplin/get_info_all_days",
+                params={"min_dt": "2026-09-12", "max_dt": "2026-09-15"},
+            )
+        finally:
+            app.dependency_overrides.pop(get_joplin_port, None)
+        assert r.status_code == 200
+        assert r.json() == [
+            {"title": "2026-09-12", "note_id": full, "has_words": True, "has_images": True},
+            {"title": "2026-09-14", "note_id": bare, "has_words": False, "has_images": False},
+        ]
