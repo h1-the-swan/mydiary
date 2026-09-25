@@ -135,3 +135,20 @@ docker run --rm -v /abs/path/to/mydiary-<feature>:/wt alpine \
   sh -c 'rm -rf /wt/* /wt/.[!.]*'
 rmdir ../mydiary-<feature> && git worktree prune
 ```
+
+That wipes gitignored files as well, so first look through
+`git status --short --ignored` in the worktree for anything worth keeping, such
+as agent build notes. Copy those into `.scratch/<feature>/`. The database
+snapshot, `.env` files and token caches are copies made at bootstrap, and can
+go. The worktree's `.scratch` is a symlink, and `rm -rf` removes only the link.
+
+`git branch -d` refuses a branch that was squash-merged on GitHub, because
+none of its commits are on main. Check that the squash commit has the same
+tree as the branch tip, then delete it with `-D`:
+
+```sh
+git diff --stat <feature> $(gh pr view <PR#> --json mergeCommit -q .mergeCommit.oid)
+git branch -D <feature>
+```
+
+No output from the diff means nothing on the branch is missing from main.
