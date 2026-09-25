@@ -3,8 +3,10 @@ import pytest
 import requests
 from pathlib import Path
 
+from mydiary.diary_note import refresh_note_mirror
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.joplin_port import HttpJoplin
 from mydiary.models import JoplinNote, JoplinNoteImageLink, MyDiaryWords
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -182,7 +184,8 @@ def test_alter_note_and_sync(
     r_put_note = joplin_client.update_note_body(note_id, md_note.txt)
     r_put_note.raise_for_status()
 
-    joplin_client.sync_note_api_to_db_obj(note_id, session=loaded_db, commit=True)
+    port = HttpJoplin(joplin_client)
+    refresh_note_mirror(loaded_db, port, port.get_note(note_id))
 
     db_note = loaded_db.get(JoplinNote, note_id)
     assert db_note.time_last_api_sync > orig_sync_dt

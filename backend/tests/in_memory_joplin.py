@@ -9,7 +9,7 @@ from typing import Dict, Iterator, List, Optional, Tuple
 
 from mydiary.core import get_hash_from_txt
 from mydiary.joplin_connector import title_from_date
-from mydiary.joplin_port import JoplinError
+from mydiary.joplin_port import JoplinError, NoteListing
 from mydiary.models import JoplinNote
 
 
@@ -49,7 +49,8 @@ class InMemoryJoplin:
 
     Beyond the port, tests get direct access to `folders`, `notes`,
     `resources` and `updates` (every body the app PUT, in order), plus a few
-    controls: `add_note` and `tag_note` to seed, `clobber_next_update` to
+    controls: `add_note` and `tag_note` to seed, `edit_note` and `untag_note`
+    for changes made in the Joplin app, `clobber_next_update` to
     stand in for the Joplin app's autosave writing back a stale copy, and
     `fail_next_update`."""
 
@@ -92,6 +93,12 @@ class InMemoryJoplin:
         if len(ids) > 1:
             raise RuntimeError(f"more than one note found with title {title}")
         return ids[0] if ids else None
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        folder_id = self._year_folder_id(year)
+        for n in list(self.notes.values()):
+            if folder_id is not None and n.parent_id == folder_id:
+                yield NoteListing(id=n.id, title=n.title, updated_time=n.updated_time)
 
     def get_note(self, note_id: str) -> JoplinNote:
         n = self._stored_note(note_id)
@@ -197,6 +204,17 @@ class InMemoryJoplin:
         """Seed a Diary Note titled `YYYY-MM-DD`, filed in its year's folder."""
         folder_id = self.get_or_create_year_folder(int(title[:4]))
         return self.create_note(title, body, folder_id)
+
+    def edit_note(self, note_id: str, body: str) -> None:
+        """Change a note's body the way the diarist would in the Joplin app:
+        its updated_time moves on, but it isn't recorded in `updates`."""
+        n = self._stored_note(note_id)
+        n.body = body
+        n.updated_time = self._tick()
+
+    def untag_note(self, note_id: str, title: str) -> None:
+        tag_ids = self.note_tag_ids.get(note_id, [])
+        self.note_tag_ids[note_id] = [t for t in tag_ids if self.tags[t] != title]
 
     def tag_note(self, note_id: str, title: str) -> None:
         """Put one of Joplin's own tags on a note, creating the tag if needed."""

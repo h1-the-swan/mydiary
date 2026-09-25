@@ -161,6 +161,22 @@ def test_created_note_is_found_by_date(joplin):
     assert note.body_hash == get_hash_from_txt(body)
 
 
+def test_missing_year_folder_lists_nothing(joplin):
+    assert list(joplin.port.yield_year_notes(TEST_YEAR)) == []
+
+
+def test_year_listing(joplin):
+    note_id = _create_day_note(joplin.port)
+    # a note outside the year folder isn't listed
+    joplin.port.create_note(TITLE, "# 2098-03-14\n", joplin.notebook_id)
+
+    (listed,) = joplin.port.yield_year_notes(TEST_YEAR)
+
+    note = joplin.port.get_note(note_id)
+    assert (listed.id, listed.title) == (note_id, TITLE)
+    assert listed.updated_time == note.updated_time
+
+
 def test_update_note_body(joplin):
     note_id = _create_day_note(joplin.port)
     before = joplin.port.get_note(note_id)

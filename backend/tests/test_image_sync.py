@@ -321,3 +321,58 @@ def test_note_update_failure_cleans_up(
     # nothing persisted
     assert db_session.exec(select(MyDiaryImage)).all() == []
     assert get_links(db_session) == []
+
+
+def test_words_edited_in_joplin_before_a_photo_sync(
+    db_session: Session, db_note: JoplinNote, image_bytes: bytes
+):
+    from mydiary.diary_note import refresh_note_mirror
+    from mydiary.models import MyDiaryWords
+    from tests.in_memory_joplin import InMemoryJoplin
+
+    # mirrored with "old words"; then edited to "some words" in the Joplin app
+    mirrored_body = make_note_body().replace("some words", "old words")
+    db_note.body = mirrored_body
+    db_session.add(db_note)
+    db_session.add(
+        MyDiaryWords(
+            joplin_note_id=NOTE_ID,
+            note_title=db_note.title,
+            txt="old words",
+            created_at=db_note.created_time,
+            updated_at=db_note.updated_time,
+            hash="old",
+        )
+    )
+    db_session.commit()
+    joplin = FakeJoplin(make_note_body())
+
+    sync_note_images(
+        session=db_session,
+        mydiary_joplin=joplin,
+        mydiary_nextcloud=FakeNextcloud(image_bytes),
+        note_id=NOTE_ID,
+        desired_paths=[IPHONE_PATH_1],
+    )
+
+    # photo sync leaves the mirrored body for the refresh...
+    assert db_session.get(JoplinNote, NOTE_ID).body == mirrored_body
+    # ...which then takes the new words without a WordsConflict
+    refresh_note_mirror(db_session, InMemoryJoplin(), joplin.get_note(NOTE_ID))
+    (words,) = db_session.exec(select(MyDiaryWords)).all()
+    assert words.txt == "some words"
+
+
+def test_first_sight_stores_no_body(db_session: Session, image_bytes: bytes):
+    joplin = FakeJoplin(make_note_body())
+    sync_note_images(
+        session=db_session,
+        mydiary_joplin=joplin,
+        mydiary_nextcloud=FakeNextcloud(image_bytes),
+        note_id=NOTE_ID,
+        desired_paths=[IPHONE_PATH_1],
+    )
+    db_note = db_session.get(JoplinNote, NOTE_ID)
+    assert (db_note.body, db_note.body_hash) == (None, None)
+    assert db_note.has_images is True
+    assert len(get_links(db_session)) == 1

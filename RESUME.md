@@ -13,7 +13,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 ## Steps
 
 - [x] 1. Joplin port and `InMemoryJoplin`
-- [ ] 2. Diary Note lookup and Note Mirror refresh
+- [x] 2. Diary Note lookup and Note Mirror refresh
 - [ ] 3. `DiaryNote.edit()`
 - [ ] 4. Map sync on `edit()`
 - [ ] 5. Photo sync on `edit()`
@@ -23,7 +23,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 
 ## Next action
 
-Set issue 02's `Status:` to `claimed` and build it (Diary Note lookup and Note Mirror refresh). Settle the note-listing gap below first.
+Set issue 03's `Status:` to `claimed` and build `DiaryNote.edit()`. Before starting, decide where photo sync's "resource still used by another note" guard lives (gap (b) below).
 
 ## Notes
 
@@ -31,7 +31,12 @@ Set issue 02's `Status:` to `claimed` and build it (Diary Note lookup and Note M
 - Never commit `.scratch/` or `docker-compose.local.yaml` (both in `.git/info/exclude`).
 - Baseline before step 1: 351 passed, 12 deselected (`external_api`) in the container.
 - Step 1 deviation: `MyDiaryJoplin` doesn't implement the port directly. Four port names (`get_note_id_by_date`, `update_note_body`, `create_resource`, `delete_resource`) collide with client methods whose return values (the sentinel, a `requests.Response`) legacy callers still read, so `HttpJoplin` in `mydiary/joplin_port.py` wraps the client. Fold it into the client in step 7, once nothing calls the legacy forms.
-- Spec gaps found in step 1, not yet built: (a) the port has no note listing, which the hourly sync (`yield_all_mydiary_notes`) needs when it moves in step 2; (b) the port's `delete_resource` is a plain delete, but photo sync today deletes with `ignore_id=note.id` so a resource another note still references is kept. Decide where that guard lives by step 3/5.
+- Spec gaps found in step 1: (a) note listing, settled in step 2 as `JoplinPort.yield_year_notes(year)`, empty for a missing year folder; (b) still open: the port's `delete_resource` is a plain delete, but photo sync today deletes with `ignore_id=note.id` so a resource another note still references is kept. Decide where that guard lives by step 3/5.
+- Step 2: routes get the port from `get_joplin_port` (built by `open_joplin_port()` in api.py, which the hourly sync also uses). Route tests override `get_joplin_port` with an `InMemoryJoplin`; background-sync tests monkeypatch `api_module.open_joplin_port`. `get_joplin_client` is still there for the routes that haven't moved.
+- Step 2: `WordsConflict` maps to 409 through an app-wide exception handler, so any route that refreshes the mirror returns 409 on one.
+- Between steps 2 and 6, refresh (`update_joplin_note`) still merges Images with the append-only `update()`, and `MyDiaryDay.images` comes from the link rows. The mirror now adds links for 257 older notes that had none (see issue 02's Answer). On such a note that also has legacy refs, refresh could hit "could not update text" until step 6 takes Images out of refresh. Notes that already had links were exposed to this before.
+- Step 2: photo sync no longer writes `JoplinNote.body` (and merges a first-seen note with no body). Any writer that puts a body in the mirror without also updating `MyDiaryWords` from it breaks the Words check for that day for good. Only the mirror refresh writes the body now; keep it that way in steps 3-6.
+- Step 2 made `MyDiaryDay.joplin_note_id = None` mean both "not looked up" and "no note"; callers look it up again when it's `None`, which costs one extra lookup at most.
 - The port only has `get_note_id_by_date`; `get_note_id_by_title` has no caller outside the client.
 - `MyDiaryJoplin.get_note` and `yield_notes_by_subfolder_id` now call `raise_for_status()`, so a missing note raises `HTTPError` instead of `KeyError('id')` / `KeyError('items')`.
 - The port's `get_note_id_by_date` looks only in the year folder. The client's own lookup falls back to the notebook root when the folder is missing; `HttpJoplin` doesn't, and a contract test pins that.

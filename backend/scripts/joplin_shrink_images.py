@@ -40,7 +40,7 @@ def main(args):
         day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
 
         existing_id = day.get_joplin_note_id()
-        if existing_id == "does_not_exist":
+        if existing_id is None:
             raise RuntimeError(
                 f"Joplin note does not already exist for date {dt.to_date_string()}!"
             )

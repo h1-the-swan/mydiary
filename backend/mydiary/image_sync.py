@@ -53,7 +53,11 @@ def sync_note_images(
     note = mydiary_joplin.get_note(note_id)
     db_note = session.get(JoplinNote, note_id)
     if db_note is None:
+        # a mirror row for the links to hang on, but with no body: the Note
+        # Mirror refresh fills it in, and sees it as a first sight
         db_note = session.merge(note)
+        db_note.body = None
+        db_note.body_hash = None
     md_note = MarkdownDoc(note.body, parent=note)
     sec_images = md_note.get_section_by_title("images")
     current_ids = sec_images.get_resource_ids()
@@ -175,7 +179,10 @@ def sync_note_images(
                 note_title=note.title,
             )
         )
-    db_note.body = md_note.txt
+    # The mirrored body is left for the Note Mirror refresh, which the PUT
+    # above makes due (Joplin's updated_time moved on). Copying the body here
+    # without its words would trip the refresh's Words check on that day for
+    # good, whenever the words were edited in Joplin since the last refresh.
     db_note.has_images = len(final_refs) > 0
     session.add(db_note)
     session.commit()

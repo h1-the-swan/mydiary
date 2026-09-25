@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """The narrow port the app uses to talk to Joplin, and its HTTP adapter.
 
-`JoplinPort` covers only what talks to Joplin: finding, reading, creating and
-updating notes, creating and deleting resources, reading tags, and the year
+`JoplinPort` covers only what talks to Joplin: finding, listing, reading,
+creating and updating notes, creating and deleting resources, reading tags, and the year
 subfolders notes are filed in. `HttpJoplin` implements it over the Joplin data
 API. Tests use `InMemoryJoplin` (tests/in_memory_joplin.py), which implements
 the same port without any HTTP.
@@ -12,7 +12,8 @@ returns stops at this boundary.
 """
 
 from contextlib import contextmanager
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Dict, Iterator, List, Optional, Protocol, runtime_checkable
 
 import requests
@@ -25,10 +26,24 @@ class JoplinError(Exception):
     """A Joplin request failed, or named a note or resource Joplin doesn't have."""
 
 
+@dataclass(frozen=True)
+class NoteListing:
+    """A note as a folder listing gives it: enough to tell whether it changed."""
+
+    id: str
+    title: str
+    updated_time: datetime  # naive local time, like JoplinNote's
+
+
 @runtime_checkable
 class JoplinPort(Protocol):
     def get_note_id_by_date(self, dt: date) -> Optional[str]:
         """The id of the Diary Note titled `YYYY-MM-DD` in the year's subfolder."""
+        ...
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        """Every note in a year's subfolder, without bodies. Nothing if the
+        folder is missing."""
         ...
 
     def get_note(self, note_id: str) -> JoplinNote:
@@ -102,6 +117,20 @@ class HttpJoplin:
         if note_id == "does_not_exist":
             return None
         return note_id
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        with _joplin_errors(f"listing the {year} notes"):
+            folder_id = self.client.get_subfolder_id(str(year))
+            if folder_id is None:
+                return
+            for item in self.client.yield_notes_by_subfolder_id(
+                folder_id, fields=["id", "title", "updated_time"]
+            ):
+                yield NoteListing(
+                    id=item["id"],
+                    title=item["title"],
+                    updated_time=datetime.fromtimestamp(item["updated_time"] / 1000),
+                )
 
     def get_note(self, note_id: str) -> JoplinNote:
         with _joplin_errors(f"getting note {note_id}"):

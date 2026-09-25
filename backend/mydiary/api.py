@@ -20,11 +20,11 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi import BackgroundTasks, Body
 from dataclasses import asdict
 import pydantic
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import desc, all_, String, cast, or_
@@ -33,6 +33,14 @@ from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
 
 from mydiary.joplin_connector import MyDiaryJoplin
+from .diary_note import (
+    DiaryNote,
+    WordsConflict,
+    refresh_note_mirror,
+    sync_changed_notes,
+    sync_one_day,
+)
+from .joplin_port import HttpJoplin, JoplinPort
 from .db import Session, engine, select, func, get_db_status
 from .hashtags import slugify_tag, tag_key
 from .tags import (
@@ -419,6 +427,17 @@ def get_joplin_client():
         yield j
 
 
+@contextmanager
+def open_joplin_port():
+    with MyDiaryJoplin(init_config=False) as j:
+        yield HttpJoplin(j)
+
+
+def get_joplin_port():
+    with open_joplin_port() as joplin:
+        yield joplin
+
+
 # handler = logging.StreamHandler()
 # handler.setFormatter(
 #     logging.Formatter(
@@ -481,8 +500,8 @@ def run_full_note_sync(force: bool = False):
     note_sync_status.started_at = pendulum.now("UTC")
     note_sync_status.error = None
     try:
-        with Session(engine) as session, MyDiaryJoplin(init_config=False) as j:
-            summary = j.sync_notes_from_api(session, force=force)
+        with Session(engine) as session, open_joplin_port() as joplin:
+            summary = sync_changed_notes(session, joplin, force=force)
         note_sync_status.last = TagSyncResult(**asdict(summary))
         logger.info(f"joplin note sync: {summary}")
         return summary
@@ -567,6 +586,11 @@ app = FastAPI(
 )
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
+
+
+@app.exception_handler(WordsConflict)
+def words_conflict_handler(request: Request, e: WordsConflict):
+    return JSONResponse(status_code=409, content={"detail": str(e)})
 
 
 @app.get("/testhealthcheck", operation_id="testHealthCheck2")
@@ -756,7 +780,7 @@ def sync_tags(
     *,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
     dt: Optional[str] = Query(None, description="One day; omit for every note"),
     tz: str = "local",
     force: bool = Query(False, description="Re-fetch notes that look unchanged"),
@@ -773,7 +797,7 @@ def sync_tags(
         note_sync_status.running = True
         background_tasks.add_task(run_full_note_sync, force=force)
         return TagSyncResult(started=True, run_id=note_sync_status.run_id)
-    summary = mydiary_joplin.sync_one_day(session, parse_dt(dt, tz))
+    summary = sync_one_day(session, joplin, parse_dt(dt, tz))
     return TagSyncResult(**asdict(summary))
 
 
@@ -1047,7 +1071,7 @@ async def spotify_save_recent_tracks_to_database():
 
 @app.get("/joplin/get_note_id/{dt}", operation_id="joplinGetNoteId", response_model=str)
 def joplin_get_note_id(
-    dt: str, mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client)
+    dt: str, joplin: JoplinPort = Depends(get_joplin_port)
 ) -> str:
     if dt == "today":
         dt = pendulum.today()
@@ -1055,12 +1079,9 @@ def joplin_get_note_id(
         dt = pendulum.yesterday()
     else:
         dt = pendulum.parse(dt)
-    existing_id = mydiary_joplin.get_note_id_by_date(dt)
-    # if existing_id == "does_not_exist":
-    #     raise RuntimeError(
-    #         f"Joplin note does not already exist for date {dt.to_date_string()}!"
-    #     )
-    return Response(existing_id)
+    diary_note = DiaryNote.find(joplin, dt)
+    # the frontend still reads this sentinel for a day with no note
+    return Response(diary_note.id if diary_note is not None else "does_not_exist")
 
 
 @app.post(
@@ -1134,15 +1155,15 @@ def joplin_get_note(
     note_id: str,
     remove_image_refs: bool = False,
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
-    note = mydiary_joplin.get_note(note_id)
+    note = joplin.get_note(note_id)
     # A read that also writes, on purpose: this is the moment the app holds the
-    # note exactly as Joplin has it, so the database mirror (body, words, tags)
-    # is refreshed here instead of waiting for the hourly sync. Idempotent, and
-    # never allowed to break the view.
+    # note exactly as Joplin has it, so the Note Mirror (body, words, photos,
+    # tags) is refreshed here instead of waiting for the hourly sync.
+    # Idempotent, and never allowed to break the view.
     try:
-        mydiary_joplin.sync_note_api_to_db_obj(note, session=session)
+        refresh_note_mirror(session, joplin, note)
     except Exception:
         logger.exception(f"could not mirror note {note_id} to the database")
         session.rollback()

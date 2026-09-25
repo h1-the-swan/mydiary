@@ -173,15 +173,19 @@ class MyDiaryDay:
         )
 
     def get_joplin_note_id(self) -> Union[str, None]:
+        """Look up the day's Diary Note. None if Joplin has none."""
+        from .diary_note import DiaryNote
         from .joplin_connector import MyDiaryJoplin
+        from .joplin_port import HttpJoplin
 
         logger.debug("starting get_joplin_note_id")
 
         if isinstance(self.joplin_connector, MyDiaryJoplin):
-            self.joplin_note_id = self.joplin_connector.get_note_id_by_date(self.dt)
+            diary_note = DiaryNote.find(HttpJoplin(self.joplin_connector), self.dt)
         else:
             with MyDiaryJoplin() as mj:
-                self.joplin_note_id = mj.get_note_id_by_date(self.dt)
+                diary_note = DiaryNote.find(HttpJoplin(mj), self.dt)
+        self.joplin_note_id = diary_note.id if diary_note is not None else None
         logger.debug(f"returning note_id: {self.joplin_note_id}")
         return self.joplin_note_id
 
@@ -294,7 +298,7 @@ class MyDiaryDay:
             raise RuntimeError("need to supply a Joplin connector instance")
         if self.joplin_note_id is None:
             self.get_joplin_note_id()
-        if self.joplin_note_id == "does_not_exist":
+        if self.joplin_note_id is None:
             raise RuntimeError(
                 f"Joplin note does not already exist for date {self.dt.to_date_string()}!"
             )
@@ -336,7 +340,7 @@ class MyDiaryDay:
             raise RuntimeError("need to supply a Joplin connector instance")
         if self.joplin_note_id is None:
             self.get_joplin_note_id()
-        if self.joplin_note_id != "does_not_exist":
+        if self.joplin_note_id is not None:
             raise RuntimeError(
                 f"Joplin note already exists for date {self.dt.to_date_string()} (note id: {self.joplin_note_id})!"
             )
@@ -374,18 +378,18 @@ class MyDiaryDay:
         if self.joplin_note_id is None:
             self.get_joplin_note_id()
 
-        if self.joplin_note_id == "does_not_exist":
+        if self.joplin_note_id is None:
             self.init_joplin_note(session=session)
-        elif self.joplin_note_id:
-            self.update_joplin_note(session=session)
         else:
-            # this should not happen
-            raise RuntimeError(
-                f"error when checking if Joplin note already exists (date: {self.dt}"
-            )
+            self.update_joplin_note(session=session)
 
     def save_note_and_words_to_db(self, session: Session):
-        # the note as Joplin now has it, its words, and its tags
-        self.joplin_connector.sync_note_api_to_db_obj(
-            self.joplin_note_id, session=session
-        )
+        # the Note Mirror, refreshed from the note as Joplin now has it
+        from .diary_note import DiaryNote
+        from .joplin_port import HttpJoplin
+
+        DiaryNote(
+            joplin=HttpJoplin(self.joplin_connector),
+            id=self.joplin_note_id,
+            date=self.dt.date(),
+        ).refresh_mirror(session)

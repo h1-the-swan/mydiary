@@ -9,6 +9,7 @@ from sqlmodel.pool import StaticPool
 
 from mydiary.models import (
     Dog,
+    JoplinNote,
     MyDiaryImage,
     PerformSong,
     PocketArticle,
@@ -1238,15 +1239,22 @@ class TestIPhoneCaptureTimes:
 
 class TestTags:
     def _seed(self, session: Session):
-        from mydiary.models import JoplinNote
         from mydiary.tags import set_target_tags, sync_note_tags
-        from tests.fakes import make_note
 
         song = PerformSong(name="Wonderwall")
         dog = Dog(name="Ruffles")
         session.add(song)
         session.add(dog)
-        session.add(make_note("2026-09-13", "Walked #dog:Ruffles and went #hiking"))
+        session.add(
+            JoplinNote(
+                id="note-2026-09-13",
+                parent_id="folder",
+                title="2026-09-13",
+                body="Walked #dog:Ruffles and went #hiking",
+                created_time=datetime(2026, 9, 13, 12),
+                updated_time=datetime(2026, 9, 13, 12),
+            )
+        )
         session.commit()
         sync_note_tags(session, session.get(JoplinNote, "note-2026-09-13"))
         set_target_tags(session, "song", str(song.id), ["hiking", "rock"])
@@ -1355,14 +1363,13 @@ class TestTags:
         assert client.get("/pocket/articles", params={"tags": "internet,nothing"}).json() == []
 
     def test_sync_one_day(self, session: Session, client: TestClient):
-        from mydiary.api import get_joplin_client
-        from tests.fakes import FakeJoplin, make_note
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
 
-        fake = FakeJoplin(
-            [make_note("2026-09-13", "## Words\n\nWalked #dog:Ruffles\n")],
-            tags={"note-2026-09-13": ["Hiking"]},
-        )
-        app.dependency_overrides[get_joplin_client] = lambda: fake
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2026-09-13", "## Words\n\nWalked #dog:Ruffles\n")
+        joplin.tag_note(note_id, "Hiking")
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
         try:
             r = client.post("/tags/sync", params={"dt": "2026-09-13"})
             assert r.status_code == 200
@@ -1372,38 +1379,62 @@ class TestTags:
                 ("dog:ruffles", "note"),
             ]
             # the mirror was refreshed too
-            assert session.get(type(fake.notes[0]), fake.notes[0].id).has_words is True
+            assert session.get(JoplinNote, note_id).has_words is True
             assert client.post("/tags/sync", params={"dt": "2026-01-01"}).json()["notes_checked"] == 0
         finally:
-            app.dependency_overrides.pop(get_joplin_client, None)
+            app.dependency_overrides.pop(get_joplin_port, None)
+
+    def test_sync_one_day_words_conflict_is_409(self, session: Session, client: TestClient):
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2026-09-13", "## Words\n\nonly copy\n")
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
+        try:
+            assert client.post("/tags/sync", params={"dt": "2026-09-13"}).status_code == 200
+            joplin.edit_note(note_id, "## Words\n\n")
+            r = client.post("/tags/sync", params={"dt": "2026-09-13"})
+            assert r.status_code == 409
+            assert "2026-09-13" in r.json()["detail"]
+        finally:
+            app.dependency_overrides.pop(get_joplin_port, None)
 
     def test_sync_all_runs_in_the_background(self, client: TestClient, monkeypatch):
         import mydiary.api as api_module
-        from mydiary.api import get_joplin_client
-        from tests.fakes import FakeJoplin
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
 
         calls = []
         monkeypatch.setattr(api_module, "run_full_note_sync", lambda force=False: calls.append(force))
-        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([])
+        app.dependency_overrides[get_joplin_port] = lambda: InMemoryJoplin()
         try:
             r = client.post("/tags/sync", params={"force": "true"})
         finally:
-            app.dependency_overrides.pop(get_joplin_client, None)
+            app.dependency_overrides.pop(get_joplin_port, None)
         assert r.status_code == 200
         assert r.json()["started"] is True
         assert r.json()["run_id"] == 1
         assert calls == [True]
 
     def test_sync_status_reports_the_run(self, session: Session, client: TestClient, monkeypatch):
-        import mydiary.api as api_module
-        from mydiary.api import get_joplin_client
-        from tests.fakes import FakeJoplin, make_note
+        from contextlib import contextmanager
 
-        fake = FakeJoplin([make_note("2026-09-13", "## Words\n\n#hiking\n")])
-        # the background runner opens its own session and client; point both at the test's
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        joplin = InMemoryJoplin()
+        joplin.add_note("2026-09-13", "## Words\n\n#hiking\n")
+
+        @contextmanager
+        def open_joplin_port():
+            yield joplin
+
+        # the background runner opens its own session and port; point both at the test's
         monkeypatch.setattr(api_module, "engine", session.get_bind())
-        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: fake)
-        app.dependency_overrides[get_joplin_client] = lambda: fake
+        monkeypatch.setattr(api_module, "open_joplin_port", open_joplin_port)
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
         try:
             before = client.get("/tags/sync/status").json()
             assert before == {"running": False, "run_id": 0, "started_at": None, "finished_at": None, "last": None, "error": None}
@@ -1419,20 +1450,23 @@ class TestTags:
             assert (after["last"]["notes_checked"], after["last"]["notes_synced"], after["last"]["tags_added"]) == (1, 1, 1)
             assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["hiking"]
         finally:
-            app.dependency_overrides.pop(get_joplin_client, None)
+            app.dependency_overrides.pop(get_joplin_port, None)
 
     def test_sync_status_records_a_failure(self, session: Session, client: TestClient, monkeypatch):
-        import mydiary.api as api_module
-        from mydiary.api import get_joplin_client
-        from tests.fakes import FakeJoplin
+        from contextlib import contextmanager
 
-        class Broken(FakeJoplin):
-            def __enter__(self):
-                raise RuntimeError("failed to connect to Joplin server")
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        @contextmanager
+        def open_joplin_port():
+            raise RuntimeError("failed to connect to Joplin server")
+            yield
 
         monkeypatch.setattr(api_module, "engine", session.get_bind())
-        monkeypatch.setattr(api_module, "MyDiaryJoplin", lambda **kwargs: Broken([]))
-        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([])
+        monkeypatch.setattr(api_module, "open_joplin_port", open_joplin_port)
+        app.dependency_overrides[get_joplin_port] = lambda: InMemoryJoplin()
         try:
             client.post("/tags/sync")
             status = client.get("/tags/sync/status").json()
@@ -1440,21 +1474,38 @@ class TestTags:
             assert "Joplin" in status["error"]
             assert status["last"] is None
         finally:
-            app.dependency_overrides.pop(get_joplin_client, None)
+            app.dependency_overrides.pop(get_joplin_port, None)
 
     def test_get_note_refreshes_mirror_and_tags(self, session: Session, client: TestClient):
-        from mydiary.api import get_joplin_client
-        from tests.fakes import FakeJoplin, make_note
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
 
-        note = make_note("2026-09-13", "## Words\n\n#hiking\n\n## Images\n\n![img](:/abc123)\n")
-        app.dependency_overrides[get_joplin_client] = lambda: FakeJoplin([note])
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note(
+            "2026-09-13", "## Words\n\n#hiking\n\n## Images\n\n![img](:/abc123)\n"
+        )
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
         try:
-            r = client.get(f"/joplin/get_note/{note.id}", params={"remove_image_refs": "true"})
+            r = client.get(f"/joplin/get_note/{note_id}", params={"remove_image_refs": "true"})
             assert r.status_code == 200
             assert "Joplin resource_id: abc123" in r.json()["body"]
             assert [t["key"] for t in client.get("/tagged/day/2026-09-13").json()] == ["hiking"]
-            db_note = session.get(type(note), note.id)
+            db_note = session.get(JoplinNote, note_id)
             assert db_note.has_images is True
             assert "![img]" in db_note.body  # the mirror keeps the real body
         finally:
-            app.dependency_overrides.pop(get_joplin_client, None)
+            app.dependency_overrides.pop(get_joplin_port, None)
+
+    def test_get_note_id(self, client: TestClient):
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2026-09-13", "body")
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
+        try:
+            assert client.get("/joplin/get_note_id/2026-09-13").text == note_id
+            # the frontend still reads the sentinel for a day with no note
+            assert client.get("/joplin/get_note_id/2026-09-14").text == "does_not_exist"
+        finally:
+            app.dependency_overrides.pop(get_joplin_port, None)
