@@ -72,7 +72,7 @@ export interface HTTPValidationError {
  * One diary photo, identified the way the iPhone Photos library sees it.
  *
  * Consumed by the "Diary -> Photos Album" Shortcut, not by the frontend.
- * See notes/iphone-photos-album-plan.md.
+ * See docs/image-workflow.md, "iPhone Photos album".
  */
 export interface IPhoneCaptureRead {
   capture_local: string;
@@ -574,7 +574,6 @@ limit?: number;
 
 export type JoplinInitNoteParams = {
 tz?: string;
-body?: string | null;
 };
 
 export type DayInitMarkdownParams = {
@@ -1040,11 +1039,12 @@ export const joplinGetNoteId = (
  */
 export const joplinInitNote = (
     dt: string,
+    stringNull?: string | null,
     params?: JoplinInitNoteParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<string>> => {
     return axios.post(
       `/joplin/init_note/${dt}`,
-      undefined,{
+      stringNull,{
     ...options,
         params: {...params, ...options?.params},}
     );

@@ -223,19 +223,27 @@ def _sync_day_map_to_note(
             .order_by(OwnTracksDayMap.panel)
         )
     )
+
+    note_id = mydiary_joplin.get_note_id_by_date(dt)
+    if note_id is None or note_id == "does_not_exist":
+        raise LookupError(f"no Joplin note for {diary_date}")
+
+    # A resource can exist and still not be in the note: e.g. the note was open
+    # in the Joplin app when this ran before, and the app's own autosave
+    # clobbered the write with its stale in-memory copy. So "up to date" also
+    # requires the note body to still reference every expected resource, not
+    # just that the resources themselves are intact.
+    current_body = mydiary_joplin.get_note(note_id).body
     if (
         not force
         and [row.content_hash for row in existing] == [p.content_hash for p in panels]
         and all(
             mydiary_joplin.resource_exists(row.joplin_resource_id) for row in existing
         )
+        and all(f":/{row.joplin_resource_id}" in current_body for row in existing)
     ):
         logger.info(f"owntracks map for {diary_date} is already up to date")
         return "no update", len(panels)
-
-    note_id = mydiary_joplin.get_note_id_by_date(dt)
-    if note_id is None or note_id == "does_not_exist":
-        raise LookupError(f"no Joplin note for {diary_date}")
 
     # an unchanged panel keeps its resource, so a day that gains areas re-uploads
     # only the new panels and leaves its overview alone

@@ -224,6 +224,27 @@ def test_rerunning_an_unchanged_day_is_a_noop(db_with_locations, dt):
     assert len(joplin.resources) == 1  # and no orphan created
 
 
+def test_reruns_when_the_note_lost_the_map_reference(db_with_locations, dt):
+    # e.g. the note was open in the Joplin app and its own autosave clobbered
+    # our write with a stale copy: the resource still exists and the track is
+    # unchanged, but the note body no longer references it, so this must not
+    # be treated as "up to date"
+    joplin = FakeJoplin()
+    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+    assert joplin.update_count == 1
+
+    joplin.note.body = NOTE_BODY  # the app clobbered the note back to this
+
+    result, _ = sync_day_map_to_note(
+        dt, session=db_with_locations, mydiary_joplin=joplin
+    )
+    assert result == "updated"
+    assert joplin.update_count == 2
+    md = MarkdownDoc(joplin.note.body)
+    section = md.get_section_by_title("Location")
+    assert section.get_resource_ids() == list(joplin.resources)
+
+
 def test_force_replaces_the_resource_and_deletes_the_old_one(
     db_with_locations, dt, monkeypatch
 ):

@@ -1,15 +1,15 @@
 <template>
   <v-card v-if="performSong" border>
-    <div class="d-flex flex-column flex-sm-row ga-4 pa-4">
+    <div class="d-flex flex-column flex-sm-row ga-6 pa-4">
       <v-img
         v-if="imageUrl"
         :src="imageUrl"
-        class="album-art rounded-lg flex-grow-0"
+        class="album-art rounded-lg flex-grow-0 flex-shrink-0"
         cover
       ></v-img>
-      <div class="flex-grow-1">
-        <h2 class="text-h5 font-weight-medium">{{ performSong.name }}</h2>
-        <p class="text-subtitle-1 text-medium-emphasis mb-3">
+      <div class="flex-grow-1 align-self-center">
+        <h2 class="text-h4 font-weight-medium">{{ performSong.name }}</h2>
+        <p class="text-h6 font-weight-regular text-medium-emphasis mb-4">
           {{ performSong.artist_name }}
         </p>
 
@@ -65,9 +65,18 @@ const props = defineProps<{
 </script>
 
 <style scoped>
+/* The art is the most recognisable thing about a song, so it leads the card.
+   Square, and sized to stay prominent without pushing the metadata off-screen. */
 .album-art {
   width: 100%;
-  max-width: 220px;
   aspect-ratio: 1;
+}
+
+@media (min-width: 600px) {
+  .album-art {
+    width: 42%;
+    min-width: 260px;
+    max-width: 440px;
+  }
 }
 </style>

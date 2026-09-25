@@ -1100,7 +1100,7 @@ class TestImages:
 class TestIPhoneCaptureTimes:
     """GET /images/iphone_captures -- feeds the Diary -> Photos Album Shortcut.
 
-    See notes/iphone-photos-album-plan.md.
+    See docs/image-workflow.md, "iPhone Photos album".
     """
 
     TOKEN = "test-token-abc123"
