@@ -87,6 +87,36 @@ with whatever the worktree's database happens to contain. Point
 `JOPLIN_NOTEBOOK_ID` at a scratch notebook if a feature needs to exercise those
 paths.
 
+## After merging one back
+
+The worktree's stack ran on its own copy of the database and its own container
+images, so the primary stack hasn't picked up the branch's migrations or new
+packages yet. After the merge, pull main in the primary checkout and then:
+
+- **If the branch added an alembic migration:** back up the primary database,
+  then migrate it. The worktree only migrated its own copy.
+
+  ```sh
+  docker compose exec backend python scripts/backup_db.py
+  docker compose exec backend alembic upgrade head
+  ```
+
+- **If the branch changed `mydiary-vuetify/package.json`:** rebuild the
+  frontend container, since its `node_modules` volume doesn't refresh on its
+  own (see [dev-commands.md](dev-commands.md#frontend-dependencies)).
+
+  ```sh
+  docker compose up -d --build -V mydiary-vuetify
+  ```
+
+To see whether either applies, run this right after the pull. `HEAD@{1}` is
+main before the pull. `ORIG_HEAD` won't work here, because a fast-forward pull
+doesn't set it.
+
+```sh
+git diff --stat 'HEAD@{1}..HEAD' -- backend/alembic/versions mydiary-vuetify/package.json
+```
+
 ## Tearing one down
 
 ```sh

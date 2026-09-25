@@ -12,11 +12,12 @@ Full service map, backend file table, and frontend/UI conventions: [docs/archite
 
 ## Development Commands
 
-`docker compose up` runs everything; the app is at http://localhost:8086. Command gotchas (container-only lint/build, API codegen): [docs/dev-commands.md](docs/dev-commands.md). To see a UI change rendered, use the Playwright MCP tools; how to use them and the required Firefox setup: [docs/agents/playwright-mcp.md](docs/agents/playwright-mcp.md).
+`docker compose up` runs everything; the app is at http://localhost:8086. Command gotchas (container-only lint/build, frontend dependencies, API codegen): [docs/dev-commands.md](docs/dev-commands.md). To see a UI change rendered, use the Playwright MCP tools; how to use them and the required Firefox setup: [docs/agents/playwright-mcp.md](docs/agents/playwright-mcp.md).
 
-Three gotchas worth keeping in view every time they apply:
+Four gotchas worth keeping in view every time they apply:
 
 - Run `npm run lint` / `npm run build` **inside the docker container**, not on the host — the host `node_modules` is incomplete and fails regardless of your changes.
+- Whenever `mydiary-vuetify/package.json` changes, including through a pull or merge, run `docker compose up -d --build -V mydiary-vuetify`. The container's `node_modules` is an anonymous volume that doesn't refresh on its own, so pages importing a new package fail to load until it's rebuilt. After merging a worktree branch, see also [docs/worktrees.md](docs/worktrees.md#after-merging-one-back).
 - After adding/changing/removing a `SQLModel` with `table=True`, run `alembic revision --autogenerate` + `alembic upgrade head` (from `backend/`).
 - After changing any route in `api.py`, regenerate the frontend client with `docker compose exec mydiary-vuetify npm run generateClientAPI`. The default OpenAPI URL only resolves on the compose network; for running it on the host, see [docs/dev-commands.md](docs/dev-commands.md#api-client-codegen).
 
