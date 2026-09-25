@@ -1,5 +1,5 @@
 from re import S
-from typing import Any, List, Dict, Tuple, Union, Optional
+from typing import TYPE_CHECKING, Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
 import json
@@ -20,8 +20,11 @@ from .models import (
     GoogleCalendarEvent,
     JoplinNote,
 )
-from .markdown_edits import MarkdownDoc
 from .db import Session, engine, select
+
+if TYPE_CHECKING:
+    from .diary_note import DiaryNote
+    from .joplin_port import JoplinPort
 
 import logging
 
@@ -172,6 +175,18 @@ class MyDiaryDay:
             **kwargs,
         )
 
+    def _joplin_port(self) -> "JoplinPort":
+        """The Joplin this day talks to: `joplin_connector` if it's already a
+        port, else the client wrapped in one."""
+        from .joplin_connector import MyDiaryJoplin
+        from .joplin_port import HttpJoplin, JoplinPort
+
+        if isinstance(self.joplin_connector, MyDiaryJoplin):
+            return HttpJoplin(self.joplin_connector)
+        if isinstance(self.joplin_connector, JoplinPort):
+            return self.joplin_connector
+        raise RuntimeError("need to supply a Joplin connector instance")
+
     def get_joplin_note_id(self) -> Union[str, None]:
         """Look up the day's Diary Note. None if Joplin has none."""
         from .diary_note import DiaryNote
@@ -180,8 +195,8 @@ class MyDiaryDay:
 
         logger.debug("starting get_joplin_note_id")
 
-        if isinstance(self.joplin_connector, MyDiaryJoplin):
-            diary_note = DiaryNote.find(HttpJoplin(self.joplin_connector), self.dt)
+        if self.joplin_connector is not None:
+            diary_note = DiaryNote.find(self._joplin_port(), self.dt)
         else:
             with MyDiaryJoplin() as mj:
                 diary_note = DiaryNote.find(HttpJoplin(mj), self.dt)
@@ -190,32 +205,35 @@ class MyDiaryDay:
         return self.joplin_note_id
 
     def init_markdown(self) -> str:
-        # md_template = "# {dt}\n\n## Words\n\n## Images\n\n## Google Calendar events\n\n{google_calendar_events}\n\n## Pocket articles\n\n{pocket_articles}\n\n## Spotify tracks\n\n{spotify_tracks}\n\n"
-        google_calendar_events = self.google_calendar_events_markdown()
-        spotify_tracks = self.spotify_tracks_markdown(timezone=self.dt.timezone)
-        dt_string = self.dt.to_formatted_date_string()
-        md = f"# {dt_string}\n\n"
-        md += f"timezone: {self.dt.timezone_name}\n\n"
-        md += f"## Words\n\n"
-        if self.words and self.words.txt:
-            md += f"{self.words.txt}\n\n"
-        md += f"## Images\n\n"
-        if self.images:
-            md += f"{self.images_markdown()}\n\n"
+        """The body of a new Diary Note for this day, laid out by the section
+        registry."""
+        from .diary_note import new_note_body
+        from .pocket_connector import get_pocket_section_cutoff
+
+        preamble = f"# {self.dt.to_formatted_date_string()}\n\n"
+        preamble += f"timezone: {self.dt.timezone_name}\n\n"
+        contents = {
+            "Words": self.words.txt if self.words and self.words.txt else "",
+            "Images": self.images_markdown() if self.images else "",
+            **self.refreshed_sections(),
+        }
         # only days with location data get a Location section, the same way the
         # Pocket section is omitted once there is nothing to put in it
         if self.owntracks_locations:
-            md += f"## Location\n\n{self.owntracks_markdown()}\n\n"
-        md += f"## Google Calendar events\n\n{google_calendar_events}\n\n"
+            contents["Location"] = self.owntracks_markdown()
         # Pocket is defunct: entries after the latest Pocket item in the
         # database no longer get a Pocket articles section
-        from .pocket_connector import get_pocket_section_cutoff
-
         if self.dt.start_of("day") <= get_pocket_section_cutoff():
-            pocket_articles = self.pocket_articles_markdown()
-            md += f"## Pocket articles\n\n{pocket_articles}\n\n"
-        md += f"## Spotify tracks\n\n{spotify_tracks}\n\n"
-        return md
+            contents["Pocket articles"] = self.pocket_articles_markdown()
+        return new_note_body(preamble, contents)
+
+    def refreshed_sections(self) -> Dict[str, str]:
+        """The App-owned Sections a refresh rewrites, as the day's data now
+        has them."""
+        return {
+            "Google Calendar events": self.google_calendar_events_markdown(),
+            "Spotify tracks": self.spotify_tracks_markdown(timezone=self.dt.timezone),
+        }
 
     def images_markdown(self) -> str:
         resource_ids_md = []
@@ -289,107 +307,65 @@ class MyDiaryDay:
                 lines[-1] += "\n"
         return "\n".join(lines)
 
-    def update_joplin_note(self, session: Session, joplin_connector=None):
-        from .joplin_connector import MyDiaryJoplin
-
-        if joplin_connector is not None:
-            self.joplin_connector = joplin_connector
-        if not isinstance(self.joplin_connector, MyDiaryJoplin):
-            raise RuntimeError("need to supply a Joplin connector instance")
-        if self.joplin_note_id is None:
-            self.get_joplin_note_id()
-        if self.joplin_note_id is None:
-            raise RuntimeError(
-                f"Joplin note does not already exist for date {self.dt.to_date_string()}!"
-            )
-
-        note = self.joplin_connector.get_note(self.joplin_note_id)
-        md_note = MarkdownDoc(note.body, parent=note)
-        md_new = MarkdownDoc(self.init_markdown())
-
-        need_to_update = False
-        for sec in md_note.sections:
-            try:
-                update_txt = md_new.get_section_by_title(sec.title).txt
-            except KeyError:
-                logger.debug(f"section {sec.title} not found in new text. skipping")
-                continue
-            result = sec.update(update_txt)
-            if result == "updated":
-                need_to_update = True
-            logger.debug(f"section {sec.title}: {result}")
-
-        if need_to_update is True:
-            logger.info(f"updating note: {note.title}")
-            r_put_note = self.joplin_connector.update_note_body(note.id, md_note.txt)
-            logger.info(f"done. status code: {r_put_note.status_code}")
-            self.save_note_and_words_to_db(session=session)
-
-        else:
-            logger.info("no updates made")
-
-    def init_joplin_note(
-        self, session: Session, joplin_connector=None, body: str = None
-    ):
-        from .joplin_connector import MyDiaryJoplin
-
-        logger.debug("starting init_joplin_note")
-        if joplin_connector is not None:
-            self.joplin_connector = joplin_connector
-        if not isinstance(self.joplin_connector, MyDiaryJoplin):
-            raise RuntimeError("need to supply a Joplin connector instance")
-        if self.joplin_note_id is None:
-            self.get_joplin_note_id()
-        if self.joplin_note_id is not None:
-            raise RuntimeError(
-                f"Joplin note already exists for date {self.dt.to_date_string()} (note id: {self.joplin_note_id})!"
-            )
-
-        title = self.dt.strftime("%Y-%m-%d")
-        logger.debug("initializing markdown")
-        if body is None:
-            body = self.init_markdown()
-        subfolder_title = str(self.dt.year)
-        subfolder_id = self.joplin_connector.get_subfolder_id(
-            subfolder_title, create_if_not_exists=True
-        )
-        logger.info(f"creating note: {title}")
-        r_post_note = self.joplin_connector.post_note(
-            title=title, body=body, parent_id=subfolder_id
-        )
-        logger.info(f"done. status code: {r_post_note.status_code}")
-
-        # fill in the note id
-        self.get_joplin_note_id()
-
-        self.save_note_and_words_to_db(session=session)
-
-    def init_or_update_joplin_note(
-        self, joplin_connector=None, session: Optional[Session] = None
-    ):
-        from .joplin_connector import MyDiaryJoplin
+    def update_joplin_note(self, session: Optional[Session] = None, joplin_connector=None):
+        """Refresh the day's Diary Note: replace its Google Calendar events
+        and Spotify tracks with the day's data, adding either section if the
+        note lacks it. Nothing else in the note is written (ADR-0001)."""
+        from .diary_note import DiaryNote
 
         if joplin_connector is not None:
             self.joplin_connector = joplin_connector
         if session is None:
             session = Session(engine)
-        if not isinstance(self.joplin_connector, MyDiaryJoplin):
-            raise RuntimeError("need to supply a Joplin connector instance")
-        if self.joplin_note_id is None:
-            self.get_joplin_note_id()
+        diary_note = DiaryNote.find(self._joplin_port(), self.dt)
+        if diary_note is None:
+            self.joplin_note_id = None
+            raise RuntimeError(
+                f"Joplin note does not already exist for date {self.dt.to_date_string()}!"
+            )
+        self._refresh(session, diary_note)
 
-        if self.joplin_note_id is None:
+    def _refresh(self, session: Session, diary_note: "DiaryNote") -> None:
+        self.joplin_note_id = diary_note.id
+        with diary_note.edit(session) as edit:
+            for heading, content in self.refreshed_sections().items():
+                edit.set_section(heading, content)
+        if edit.wrote:
+            logger.info(f"updated note: {self.dt.to_date_string()}")
+        else:
+            logger.info("no updates made")
+
+    def init_joplin_note(
+        self, session: Optional[Session] = None, joplin_connector=None, body: str = None
+    ):
+        """Create the day's Diary Note from `body`, or from the template if
+        none is given, and mirror it."""
+        from .diary_note import DiaryNote
+
+        logger.debug("starting init_joplin_note")
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if session is None:
+            session = Session(engine)
+        joplin = self._joplin_port()
+        if body is None:
+            logger.debug("initializing markdown")
+            body = self.init_markdown()
+        logger.info(f"creating note: {self.dt.to_date_string()}")
+        diary_note = DiaryNote.create(session, joplin, self.dt, body)
+        self.joplin_note_id = diary_note.id
+
+    def init_or_update_joplin_note(
+        self, joplin_connector=None, session: Optional[Session] = None
+    ):
+        from .diary_note import DiaryNote
+
+        if joplin_connector is not None:
+            self.joplin_connector = joplin_connector
+        if session is None:
+            session = Session(engine)
+        diary_note = DiaryNote.find(self._joplin_port(), self.dt)
+        if diary_note is None:
             self.init_joplin_note(session=session)
         else:
-            self.update_joplin_note(session=session)
-
-    def save_note_and_words_to_db(self, session: Session):
-        # the Note Mirror, refreshed from the note as Joplin now has it
-        from .diary_note import DiaryNote
-        from .joplin_port import HttpJoplin
-
-        DiaryNote(
-            joplin=HttpJoplin(self.joplin_connector),
-            id=self.joplin_note_id,
-            date=self.dt.date(),
-        ).refresh_mirror(session)
+            self._refresh(session, diary_note)

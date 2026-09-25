@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """The Diary Note: one Joplin note per Diary Day, and its Note Mirror.
 
-This module finds a Diary Note by date, owns every write to it
-(`DiaryNote.edit()`, which only writes App-owned Sections; see ADR-0001), and
+This module holds the section registry, finds and creates Diary Notes by
+date, owns every later write to one (`DiaryNote.edit()`, which only writes
+App-owned Sections; see ADR-0001), and
 refreshes the Note Mirror, the database's copy of the note and everything
 derived from it (words, which Photos it shows, tags). Joplin holds the
 authoritative note; the mirror is always refreshed from what Joplin returned,
@@ -22,6 +23,7 @@ from sqlalchemy import update
 from sqlmodel import Session, select
 
 from .core import get_hash_from_txt
+from .joplin_connector import title_from_date
 from .joplin_port import JoplinPort
 from .markdown_edits import MarkdownDoc, MarkdownSection
 from .models import JoplinNote, JoplinNoteImageLink, MyDiaryImage, MyDiaryWords
@@ -69,6 +71,10 @@ class SectionNotAppOwned(ValueError):
     """Only App-owned Sections may be written once a note exists (ADR-0001)."""
 
 
+class NoteExists(RuntimeError):
+    """A Diary Note was to be created for a date that already has one."""
+
+
 class Owner(Enum):
     WRITTEN = "written"
     APP = "app"
@@ -83,7 +89,8 @@ class SectionSpec:
 
 # Every section the app knows, in note order, and who owns it (ADR-0001). The
 # preamble above the first `##` heading, and any section not listed here, is
-# Written.
+# Written. A new note's template (`new_note_body`) and a section added to an
+# older note both follow this order.
 SECTIONS: Tuple[SectionSpec, ...] = (
     SectionSpec("Words", Owner.WRITTEN),
     SectionSpec("Images", Owner.APP),
@@ -102,6 +109,24 @@ def _app_owned(heading: str) -> SectionSpec:
                 raise SectionNotAppOwned(f"{spec.heading} is {spec.owner.value}")
             return spec
     raise SectionNotAppOwned(f"{heading} is not a known section, so it is written")
+
+
+def new_note_body(preamble: str, contents: Dict[str, str]) -> str:
+    """A new Diary Note's body: the preamble, then each section in `contents`
+    in registry order, as its `## ` heading followed by its content if it has
+    any. A section not in `contents` is left out of the note."""
+    headings = {spec.heading for spec in SECTIONS}
+    unknown = [heading for heading in contents if heading not in headings]
+    if unknown:
+        raise ValueError(f"not in the section registry: {unknown}")
+    body = preamble
+    for spec in SECTIONS:
+        if spec.heading not in contents:
+            continue
+        body += f"## {spec.heading}\n\n"
+        if contents[spec.heading]:
+            body += f"{contents[spec.heading]}\n\n"
+    return body
 
 
 def _find_section(doc: MarkdownDoc, heading: str) -> Optional[MarkdownSection]:
@@ -222,6 +247,38 @@ class DiaryNote:
         except ValueError:
             raise LookupError(f"note {note_id} ({title!r}) is not a Diary Note")
         return cls(joplin=joplin, id=note_id, date=dt)
+
+    @classmethod
+    def create(
+        cls, session: Session, joplin: JoplinPort, dt: date, body: str
+    ) -> "DiaryNote":
+        """Create the Diary Note for a date in its year's folder, then refresh
+        its Note Mirror from a re-read. The body is posted as given, without
+        checking it against the registry: it is either the template
+        (`new_note_body`) or what the browser sends back. `NoteExists` if the
+        date already has a note, and `WordsConflict` if the mirror refresh
+        would raise it; either way nothing is created."""
+        if isinstance(dt, datetime):
+            dt = dt.date()
+        title = title_from_date(dt)
+        # a new note has no id yet, so this checks against the row of a
+        # deleted note with the same title, as the refresh will
+        check_words(session, JoplinNote(id="", title=title, body=body))
+        # one create at a time: two for one day would leave two notes with the
+        # same title, and two in a new year two folders for it, either of
+        # which breaks the lookup of a day
+        with _note_lock("new note"):
+            existing = cls.find(joplin, dt)
+            if existing is not None:
+                raise NoteExists(
+                    f"Joplin note already exists for date {dt} "
+                    f"(note id: {existing.id})"
+                )
+            folder_id = joplin.get_or_create_year_folder(dt.year)
+            note_id = joplin.create_note(title, body, folder_id)
+        diary_note = cls(joplin=joplin, id=note_id, date=dt)
+        diary_note.refresh_mirror(session)
+        return diary_note
 
     def read(self) -> JoplinNote:
         return self.joplin.get_note(self.id)

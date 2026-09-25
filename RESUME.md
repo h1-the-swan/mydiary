@@ -17,13 +17,13 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 - [x] 3. `DiaryNote.edit()`
 - [x] 4. Map sync on `edit()`
 - [x] 5. Photo sync on `edit()`
-- [ ] 6. Section registry, refresh and creation
+- [x] 6. Section registry, refresh and creation
 - [ ] 7. Cleanup (sentinels, readable body, shrink script, fakes, docs)
 - [ ] Verification: the manual checks listed in issues 04, 05 and 06, in the worktree stack against `mydiary_test`
 
 ## Next action
 
-Step 6: set issue 06's `Status:` to `claimed` and build the section registry, refresh and creation on the Diary Note module.
+Step 7: set issue 07's `Status:` to `claimed` and do the cleanup (sentinels, readable body, one ref syntax, delete the shrink script, fold the fakes into `InMemoryJoplin`, docs).
 
 ## Notes
 
@@ -53,3 +53,8 @@ Step 6: set issue 06's `Status:` to `claimed` and build the section registry, re
 - Step 5: the upload route passes `keep_existing=True` instead of looking up the note's current photo paths itself, so that lookup happens under the note lock from the body `edit()` read.
 - Step 5: removing an iPhone photo deletes its `MyDiaryImage` row, and its link rows first: SQLAlchemy would otherwise try to null the link's primary-key column. A row another note also links is kept (and its links left alone), since deleting it would turn that note's ref into an unknown one.
 - Step 5 left alone: `upload_images_to_note` stores originals in Nextcloud before it knows the note is valid, so a 404/409 leaves orphan uploads (as before). It is still `async def` because it awaits the file reads, so while another request holds that note's lock it blocks the event loop. A missing note id is still a 500 (`JoplinError`), not a 404.
+- Step 6: `init_markdown` builds its body with `diary_note.new_note_body(preamble, contents)`, which lays the given sections out in registry order. Checked byte-identical against the old template for five real days (Pocket, Location and plain ones).
+- Step 6: refresh is `MyDiaryDay.update_joplin_note` → `edit()` setting what `refreshed_sections()` returns (Google Calendar events, Spotify tracks). It always looks the note up with `DiaryNote.find` rather than trusting `joplin_note_id`. `MyDiaryDay` takes either a `MyDiaryJoplin` or a `JoplinPort` as `joplin_connector` (`_joplin_port()`), and `session` is optional on refresh and creation. The two scripts calling `update_joplin_note()` / `init_joplin_note()` without a session were broken before this.
+- Step 6: creation is `DiaryNote.create(session, joplin, dt, body)`: a Words check against a deleted note's mirror row before posting, `NoteExists` (a `RuntimeError`) if the day has a note, one in-process lock around find + folder + POST (so two creates can't make two notes for a day, or two folders for a new year), then a mirror refresh from a re-read. Anything else failing after the POST still leaves the note in Joplin unmirrored, and a retry gets `NoteExists` (as on main). `/joplin/init_note` and `/joplin/update_note` now take the port and are plain `def`s.
+- Step 6 left alone: a `MyDiaryWords` row with no note id (none exist in the live DB) would be duplicated when that day's note is created, since the mirror finds words by note id. Same as main.
+- Step 6: `MarkdownSection.update()`, `MarkdownDoc.ensure_section` and their tests are gone, with the two fixture notes only `test_update_body` read. The shrink script uses `set_content` until step 7 deletes it.

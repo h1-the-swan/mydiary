@@ -1090,13 +1090,15 @@ def joplin_get_note_id(
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
 )
-async def joplin_init_note(
+def joplin_init_note(
     dt: str,
     tz: str = "local",
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
     body: Optional[str] = Body(None),
 ) -> str:
+    # a plain def: creating waits on a lock for the day, which would block the
+    # event loop
     if dt == "today":
         dt = pendulum.today(tz=tz)
     elif dt == "yesterday":
@@ -1108,19 +1110,15 @@ async def joplin_init_note(
             # body is supplied, so no need to sync with external APIs
             day = MyDiaryDay.from_dt(
                 dt,
-                joplin_connector=mydiary_joplin,
+                joplin_connector=joplin,
                 session=session,
                 spotify_sync=False,
                 gcal_save=False,
             )
         else:
-            day = MyDiaryDay.from_dt(
-                dt, joplin_connector=mydiary_joplin, session=session
-            )
+            day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.init_joplin_note(
-            session=session, joplin_connector=mydiary_joplin, body=body
-        )
+        day.init_joplin_note(session=session, body=body)
         logger.debug("initialized note")
         return day.joplin_note_id
     except Exception as e:
@@ -1205,12 +1203,14 @@ def joplin_get_note_images(
     "/joplin/update_note/{dt}",
     operation_id="joplinUpdateNote",
 )
-async def joplin_update_note(
+def joplin_update_note(
     dt: str,
     tz: str = "local",
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
+    # a plain def: the edit waits on the note's lock, which would block the
+    # event loop
     if dt == "today":
         dt = pendulum.today(tz=tz)
     elif dt == "yesterday":
@@ -1218,9 +1218,9 @@ async def joplin_update_note(
     else:
         dt = pendulum.parse(dt, tz=tz)
     try:
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
+        day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.update_joplin_note(session=session, joplin_connector=mydiary_joplin)
+        day.update_joplin_note(session=session)
         logger.debug("updated note")
     except Exception as e:
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))

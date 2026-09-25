@@ -56,7 +56,7 @@ def main(args):
         if resource_ids:
             new_ids = []
             to_delete = []
-            new_txt = sec_images.txt
+            new_content = sec_images.get_content()
             logger.info(f"reducing image size for {len(resource_ids)} images...")
             for resource_id in resource_ids:
                 logger.debug(f"old resource id: {resource_id}")
@@ -67,9 +67,9 @@ def main(args):
                 new_id = r.json()["id"]
                 logger.debug(f"new resource id: {new_id}")
                 new_ids.append(new_id)
-                new_txt = new_txt.replace(resource_id, new_id)
+                new_content = new_content.replace(resource_id, new_id)
                 to_delete.append(resource_id)
-            sec_images.update(new_txt, force=True)
+            sec_images.set_content(new_content)
             logger.info(f"updating note: {note.title}")
             r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
             r_put_note.raise_for_status()

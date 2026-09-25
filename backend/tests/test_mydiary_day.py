@@ -136,11 +136,7 @@ def test_add_images(
     try:
         resource_ids_md = [f"![](:/{resource_id})" for resource_id in resource_ids]
         assert (len(resource_ids_md)) == 2
-        new_txt = sec_images.txt
-        new_txt += "\n"
-        new_txt += "\n\n".join(resource_ids_md)
-        new_txt += "\n"
-        sec_images.update(new_txt)
+        sec_images.set_content("\n\n".join(resource_ids_md))
         for item in resource_ids_md:
             assert item in sec_images.txt
             assert item in md_note.txt
@@ -177,9 +173,7 @@ def test_alter_note_and_sync(
     sec_words = md_note.get_section_by_title("words")
     assert sec_words.get_content() == "Test words."
     new_words = "Test altered words."
-    new_words_md = f"## Words\n\n"
-    new_words_md += f"{new_words}\n\n"
-    status = sec_words.update(new_words_md, force=True)
+    status = sec_words.set_content(new_words)
     assert status == "updated"
     assert sec_words.get_content() == new_words
     assert new_words in md_note.txt
