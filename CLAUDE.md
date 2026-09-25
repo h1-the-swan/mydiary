@@ -45,7 +45,7 @@ Each `.env` has a commented `.env.example` beside it. Gotchas the examples don't
 
 ### Issue tracker
 
-Issues and specs live as local markdown under `.scratch/`. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+The backlog, specs and issues live as local markdown under `.scratch/` (gitignored; worktrees symlink to the primary's). Unstarted ideas go in `.scratch/backlog/<slug>.md`, one file per item. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
 
 ### Domain docs
 

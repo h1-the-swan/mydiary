@@ -28,8 +28,9 @@ usage() {
   cat <<'EOF'
 Usage: scripts/bootstrap-worktree.sh --db <snapshot|empty> [options]
 
-Run from inside a git worktree. Symlinks backend/.env, the token cache files
-and mydiary-vuetify/.env from the primary checkout, writes a root .env with
+Run from inside a git worktree. Symlinks backend/.env, the token cache files,
+mydiary-vuetify/.env and the .scratch issue tracker from the primary checkout,
+writes a root .env with
 free host ports and the worktree compose overlay, and sets up a database.
 
 Required:
@@ -150,6 +151,22 @@ if [[ ! -f "$PRIMARY_ROOT/mydiary-vuetify/.env" ]]; then
        mydiary-vuetify/.env.example), even if you leave the key blank."
 fi
 [[ -d "$PRIMARY_ROOT/backend/token_cache" ]] || die "the primary checkout has no backend/token_cache directory"
+
+# --- Share the issue tracker ---------------------------------------------
+#
+# .scratch/ holds the backlog, specs and issues (docs/agents/issue-tracker.md).
+# It's gitignored, so a worktree would otherwise start with none of it, and
+# anything written there would be lost with the worktree. One copy, in the
+# primary, seen from every checkout.
+
+step "Linking the issue tracker (.scratch) from the primary checkout"
+mkdir -p "$PRIMARY_ROOT/.scratch"
+link_from_primary .scratch
+if [[ ! -L "$WORKTREE_ROOT/.scratch" ]]; then
+  note "WARNING: this worktree has its own .scratch, so it can't see the"
+  note "primary's backlog. Move its contents into $PRIMARY_ROOT/.scratch,"
+  note "remove it, then:  ln -s $PRIMARY_ROOT/.scratch $WORKTREE_ROOT/.scratch"
+fi
 
 # --- Pick host ports -----------------------------------------------------
 

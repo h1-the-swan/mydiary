@@ -72,7 +72,7 @@ export interface HTTPValidationError {
  * One diary photo, identified the way the iPhone Photos library sees it.
  *
  * Consumed by the "Diary -> Photos Album" Shortcut, not by the frontend.
- * See notes/iphone-photos-album-plan.md.
+ * See docs/image-workflow.md, "iPhone Photos album".
  */
 export interface IPhoneCaptureRead {
   capture_local: string;

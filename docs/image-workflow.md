@@ -97,6 +97,18 @@ Route: `GET /images/iphone_captures?since=YYYY-MM-DD` (`iphoneCaptureTimes`), ga
 
 On the phone, for each timestamp the Shortcut searches for photos whose `Date Created` is that minute and that aren't in the album yet, confirms the exact second by formatting each candidate's date, and files the match into the album with `Save to Photos`. Photos already in the album are never passed to `Save to Photos` again, because it duplicates a photo that is already in the target album. A timestamp that was neither added nor found already in the album is reported as missed in the run notification. The rolling window means a day the phone missed is covered by the next run.
 
+### Design rules
+
+These come from the build (2026-08/09) and are easy to break by accident:
+
+- **The phone has to pull.** Only on-device apps can write the Photos library (PhotoKit). There's no server-side API, no iCloud Photos sync to use as a channel, and the host is Windows/WSL, so the macOS route (`osxphotos`, AppleScript) doesn't exist. A Shortcut on a timed automation is the only mechanism. PhotoSync (WebDAV to album) was rejected because it re-imports copies, duplicating every diary photo in a local-only library.
+- **`MyDiaryImage.created_at` is local wall-clock time, and must stay that way.** It's parsed straight from the filename, despite the model comment calling it UTC. The Nextcloud auto-upload filename and Shortcuts' `Date Created` both render in the device's *current* timezone, so they agree directly. The Photos app renders in the capture timezone and disagrees with both; that's expected. Converting `created_at` to UTC would break every match, and travel photos by a different amount than the rest.
+- **The residual timezone risk is detected, not assumed away.** A batch auto-uploaded while abroad with the phone on local time would be named in the foreign zone, and a later run at home wouldn't match it. That's why misses are reported.
+- **Minute precision plus a check on the exact second.** `Find Photos` date filters only go down to the minute, and same-minute collisions affect about 18% of selected photos, so the Shortcut formats each candidate's date and compares the second.
+- **Don't match on `orig_image_hash`.** Files reach Nextcloud as `.jpg` converted from HEIC, so the bytes differ from the on-device original.
+- **Keep the Shortcut a thin dispatcher.** Shortcuts can't be version-controlled, diffed or tested. The endpoint returns identity (`capture_local`, `img_number`, `nextcloud_path`), never instructions, and any future selection rule (other albums, favorites) belongs server-side, e.g. as a `target` field in the response.
+- **Authentication is per-route.** `/images/iphone_captures` uses the `require_api_token` dependency rather than global middleware, because the app has no login flow yet and a global gate would lock the browser out of the whole UI. See [env-vars.md](env-vars.md).
+
 ## Database models (`backend/mydiary/models.py`)
 
 - `MyDiaryImage` — one row per image included in (or, for uploads, associated with) a diary entry. Key fields: `nextcloud_path` (canonical identifier), `joplin_resource_id`, `hash`/`orig_image_hash`, `thumbnail_size`, `created_at`, `diary_date` (uploads).

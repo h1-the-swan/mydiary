@@ -8,7 +8,7 @@ Changing anything in `backend/.env` needs `docker compose up -d backend` — `re
 
 ## `MYDIARY_API_TOKEN`
 
-The `X-API-Key` for programmatic clients — currently only the iOS Shortcut that hits `/images/iphone_captures`, run daily by a personal automation on the phone (see [image-workflow.md](image-workflow.md) and `notes/iphone-photos-album-plan.md`). It is checked by a per-route dependency rather than global middleware, because the app has no login flow yet and a global gate would lock the browser out of the whole UI.
+The `X-API-Key` for programmatic clients — currently only the iOS Shortcut that hits `/images/iphone_captures`, run daily by a personal automation on the phone (see [image-workflow.md](image-workflow.md#iphone-photos-album-shortcut)). It is checked by a per-route dependency rather than global middleware, because the app has no login flow yet and a global gate would lock the browser out of the whole UI.
 
 Because the check fails closed, an unset token and a broken endpoint look identical from the outside.
 

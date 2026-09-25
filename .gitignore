@@ -52,7 +52,9 @@ git-filter-repo
 
 # browser/session artifacts and scratch files
 .playwright-mcp/
-scratch/
+# no trailing slash: in a worktree .scratch is a symlink, which a `dir/`
+# pattern doesn't match
+/.scratch
 
 # local planning notes, not for the repo
 notes/plans/

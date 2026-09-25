@@ -217,7 +217,7 @@ class IPhoneCaptureRead(SQLModel):
     """One diary photo, identified the way the iPhone Photos library sees it.
 
     Consumed by the "Diary -> Photos Album" Shortcut, not by the frontend.
-    See notes/iphone-photos-album-plan.md.
+    See docs/image-workflow.md, "iPhone Photos album".
     """
 
     # Naive local wall-clock capture time, seconds precision, NO offset and NO
@@ -406,7 +406,7 @@ def require_api_token(x_api_key: str = Header(default="")):
 
     Deliberately a per-route dependency rather than global middleware: the app
     has no login flow yet, so a global gate would lock the browser out of the
-    whole UI. See notes/iphone-photos-album-plan.md.
+    whole UI. See docs/image-workflow.md, "iPhone Photos album".
     """
     expected = os.environ.get("MYDIARY_API_TOKEN", "")
     # fail closed: an unset token denies everything rather than allowing it

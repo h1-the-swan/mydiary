@@ -26,6 +26,14 @@ container before declaring success, because a dangling symlink otherwise shows
 up much later as an unexplained `FileNotFoundError` or, for the frontend, a
 silently watermarked map.
 
+The script also symlinks the worktree's `.scratch` to the primary's. That
+directory is the issue tracker (backlog, specs, issues; see
+[agents/issue-tracker.md](agents/issue-tracker.md)), and it's gitignored, so
+without the link a worktree would start with none of it, and specs written
+there would vanish at teardown. If the worktree already has a real `.scratch`,
+the script leaves it and prints the commands to merge and link it by hand.
+Teardown removes only the link.
+
 ## Choosing `--db`
 
 The flag is required and has no default, because the right answer depends on the

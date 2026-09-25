@@ -2,8 +2,8 @@
 
 The app is reachable off-host only over a private Tailscale tailnet, never
 publicly. Serve proxies `https://mydiary.<tailnet>.ts.net` →
-`proxy-vue:80`. The design and its tradeoffs are Part B of
-`notes/auth-security-monitoring-plan-tailscale.md`.
+`proxy-vue:80`. Why tailnet-only, and the alternatives that were rejected:
+[ADR 0001](adr/0001-tailnet-only-remote-access.md).
 
 | File | Purpose |
 |------|---------|
