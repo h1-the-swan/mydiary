@@ -24,6 +24,17 @@ const timeOfDay = {
     night: '#4a3aa7',
 }
 
+/**
+ * How much of a section the practice sheet still shows, from all of it to none.
+ * Used for the structure line, the learning queue bars and the section labels.
+ */
+const practiceLevel = {
+    'level-full': '#b0bec5',
+    'level-letters': '#f2c14e',
+    'level-cues': '#8cc084',
+    'level-memorized': timeOfDay.morning,
+}
+
 // https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
 export default createVuetify({
     theme: {
@@ -37,6 +48,7 @@ export default createVuetify({
                     background: '#f6f7f9',
                     surface: '#ffffff',
                     ...timeOfDay,
+                    ...practiceLevel,
                 },
             },
         },

@@ -4,11 +4,12 @@ The everyday commands are the `package.json` scripts and standard poetry/pytest/
 
 ## Frontend lint and build
 
-Run `lint` and `build` **inside the container** — the host `node_modules` is incomplete (it lacks `leaflet`, so `vue-tsc` fails on `MapSection.vue` regardless of your changes):
+Run `lint`, `build` and `test` **inside the container** — the host `node_modules` is incomplete (it lacks `leaflet`, so `vue-tsc` fails on `MapSection.vue` regardless of your changes):
 
 ```sh
 docker compose exec mydiary-vuetify npm run build
 docker compose exec mydiary-vuetify npm run lint
+docker compose exec mydiary-vuetify npm test    # vitest: chordpro.ts, chords.ts, practice.ts
 ```
 
 `npm run lint` reports pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.

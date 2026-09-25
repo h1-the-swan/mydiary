@@ -161,7 +161,7 @@ class TestUpgrade:
 class TestDowngrade:
     def test_round_trip_restores_the_old_shape(self, old_db: Path):
         run_or_fail(old_db, "upgrade", "head")
-        run_or_fail(old_db, "downgrade", "-1")
+        run_or_fail(old_db, "downgrade", BEFORE_TAGS_REVISION)
 
         assert query(old_db, "SELECT version_num FROM alembic_version") == [(BEFORE_TAGS_REVISION,)]
         assert columns(old_db, "tag") == ["name", "is_pocket_tag"]
