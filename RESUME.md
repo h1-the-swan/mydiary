@@ -4,7 +4,7 @@ Working notes for resuming the Diary Note module refactor (one module owns every
 
 - Branch: `diary-note-module`
 - Worktree: `../mydiary-diary-note-module` (a sibling of the primary checkout)
-- Plan: `.scratch/diary-note-module/spec.md` and `.scratch/diary-note-module/issues/01..07`, untracked on purpose and present only in this worktree. Also `CONTEXT.md` (glossary) and `docs/adr/0001-diary-note-sections-have-one-owner.md`.
+- Plan: `.scratch/diary-note-module/spec.md` and `.scratch/diary-note-module/issues/01..07`, untracked on purpose. Since 2026-09-25 this worktree's `.scratch` is a symlink to the primary checkout's `/home/hasone/code/mydiary/.scratch`, so they live there. Also `CONTEXT.md` (glossary) and `docs/adr/0001-diary-note-sections-have-one-owner.md`.
 
 To resume, read the spec and the issue named in "Next action". Then run `git status --short` and `git log --oneline main..` in the worktree, `docker compose up -d` (app on http://localhost:8088), and `docker compose exec -T backend pytest -q -p no:cacheprovider`. Continue from "Next action".
 
@@ -16,14 +16,14 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 - [x] 2. Diary Note lookup and Note Mirror refresh
 - [x] 3. `DiaryNote.edit()`
 - [x] 4. Map sync on `edit()`
-- [ ] 5. Photo sync on `edit()`
+- [x] 5. Photo sync on `edit()`
 - [ ] 6. Section registry, refresh and creation
 - [ ] 7. Cleanup (sentinels, readable body, shrink script, fakes, docs)
 - [ ] Verification: the manual checks listed in issues 04, 05 and 06, in the worktree stack against `mydiary_test`
 
 ## Next action
 
-Step 5: set issue 05's `Status:` to `claimed` and move photo sync (`image_sync.sync_note_images`) onto `DiaryNote.edit()`.
+Step 6: set issue 06's `Status:` to `claimed` and build the section registry, refresh and creation on the Diary Note module.
 
 ## Notes
 
@@ -48,4 +48,8 @@ Step 5: set issue 05's `Status:` to `claimed` and move photo sync (`image_sync.s
 - Step 4: `NoteEdit.wrote` says whether the edit PUT the note. Map sync reports "no update" when the edit didn't write and no `OwnTracksDayMap` row changed; an unchanged row is no longer re-merged, so its `created_at` stays put. `sync_day_map_to_note` takes `joplin: JoplinPort` (was `mydiary_joplin`). The re-encode script wraps its client in `HttpJoplin` and counts a `NoteClobbered` or `WordsConflict` day as failed instead of stopping.
 - Step 4: map sync now runs the Words check on entering and refreshes the mirror, so a note with a Words conflict gets a 409 from `/owntracks/map/{dt}/to_note`.
 - Step 4: `edit()` turns autoflush off for the caller's block and the write, and `refresh_note_mirror` fetches Joplin's tags before its first flush. Otherwise a caller's staged rows get flushed early, and SQLite's write lock is held through the Joplin requests (no timeout on them), which locks out every other writer while the Joplin app is stalled.
-- For step 5: `NoteEdit._delete_created` deletes a created resource the failed note doesn't reference without asking whether another note does. Ids are the md5 of the bytes, so the same photo on two days is one resource: if two edits add it concurrently and the creator fails, the other note loses it. Unlikely for maps, plausible for photos; give it the `_still_referenced` check (it needs the session) when photo sync moves over.
+- Step 5: a failed edit's cleanup now asks `_still_referenced` too before deleting a resource it created, since the same photo on two days is one resource (ids are md5s).
+- Step 5: `DiaryNote.get(joplin, note_id)` builds a Diary Note from an id (the image routes take ids), reading the note once for its date title; a title that isn't a date is `LookupError` → 404. Shrinking is `image_sync.shrink_photo()` (pure) plus `ShrunkPhoto.image_row()`; `MyDiaryJoplin.create_thumbnail` is gone. `joplin_reduce_image_size` stays for the shrink script until step 7.
+- Step 5: the upload route passes `keep_existing=True` instead of looking up the note's current photo paths itself, so that lookup happens under the note lock from the body `edit()` read.
+- Step 5: removing an iPhone photo deletes its `MyDiaryImage` row, and its link rows first: SQLAlchemy would otherwise try to null the link's primary-key column. A row another note also links is kept (and its links left alone), since deleting it would turn that note's ref into an unknown one.
+- Step 5 left alone: `upload_images_to_note` stores originals in Nextcloud before it knows the note is valid, so a 404/409 leaves orphan uploads (as before). It is still `async def` because it awaits the file reads, so while another request holds that note's lock it blocks the event loop. A missing note id is still a 500 (`JoplinError`), not a 404.

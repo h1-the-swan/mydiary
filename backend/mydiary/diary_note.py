@@ -212,6 +212,17 @@ class DiaryNote:
             return None
         return cls(joplin=joplin, id=note_id, date=dt)
 
+    @classmethod
+    def get(cls, joplin: JoplinPort, note_id: str) -> "DiaryNote":
+        """The Diary Note with this id. `LookupError` if the note isn't
+        titled with a date; `JoplinError` if Joplin doesn't have it."""
+        title = joplin.get_note(note_id).title
+        try:
+            dt = date.fromisoformat(title)
+        except ValueError:
+            raise LookupError(f"note {note_id} ({title!r}) is not a Diary Note")
+        return cls(joplin=joplin, id=note_id, date=dt)
+
     def read(self) -> JoplinNote:
         return self.joplin.get_note(self.id)
 
@@ -264,7 +275,7 @@ class DiaryNote:
                 session.commit()
             except BaseException:
                 session.rollback()
-                edit._delete_created()
+                edit._delete_created(session)
                 raise
             edit._delete_dropped(session)
 
@@ -373,7 +384,7 @@ class NoteEdit:
         self._last_seen = written.body
         return written
 
-    def _delete_created(self) -> None:
+    def _delete_created(self, session: Session) -> None:
         if not self.created:
             return
         # a write may have landed even though the edit failed (the read after
@@ -395,6 +406,10 @@ class NoteEdit:
                 )
                 continue
             try:
+                # the same photo on another day is the same resource, which a
+                # concurrent edit of that note may have just used
+                if self._used_by_other_notes(session, resource_id):
+                    continue
                 self.joplin.delete_resource(resource_id)
             except Exception:
                 logger.exception(f"failed to clean up resource {resource_id}")
@@ -417,6 +432,9 @@ class NoteEdit:
                 "still references it"
             )
             return True
+        return self._used_by_other_notes(session, resource_id)
+
+    def _used_by_other_notes(self, session: Session, resource_id: str) -> bool:
         # Joplin indexes note resources in the background, a few seconds
         # behind, so the mirror is asked as well
         mirrored = session.exec(

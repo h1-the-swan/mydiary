@@ -19,7 +19,6 @@ from .core import get_hash_from_txt, reduce_image_size, reduce_size_recurse
 from .models import (
     JoplinNote,
     JoplinFolder,
-    MyDiaryImage,
 )
 from .db import engine, Session
 
@@ -494,46 +493,6 @@ class MyDiaryJoplin:
             params={"token": self.token},
         )
         return r
-
-    def create_thumbnail(
-        self,
-        image_bytes: bytes,
-        name: Optional[str] = None,
-        nextcloud_path: Optional[str] = None,
-        created_at: Optional[pendulum.DateTime] = None,
-    ) -> MyDiaryImage:
-        size = (512, 512)
-        bytes_threshold = 60000
-        orig_image_hash = hashlib.md5()
-        orig_image_hash.update(image_bytes)
-        if len(image_bytes) > bytes_threshold:
-            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-        image_hash = hashlib.md5()
-        image_hash.update(image_bytes)
-        # the resource id is the hash of the image bytes, so identical image
-        # content maps to a single Joplin resource; creating it again would fail
-        # on the unique-id constraint
-        resource_id = image_hash.hexdigest()
-        if self.resource_exists(resource_id):
-            logger.debug(f"reusing existing joplin resource {resource_id}")
-        else:
-            r = self.create_resource(data=image_bytes, title=name)
-            r.raise_for_status()
-            resource_id = r.json()["id"]
-        if created_at is None:
-            created_at = pendulum.now(tz="UTC")
-        mydiary_image = MyDiaryImage(
-            hash=image_hash.hexdigest(),
-            name=name,
-            filepath=None,
-            nextcloud_path=nextcloud_path,
-            description=None,
-            thumbnail_size=len(image_bytes),
-            joplin_resource_id=resource_id,
-            created_at=created_at.in_timezone("UTC"),
-            orig_image_hash=orig_image_hash.hexdigest(),
-        )
-        return mydiary_image
 
     def get_resource_file(self, resource_id: str) -> bytes:
         r = requests.get(

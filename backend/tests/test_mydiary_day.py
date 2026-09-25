@@ -4,6 +4,7 @@ import requests
 from pathlib import Path
 
 from mydiary.diary_note import refresh_note_mirror
+from mydiary.image_sync import shrink_photo
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.joplin_port import HttpJoplin
@@ -114,13 +115,14 @@ def test_add_images(
         created_at = pendulum.from_format(
             image_name, "YY-MM-DD HH-mm-ss SSSS", tz="America/New_York"
         )
-        mydiary_image = joplin_client.create_thumbnail(
-            image_bytes,
-            name=image_name,
-            nextcloud_path=fp.name,
-            created_at=created_at,
+        photo = shrink_photo(image_bytes)
+        port = HttpJoplin(joplin_client)
+        resource_id = photo.hash
+        if not port.resource_exists(resource_id):
+            resource_id = port.create_resource(photo.data, title=image_name)
+        mydiary_image = photo.image_row(
+            resource_id, name=image_name, nextcloud_path=fp.name, created_at=created_at
         )
-        resource_id = mydiary_image.joplin_resource_id
         resource_ids.append(resource_id)
         note_image_link = JoplinNoteImageLink(
             note=db_note,

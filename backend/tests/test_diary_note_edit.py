@@ -317,6 +317,21 @@ class TestFailure:
                 edit.set_section("Images", f"![](:/{rid})")
         assert joplin.resource_exists(rid)
 
+    def test_a_created_resource_another_note_took_up_is_kept(
+        self, db_session: Session
+    ):
+        # the same photo on two days is one resource: an edit of the other
+        # day can pick up the one this edit created before this one fails
+        note = diary_note()
+        joplin = note.joplin
+        with pytest.raises(JoplinError):
+            with note.edit(db_session) as edit:
+                rid = edit.add_resource(b"photo")
+                joplin.add_note("2026-09-14", f"## Images\n\n![](:/{rid})\n")
+                edit.set_section("Images", f"![](:/{rid})")
+                joplin.fail_next_update()
+        assert joplin.resource_exists(rid)
+
     def test_dropped_resources_survive_a_failed_edit(self, db_session: Session):
         joplin = InMemoryJoplin()
         old = joplin.create_resource(b"old photo")

@@ -2,16 +2,20 @@
 
 DESCRIPTION = """Two-way sync between a set of Nextcloud photo paths and the images section of a Joplin diary note."""
 
-from datetime import date
+import hashlib
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
+import pendulum
 import requests
 from sqlmodel import Session, select
 
-from .joplin_connector import MyDiaryJoplin
-from .markdown_edits import MarkdownDoc
-from .models import JoplinNote, JoplinNoteImageLink, MyDiaryImage
+from .core import reduce_size_recurse
+from .diary_note import DiaryNote, image_resource_ids_of
+from .joplin_port import JoplinPort
+from .models import MyDiaryImage
 from .nextcloud_connector import MyDiaryNextcloud
 
 import logging
@@ -22,6 +26,8 @@ logger = root_logger.getChild(__name__)
 PHONE_SYNC_BASEDIR = "H1phone_sync"
 UPLOADS_BASEDIR = "mydiary_uploads"
 
+SECTION_TITLE = "Images"
+
 
 def is_upload_path(nextcloud_path: str) -> bool:
     return nextcloud_path.startswith(f"{UPLOADS_BASEDIR}/")
@@ -31,13 +37,61 @@ def image_ref(resource_id: str) -> str:
     return f"![](:/{resource_id})"
 
 
+@dataclass(frozen=True)
+class ShrunkPhoto:
+    """A photo made small enough to put in a note."""
+
+    data: bytes
+    hash: str  # md5 of `data`, which is also its Joplin resource id
+    orig_hash: str  # md5 of the photo as it came in
+
+    def image_row(
+        self,
+        resource_id: str,
+        name: Optional[str] = None,
+        nextcloud_path: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+    ) -> MyDiaryImage:
+        if created_at is None:
+            created_at = pendulum.now(tz="UTC")
+        return MyDiaryImage(
+            hash=self.hash,
+            name=name,
+            filepath=None,
+            nextcloud_path=nextcloud_path,
+            description=None,
+            thumbnail_size=len(self.data),
+            joplin_resource_id=resource_id,
+            created_at=pendulum.instance(created_at).in_timezone("UTC"),
+            orig_image_hash=self.orig_hash,
+        )
+
+
+def shrink_photo(
+    image_bytes: bytes,
+    size: Tuple[int, int] = (512, 512),
+    bytes_threshold: int = 60000,
+) -> ShrunkPhoto:
+    """Scale a photo down until it's under `bytes_threshold` bytes; one
+    already under it is left as it is."""
+    orig_hash = hashlib.md5(image_bytes).hexdigest()
+    if len(image_bytes) > bytes_threshold:
+        image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
+    return ShrunkPhoto(
+        data=image_bytes,
+        hash=hashlib.md5(image_bytes).hexdigest(),
+        orig_hash=orig_hash,
+    )
+
+
 def sync_note_images(
     session: Session,
-    mydiary_joplin: MyDiaryJoplin,
+    joplin: JoplinPort,
     mydiary_nextcloud: MyDiaryNextcloud,
     note_id: str,
     desired_paths: List[str],
     diary_date: Optional[date] = None,
+    keep_existing: bool = False,
 ) -> dict:
     """Make the note's images section match desired_paths (percent-encoded, display order).
 
@@ -49,56 +103,63 @@ def sync_note_images(
       for re-selection via their diary_date.
     - Resource ids in the note with no MyDiaryImage row (e.g. from the removed Google
       Photos integration) are preserved in place and never touched.
+
+    With `keep_existing`, desired_paths are added after the photos the note
+    already shows, and nothing is removed.
+
+    The write goes through `DiaryNote.edit()`, whose mirror refresh rebuilds
+    the note's image links from the section it wrote.
     """
-    note = mydiary_joplin.get_note(note_id)
-    db_note = session.get(JoplinNote, note_id)
-    if db_note is None:
-        # a mirror row for the links to hang on, but with no body: the Note
-        # Mirror refresh fills it in, and sees it as a first sight
-        db_note = session.merge(note)
-        db_note.body = None
-        db_note.body_hash = None
-    md_note = MarkdownDoc(note.body, parent=note)
-    sec_images = md_note.get_section_by_title("images")
-    current_ids = sec_images.get_resource_ids()
+    diary_note = DiaryNote.get(joplin, note_id)
+    with diary_note.edit(session) as edit:
+        current_ids = image_resource_ids_of(edit.note.body)
 
-    # resolve existing refs to database rows; unknown ids are left untouched
-    id_to_image: Dict[str, Optional[MyDiaryImage]] = {}
-    for resource_id in current_ids:
-        id_to_image[resource_id] = session.exec(
-            select(MyDiaryImage).where(MyDiaryImage.joplin_resource_id == resource_id)
-        ).first()
-    known_path_to_id = {
-        img.nextcloud_path: rid
-        for rid, img in id_to_image.items()
-        if img is not None and img.nextcloud_path
-    }
+        # resolve existing refs to database rows; unknown ids are left untouched
+        id_to_image: Dict[str, Optional[MyDiaryImage]] = {}
+        for resource_id in current_ids:
+            id_to_image[resource_id] = session.exec(
+                select(MyDiaryImage).where(
+                    MyDiaryImage.joplin_resource_id == resource_id
+                )
+            ).first()
+        known_path_to_id = {
+            img.nextcloud_path: rid
+            for rid, img in id_to_image.items()
+            if img is not None and img.nextcloud_path
+        }
 
-    # dedupe desired paths, preserving order
-    desired = list(dict.fromkeys(desired_paths))
-    to_add = [p for p in desired if p not in known_path_to_id]
-    to_remove = {
-        rid: img
-        for rid, img in id_to_image.items()
-        if img is not None
-        and (not img.nextcloud_path or img.nextcloud_path not in desired)
-    }
-    if not to_add and not to_remove:
-        return {"note_id": note.id, "added": [], "removed": [], "resource_ids": current_ids}
+        if keep_existing:
+            desired_paths = list(known_path_to_id) + list(desired_paths)
+        # dedupe desired paths, preserving order
+        desired = list(dict.fromkeys(desired_paths))
+        to_add = [p for p in desired if p not in known_path_to_id]
+        to_remove = {
+            rid: img
+            for rid, img in id_to_image.items()
+            if img is not None
+            and not keep_existing
+            and (not img.nextcloud_path or img.nextcloud_path not in desired)
+        }
+        if not to_add and not to_remove:
+            return {
+                "note_id": note_id,
+                "added": [],
+                "removed": [],
+                "resource_ids": current_ids,
+            }
 
-    # create resources for new photos before touching the note
-    added_images: List[MyDiaryImage] = []
-    new_resource_ids: List[str] = []
-    try:
+        added_images: List[MyDiaryImage] = []
+        new_resource_ids: List[str] = []
         for photo_path in to_add:
-            image_bytes = mydiary_nextcloud.get_image(photo_path)
             image_name = Path(requests.utils.unquote(photo_path)).stem
             try:
                 created_at = mydiary_nextcloud.parse_datetime_from_filepath(photo_path)
             except Exception:
                 created_at = None
-            new_image = mydiary_joplin.create_thumbnail(
-                image_bytes,
+            photo = shrink_photo(mydiary_nextcloud.get_image(photo_path))
+            resource_id = edit.add_resource(photo.data, title=image_name)
+            new_image = photo.image_row(
+                resource_id,
                 name=image_name,
                 nextcloud_path=photo_path,
                 created_at=created_at,
@@ -118,8 +179,8 @@ def sync_note_images(
                 new_image.diary_date = diary_date
             session.add(new_image)
             added_images.append(new_image)
-            new_resource_ids.append(new_image.joplin_resource_id)
-            logger.debug(f"new resource id: {new_image.joplin_resource_id}")
+            new_resource_ids.append(resource_id)
+            logger.debug(f"new resource id: {resource_id}")
 
         # rebuild the section: kept refs in original order (unknown ids stay in
         # place), then newly added refs
@@ -130,65 +191,28 @@ def sync_note_images(
         # identical image content shares one Joplin resource id, so the same ref
         # can appear twice; keep the first occurrence only
         final_refs = list(dict.fromkeys(final_refs))
-        sec_images.set_content("\n\n".join(image_ref(rid) for rid in final_refs))
-
-        logger.info(f"updating note: {note.title}")
-        r_put_note = mydiary_joplin.update_note_body(note.id, md_note.txt)
-        r_put_note.raise_for_status()
-    except Exception:
-        session.rollback()
-        for rid in new_resource_ids:
-            try:
-                mydiary_joplin.delete_resource(rid, force=True)
-            except Exception:
-                logger.warning(f"failed to clean up joplin resource {rid}")
-        raise
-
-    # note update succeeded: now safe to delete removed resources (best-effort)
-    for rid in to_remove:
-        try:
-            r = mydiary_joplin.delete_resource(rid, ignore_id=note.id)
-            r.raise_for_status()
-        except Exception:
-            logger.warning(f"failed to delete joplin resource {rid}; continuing")
-
-    # database bookkeeping, committed in one transaction
-    for link in session.exec(
-        select(JoplinNoteImageLink).where(JoplinNoteImageLink.joplin_note_id == note.id)
-    ).all():
-        session.delete(link)
-    for rid, img in to_remove.items():
-        if img.nextcloud_path and is_upload_path(img.nextcloud_path):
-            img.joplin_resource_id = None
-            session.add(img)
-        else:
-            session.delete(img)
-    # newly added refs are not in id_to_image; map them from added_images
-    added_by_id = {img.joplin_resource_id: img for img in added_images}
-    sequence_num = 0
-    for rid in final_refs:
-        img = id_to_image.get(rid) or added_by_id.get(rid)
-        if img is None:  # unknown (legacy) resource id
-            continue
-        sequence_num += 1
-        session.add(
-            JoplinNoteImageLink(
-                note=db_note,
-                mydiary_image=img,
-                sequence_num=sequence_num,
-                note_title=note.title,
-            )
+        edit.set_section(
+            SECTION_TITLE, "\n\n".join(image_ref(rid) for rid in final_refs)
         )
-    # The mirrored body is left for the Note Mirror refresh, which the PUT
-    # above makes due (Joplin's updated_time moved on). Copying the body here
-    # without its words would trip the refresh's Words check on that day for
-    # good, whenever the words were edited in Joplin since the last refresh.
-    db_note.has_images = len(final_refs) > 0
-    session.add(db_note)
-    session.commit()
+
+        for rid, img in to_remove.items():
+            edit.drop_resource(rid)
+            if img.nextcloud_path and is_upload_path(img.nextcloud_path):
+                img.joplin_resource_id = None
+                session.add(img)
+                continue
+            if any(link.joplin_note_id != note_id for link in img.note_links):
+                # another day shows the same photo; deleting the row would
+                # turn its ref there into an unknown one
+                continue
+            # its links go first, as they can't outlive the row
+            for link in img.note_links:
+                session.delete(link)
+            session.delete(img)
+        logger.info(f"updating note: {edit.note.title}")
 
     return {
-        "note_id": note.id,
+        "note_id": note_id,
         "added": [img.nextcloud_path for img in added_images],
         "removed": [img.nextcloud_path for img in to_remove.values()],
         "resource_ids": final_refs,

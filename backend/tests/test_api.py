@@ -1384,6 +1384,28 @@ class TestTags:
         finally:
             app.dependency_overrides.pop(get_joplin_port, None)
 
+    def test_sync_note_images(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+        from tests.test_image_sync import FakeNextcloud, IPHONE_PATH_1
+
+        monkeypatch.setattr(api_module, "MyDiaryNextcloud", FakeNextcloud)
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2024-05-18", "## Words\n\nhi\n\n## Images\n")
+        folder_id = joplin.get_or_create_year_folder(2024)
+        not_diary = joplin.create_note("Shopping list", "## Images\n", folder_id)
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
+        try:
+            r = client.post(f"/images/sync_note/{note_id}", json=[IPHONE_PATH_1])
+            assert r.status_code == 200
+            assert r.json()["added"] == [IPHONE_PATH_1]
+            assert session.get(JoplinNote, note_id).has_images is True
+            r = client.post(f"/images/sync_note/{not_diary}", json=[IPHONE_PATH_1])
+            assert r.status_code == 404
+        finally:
+            app.dependency_overrides.pop(get_joplin_port, None)
+
     def test_note_clobbered_is_409(self):
         from mydiary.api import diary_note_conflict_handler
         from mydiary.diary_note import NoteClobbered

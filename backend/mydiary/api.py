@@ -1561,7 +1561,7 @@ async def upload_images_to_note(
     note_id: str,
     dt: str,
     files: List[UploadFile] = File(...),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
     """Store uploaded originals in Nextcloud (mydiary_uploads/{YYYY}/{MM}/), then
     run them through the same shrink/database/Joplin pipeline as iPhone photos."""
@@ -1590,28 +1590,18 @@ async def upload_images_to_note(
         upload_paths.append(nextcloud_path)
 
     # add the new uploads to the note alongside whatever is already there
-    note = mydiary_joplin.get_note(note_id)
-    current_ids = note.md_note.get_image_resource_ids()
-    current_paths = [
-        img.nextcloud_path
-        for resource_id in current_ids
-        for img in [
-            session.exec(
-                select(MyDiaryImage).where(
-                    MyDiaryImage.joplin_resource_id == resource_id
-                )
-            ).first()
-        ]
-        if img is not None and img.nextcloud_path
-    ]
-    sync_note_images(
-        session=session,
-        mydiary_joplin=mydiary_joplin,
-        mydiary_nextcloud=mydiary_nextcloud,
-        note_id=note_id,
-        desired_paths=current_paths + upload_paths,
-        diary_date=diary_date,
-    )
+    try:
+        sync_note_images(
+            session=session,
+            joplin=joplin,
+            mydiary_nextcloud=mydiary_nextcloud,
+            note_id=note_id,
+            desired_paths=upload_paths,
+            diary_date=diary_date,
+            keep_existing=True,
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return [
         session.exec(
             select(MyDiaryImage).where(MyDiaryImage.nextcloud_path == path)
@@ -1685,26 +1675,29 @@ def iphone_capture_times(
     operation_id="syncNoteImages",
     response_model=dict,
 )
-async def sync_note_images_route(
+def sync_note_images_route(
     *,
     session: Session = Depends(get_session),
     note_id: str,
     photos: List[str],
     dt: Optional[str] = None,
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
     """Two-way sync: make the note's images section match `photos` (the full
     desired list of nextcloud paths, in display order)."""
     from .image_sync import sync_note_images
 
-    return sync_note_images(
-        session=session,
-        mydiary_joplin=mydiary_joplin,
-        mydiary_nextcloud=MyDiaryNextcloud(),
-        note_id=note_id,
-        desired_paths=photos,
-        diary_date=pendulum.parse(dt).date() if dt else None,
-    )
+    try:
+        return sync_note_images(
+            session=session,
+            joplin=joplin,
+            mydiary_nextcloud=MyDiaryNextcloud(),
+            note_id=note_id,
+            desired_paths=photos,
+            diary_date=pendulum.parse(dt).date() if dt else None,
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post(
