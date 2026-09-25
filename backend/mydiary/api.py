@@ -1920,7 +1920,11 @@ def create_song_arrangement(
 ):
     song = _get_song_or_404(session, perform_song_id)
     try:
-        return songs.create_arrangement(session, song, **arrangement.model_dump())
+        # exclude_unset: a key or capo left out comes from the song, but an
+        # explicit null (a cleared field) is kept
+        return songs.create_arrangement(
+            session, song, **arrangement.model_dump(exclude_unset=True)
+        )
     except songs.ArrangementExists as e:
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:

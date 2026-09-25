@@ -44,6 +44,9 @@ so with a capo the two differ. The shape key is derived on the fly by
 shown as `Sounds in Ab · C shapes · capo 8`. A song's first guitar arrangement
 copies `PerformSong.key` and `capo`, which have always described the guitar
 part; a ukulele arrangement starts from whatever the other sheet sounds in.
+The new-sheet dialog fills those in for editing, so the create route only
+copies a key or capo the request leaves out. An explicit `null` is a field the
+user cleared, and is stored as none.
 
 Deleting an arrangement keeps the practice runs made with it and clears their
 `arrangement_id` — a run belongs to the song, and section levels are shared

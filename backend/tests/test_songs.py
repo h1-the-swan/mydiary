@@ -87,6 +87,11 @@ class TestArrangements:
         arr = songs.create_arrangement(session, song, "guitar", key="G", capo=0)
         assert (arr.key, arr.capo) == ("G", 0)
 
+    def test_explicit_none_is_not_inherited(self, session, song):
+        # the new-sheet dialog sends None for a field the user cleared
+        arr = songs.create_arrangement(session, song, "guitar", key=None, capo=None)
+        assert (arr.key, arr.capo) == (None, None)
+
     def test_duplicate_instrument_raises(self, session, song):
         songs.create_arrangement(session, song, "guitar")
         with pytest.raises(songs.ArrangementExists):
@@ -114,6 +119,13 @@ class TestArrangements:
 
 
 class TestRuns:
+    def test_practiced_at_with_an_offset_is_stored_as_utc(self, session, song):
+        # 20:00 in Los Angeles is 03:00 UTC the next day
+        when = pendulum.datetime(2026, 9, 18, 20, tz="America/Los_Angeles")
+        run = make_run(session, song, [("Chorus", False)], when=when)
+        session.expire(run)
+        assert run.practiced_at == pendulum.datetime(2026, 9, 19, 3).naive()
+
     def test_run_copies_instrument_and_keeps_section_order(self, session, song):
         arr = songs.create_arrangement(session, song, "ukulele")
         run = make_run(session, song, [("Verse 1", False), ("Chorus", True)], arrangement=arr)

@@ -54,6 +54,13 @@ class TestArrangementRoutes:
         assert [a["id"] for a in listed] == [arr["id"]]
         assert client.get(f"/arrangements/{arr['id']}").json()["sheet"] == SHEET
 
+    def test_cleared_key_and_capo_are_kept_cleared(self, client, song):
+        r = client.post(
+            f"/performsongs/{song.id}/arrangements",
+            json={"instrument": "guitar", "key": None, "capo": None},
+        )
+        assert (r.json()["key"], r.json()["capo"]) == (None, None)
+
     def test_duplicate_is_409(self, client, song):
         create_guitar(client, song)
         r = client.post(f"/performsongs/{song.id}/arrangements", json={"instrument": "guitar"})

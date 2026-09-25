@@ -7,7 +7,7 @@ gathers their inputs. Sheets are opaque ChordPro text here -- the frontend owns
 parsing them, and practice runs arrive already keyed by section label."""
 
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pendulum
 from sqlalchemy import desc, func
@@ -50,12 +50,16 @@ def arrangements_for_song(session: Session, song_id: int) -> List[SongArrangemen
     )
 
 
+# default for create_arrangement's key and capo: take the song's value
+_FROM_SONG: Any = object()
+
+
 def create_arrangement(
     session: Session,
     song: PerformSong,
     instrument: str,
-    key: Optional[str] = None,
-    capo: Optional[int] = None,
+    key: Optional[str] = _FROM_SONG,
+    capo: Optional[int] = _FROM_SONG,
     sheet: str = "",
     source: str = "manual",
 ) -> SongArrangement:
@@ -68,10 +72,14 @@ def create_arrangement(
     ).first()
     if existing is not None:
         raise ArrangementExists(f"{song.name} already has a {instrument} arrangement")
-    # PerformSong.key/capo have always described what is played on guitar
-    if instrument == "guitar":
-        key = song.key if key is None else key
-        capo = song.capo if capo is None else capo
+    # PerformSong.key/capo have always described what is played on guitar.
+    # Only a value left out is inherited: an explicit None is a field the user
+    # cleared, and means no key or no capo
+    inherit = instrument == "guitar"
+    if key is _FROM_SONG:
+        key = song.key if inherit else None
+    if capo is _FROM_SONG:
+        capo = song.capo if inherit else None
     now = _utcnow()
     arrangement = SongArrangement(
         perform_song_id=song.id,
@@ -159,7 +167,13 @@ def create_run(
         perform_song_id=song_id,
         arrangement_id=arrangement.id if arrangement else None,
         instrument=arrangement.instrument if arrangement else None,
-        practiced_at=practiced_at or _utcnow(),
+        # SQLite drops the offset and keeps the clock time, so convert first;
+        # a naive value is taken as UTC already
+        practiced_at=(
+            pendulum.instance(practiced_at).in_timezone("UTC")
+            if practiced_at
+            else _utcnow()
+        ),
         note=note,
     )
     session.add(run)
