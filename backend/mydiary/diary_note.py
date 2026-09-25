@@ -3,7 +3,7 @@
 
 This module holds the section registry, finds and creates Diary Notes by
 date, owns every later write to one (`DiaryNote.edit()`, which only writes
-App-owned Sections; see ADR-0001), and
+App-owned Sections; see ADR-0002), and
 refreshes the Note Mirror, the database's copy of the note and everything
 derived from it (words, which Photos it shows, tags). Joplin holds the
 authoritative note; the mirror is always refreshed from what Joplin returned,
@@ -72,7 +72,7 @@ class NoteClobbered(Exception):
 
 
 class SectionNotAppOwned(ValueError):
-    """Only App-owned Sections may be written once a note exists (ADR-0001)."""
+    """Only App-owned Sections may be written once a note exists (ADR-0002)."""
 
 
 class NoteExists(RuntimeError):
@@ -91,7 +91,7 @@ class SectionSpec:
     owner: Owner
 
 
-# Every section the app knows, in note order, and who owns it (ADR-0001). The
+# Every section the app knows, in note order, and who owns it (ADR-0002). The
 # preamble above the first `##` heading, and any section not listed here, is
 # Written. A new note's template (`new_note_body`) and a section added to an
 # older note both follow this order.

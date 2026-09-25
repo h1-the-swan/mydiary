@@ -37,31 +37,29 @@ Performance design (added in the 2026-07 overhaul):
 
 ## Adding / syncing photos to the Joplin note
 
-Route: `POST /images/sync_note/{note_id}` (`syncNoteImages`), body = the **full desired list** of `nextcloud_path`s in display order. This performs a two-way sync of the note's `## Images` section (service: `backend/mydiary/image_sync.py`):
+Route: `POST /images/sync_note/{note_id}` (`syncNoteImages`), body = the **full desired list** of `nextcloud_path`s in display order. This performs a two-way sync of the note's `## Images` section (service: `sync_note_images` in `backend/mydiary/image_sync.py`). The write is one `DiaryNote.edit()` (see [architecture.md](architecture.md#diary-notes-and-joplin)), so the note is read, written and verified under that note's lock.
 
 For each photo being **added**:
 
 1. Full-resolution download from Nextcloud (WebDAV GET).
-2. Shrink: `MyDiaryJoplin.create_thumbnail` → `reduce_size_recurse` (`core.py`) repeatedly thumbnails (EXIF-rotation-corrected) until ≤ 60000 bytes.
-3. Upload to Joplin as a resource; the resource id is the md5 of the shrunk bytes. Because the id is content-derived, byte-identical images map to a single Joplin resource — `create_thumbnail` reuses an existing resource instead of re-uploading (Joplin rejects a duplicate id), and the images section dedupes repeated refs.
+2. Shrink: `shrink_photo` → `reduce_size_recurse` (`core.py`) repeatedly thumbnails (EXIF-rotation-corrected) until ≤ 60000 bytes. It is a pure function returning the bytes and both hashes.
+3. Upload to Joplin as a resource (`edit.add_resource`); the resource id is the md5 of the shrunk bytes. Because the id is content-derived, byte-identical images map to a single Joplin resource. An existing resource is reused instead of re-uploaded (Joplin rejects a duplicate id), and the images section dedupes repeated refs.
 4. `MyDiaryImage` row: `hash` (md5 of shrunk bytes), `orig_image_hash` (md5 of original), `nextcloud_path`, `thumbnail_size`, `joplin_resource_id`, `created_at` (parsed from the filename when possible), `diary_date` (uploads only).
 5. `![](:/{resource_id})` appended to the `## Images` section.
 
 For each photo being **removed** (present in the note but not in the desired list):
 
-- The markdown ref is removed and the Joplin resource is deleted (after the note update succeeds).
-- iPhone-sync rows (`H1phone_sync/…`): the `MyDiaryImage` row is **deleted** — it is derived data, recreated identically on re-add.
+- The markdown ref is removed. The Joplin resource is dropped: deleted after the note has been written and committed, and only if no other note references it (the same photo on two days is one resource).
+- iPhone-sync rows (`H1phone_sync/…`): the `MyDiaryImage` row is **deleted** (with its link rows first), since it is derived data, recreated identically on re-add. A row another note also links is kept.
 - Upload rows (`mydiary_uploads/…`): the row is **kept** with `joplin_resource_id` nulled, so the image still appears (deselected) in the uploads tab and can be re-added later.
 
-Bookkeeping on every sync:
+Bookkeeping:
 
-- `JoplinNoteImageLink` rows for the note are deleted and recreated with contiguous `sequence_num` following the final section order (composite PK makes in-place renumbering fragile).
 - **Unknown resource ids** — refs in the Images section with no matching `MyDiaryImage` row (e.g. images added by the removed Google Photos flow) — are preserved in place and never touched.
-- Order of operations: create new resources → PUT note body → delete removed resources (best-effort) → single DB commit. If the note PUT fails, just-created resources are cleaned up and the DB is rolled back.
+- `JoplinNoteImageLink` rows are part of the Note Mirror. Every mirror refresh (this sync's write, the hourly sync, opening the day) rebuilds them from the Images section's refs in order, with contiguous `sequence_num`, skipping unknown ids. So the links also follow photos reordered or removed by hand in Joplin.
+- Failure: the DB is rolled back and the resources this sync created are deleted, unless the note turned out to reference them. A write the Joplin app keeps overwriting fails with 409 (`NoteClobbered`).
 
-The markdown edit uses `MarkdownSection.set_content` (`markdown_edits.py`), which replaces the app-owned Images section unconditionally. (The general `MarkdownSection.update` only permits safe insertions — by design, to protect hand-written sections — and cannot express removals.)
-
-Reading back: `GET /joplin/get_note_images/{note_id}` (`joplinNoteImages`) extracts resource ids from the note markdown and joins them to `MyDiaryImage` rows by `joplin_resource_id` (unknown ids are skipped). The frontend marks a grid photo as "in the note" iff its path appears among the returned `nextcloud_path`s.
+Reading back: `GET /joplin/get_note_images/{note_id}` (`joplinNoteImages`) takes the resource ids from the note's Images section and joins them to `MyDiaryImage` rows by `joplin_resource_id` (unknown ids are skipped). The frontend marks a grid photo as "in the note" iff its path appears among the returned `nextcloud_path`s.
 
 ## Manual uploads
 
@@ -117,4 +115,4 @@ These come from the build (2026-08/09) and are easy to break by accident:
 
 ## Deprecated: Google Photos
 
-The Google Photos integration (thumbnail listing + add-to-Joplin routes) was removed in 2026-07. It was never used by the frontend and never persisted to the database, so old notes may contain image refs with no `MyDiaryImage` row; the sync logic preserves such refs untouched. Note: `MyDiaryDay.update_joplin_note` (the `joplinUpdateNote` route) regenerates the Images section from DB links and can still conflict on those legacy notes — a pre-existing limitation unchanged by the overhaul.
+The Google Photos integration (thumbnail listing + add-to-Joplin routes) was removed in 2026-07. It was never used by the frontend and never persisted to the database, so old notes may contain image refs with no `MyDiaryImage` row; the sync logic preserves such refs untouched. Refreshing a note (`MyDiaryDay.update_joplin_note`, the `joplinUpdateNote` route) doesn't touch the Images section, so it leaves those refs alone too.

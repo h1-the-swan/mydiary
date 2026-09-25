@@ -109,7 +109,7 @@ class MarkdownSection:
     def set_content(self, new_content: str) -> str:
         """Replace this section's content unconditionally, preserving the heading line.
 
-        Only for App-owned Sections: see `DiaryNote.edit()` and ADR-0001.
+        Only for App-owned Sections: see `DiaryNote.edit()` and ADR-0002.
         """
         heading_line = self.lines[0] if self.lines else f"{'#' * self.level} {self.title}"
         new_content = new_content.strip()

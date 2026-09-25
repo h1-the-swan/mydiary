@@ -312,7 +312,7 @@ class MyDiaryDay:
     def update_joplin_note(self, session: Optional[Session] = None, joplin_connector=None):
         """Refresh the day's Diary Note: replace its Google Calendar events
         and Spotify tracks with the day's data, adding either section if the
-        note lacks it. Nothing else in the note is written (ADR-0001)."""
+        note lacks it. Nothing else in the note is written (ADR-0002)."""
         from .diary_note import DiaryNote
 
         if joplin_connector is not None:

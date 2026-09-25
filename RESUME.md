@@ -4,7 +4,7 @@ Working notes for resuming the Diary Note module refactor (one module owns every
 
 - Branch: `diary-note-module`
 - Worktree: `../mydiary-diary-note-module` (a sibling of the primary checkout)
-- Plan: `.scratch/diary-note-module/spec.md` and `.scratch/diary-note-module/issues/01..07`, untracked on purpose. Since 2026-09-25 this worktree's `.scratch` is a symlink to the primary checkout's `/home/hasone/code/mydiary/.scratch`, so they live there. Also `CONTEXT.md` (glossary) and `docs/adr/0001-diary-note-sections-have-one-owner.md`.
+- Plan: `.scratch/diary-note-module/spec.md` and `.scratch/diary-note-module/issues/01..07`, untracked on purpose. Since 2026-09-25 this worktree's `.scratch` is a symlink to the primary checkout's `/home/hasone/code/mydiary/.scratch`, so they live there. Also `CONTEXT.md` (glossary) and `docs/adr/0002-diary-note-sections-have-one-owner.md`.
 
 To resume, read the spec and the issue named in "Next action". Then run `git status --short` and `git log --oneline main..` in the worktree, `docker compose up -d` (app on http://localhost:8088), and `docker compose exec -T backend pytest -q -p no:cacheprovider`. Continue from "Next action".
 
@@ -18,14 +18,17 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 - [x] 4. Map sync on `edit()`
 - [x] 5. Photo sync on `edit()`
 - [x] 6. Section registry, refresh and creation
-- [ ] 7. Cleanup, in two commits:
+- [x] 7. Cleanup, in two commits:
   - [x] 7a. Code: sentinels, readable body, one ref syntax, shrink script, inline fake, dead client methods
-  - [ ] 7b. Docs: `docs/architecture.md`, `CONTEXT.md` check, renumber our ADR to 0002
+  - [x] 7b. Docs: `docs/architecture.md`, the image/location/tags/worktrees docs, `CONTEXT.md` check, renumber our ADR to 0002
+- [ ] 8. Merge main (song-practice #633, 053dd3f) into the branch and port Practice onto the registry, in one reviewed merge commit
 - [ ] Verification: the manual checks listed in issues 04, 05 and 06, in the worktree stack against `mydiary_test`
 
 ## Next action
 
-Step 7b (issue 07 is `claimed`): rename `docs/adr/0001-diary-note-sections-have-one-owner.md` to `0002-…` and update every `ADR-0001` reference to it (diary_note.py, markdown_edits.py, mydiary_day.py, CONTEXT.md, this file); update `docs/architecture.md` (backend file table: `diary_note.py`, `joplin_port.py`; the port and `InMemoryJoplin`); check `CONTEXT.md` against the code; move lasting Notes below into the docs. Then resolve issue 07 and do the Verification step.
+Step 8: `git merge --no-commit main`. Resolve `mydiary_day.py` onto the branch's structure. Add Practice to `SECTIONS` (App-owned, after Spotify tracks), put it in `init_markdown` and `refreshed_sections()` only when `practice_runs` is non-empty, and move `tests/test_mydiary_day_practice.py` onto `InMemoryJoplin`. Update `docs/song-practice.md` (its `ensure_section` passages), the App-owned lists in `CONTEXT.md` and ADR 0002, and `docs/architecture.md`'s conflict. Then `alembic upgrade head` in the worktree container (#633 added a migration) and `docker compose up -d --build -V mydiary-vuetify` (new frontend packages), full tests, review, and ask before committing.
+
+After step 8, Verification: work through the manual checks listed in issues 04, 05 and 06 in the worktree stack (http://localhost:8088, backend pointed at `mydiary_test`), recording each result here. `mydiary_test` only has notes in Dec 2021 and 2022, so seed test notes shaped like real ones first (see the spec's Testing section; ask before copying real note bodies). Then the merge: the user decides; delete this file in a final commit first.
 
 ## Notes
 
@@ -65,3 +68,5 @@ Step 7b (issue 07 is `claimed`): rename `docs/adr/0001-diary-note-sections-have-
 - Step 7a: `HttpJoplin` stays a wrapper instead of folding into the client (the step 1 plan). The `external_api` fixtures still read the client's `requests.Response` returns, and the wrapper is where failures become `JoplinError`. The client's `get_note_id_by_title` returns `None` now; its `get_note_id_by_date` (with the notebook-root fallback), `get_info_all_days` and `joplin_reduce_image_size` are gone.
 - Step 7a: `/joplin/get_info_all_days` runs on the port and is a plain `def`. A note with no Words or Images section now counts as `false` (it was a 500), and a year with no folder has no notes (the client used to fall back to the notebook root). `/joplin/get_note_images` no longer special-cases `"does_not_exist"`: every frontend caller already skips the call for it.
 - `mydiary_test` currently has notes only in 2021 (Dec) and 2022 (2022-01-14, 2022-11-02); its 2024 folder is empty.
+- Step 7b: the lasting parts of these Notes (how `edit()` writes and verifies, the lock, autoflush, the Words check, the port and `InMemoryJoplin`, the contract test) are now in `docs/architecture.md` under "Diary Notes and Joplin". `docs/architecture.md` has no backend file table, whatever issue 07 and CLAUDE.md say, so that went in as prose.
+- Song-practice (#633) landed on main at 18:45 on 2026-09-25 (b44df35), after this branch's rebase, followed by 053dd3f (docs). Its Practice section uses `ensure_section` in `update_joplin_note`, appends to `init_markdown`'s template, and its test imports `tests.fakes`; this branch removed all three. The user chose to merge main into the branch (no second rebase) and port Practice onto the registry in that merge, reviewed like a step.

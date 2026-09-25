@@ -224,11 +224,18 @@ beneath. Only stays over an hour get a duration label.
 ## Joplin
 
 `owntracks_maps.sync_day_map_to_note` renders, uploads, and writes the
-`## Location` section, which sits after `## Images`.
+`## Location` section, which sits after `## Images`. Once a note exists it is
+the section's only writer. It does all of this inside one `DiaryNote.edit()`
+(see [architecture.md](architecture.md#diary-notes-and-joplin)), so the
+`OwnTracksDayMap` rows are committed only once the note write has been
+verified, and a map resource the day no longer uses is deleted only after that.
+A note the Joplin app keeps overwriting gets a 409 from
+`/owntracks/map/{dt}/to_note`.
 
-- Uploads via `create_resource`, **not** `create_thumbnail` — the latter's 60KB
-  ceiling would destroy the map. No `MyDiaryImage` row is created either, or the
-  map would leak into the photo grid and the Images section.
+- Uploads the rendered bytes as they are (`edit.add_resource`), skipping the
+  photo pipeline's `shrink_photo` and its 60KB ceiling. No `MyDiaryImage` row is
+  created either, or the map would leak into the photo grid and the Images
+  section.
 - `OwnTracksDayMap` is one row **per panel** — `(diary_date, panel)` is the
   primary key, and panel 0 is the overview every day has. It records
   `content_hash` — `sha256` over that panel's track hash plus
@@ -247,11 +254,11 @@ beneath. Only stays over an hour get a duration label.
   enough on its own to invalidate every stored day — which is what makes
   `scripts/owntracks_reencode_maps.py` work without `force`, and makes it
   resumable: a day already re-encoded hashes equal and is skipped.
-- `create_resource(ext=render.ext)` is what makes a non-PNG map render in the
+- `add_resource(ext=render.ext)` is what makes a non-PNG map render in the
   note at all: Joplin derives the resource's mime type from that extension.
-- Old notes predating this feature have no Location section, and
-  `update_joplin_note` skips sections it does not find. `MarkdownDoc.ensure_section`
-  is what backfills it.
+- Old notes predating this feature have no Location section. Map sync adds it
+  in the place the section registry gives it (`edit.set_section`); refreshing a
+  note never writes Location.
 - The section holds the map **and** a text itinerary. The itinerary is the part
   that keeps working: Joplin can search text, it cannot search an image. A
   multi-area day leads with the overview and the day summary, then gives each
