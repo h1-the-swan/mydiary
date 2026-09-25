@@ -332,6 +332,7 @@ class MyDiaryJoplin:
             "fields": fields,
         }
         r = requests.get(f"{self.base_url}/notes/{id}", params=params)
+        r.raise_for_status()
         return JoplinNote.from_api_response(r)
 
     def sync_note_api_to_db_obj(
@@ -789,6 +790,7 @@ class MyDiaryJoplin:
         }
         while has_more:
             r = requests.get(url, params=params)
+            r.raise_for_status()
             resp = r.json()
             for note in resp["items"]:
                 yield note
