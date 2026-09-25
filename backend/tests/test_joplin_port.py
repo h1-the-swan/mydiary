@@ -9,6 +9,7 @@ like any other code that writes to Joplin (see CLAUDE.md)."""
 
 import hashlib
 import os
+import time
 import uuid
 from datetime import date
 
@@ -207,6 +208,22 @@ def test_resource_round_trip(joplin):
     assert not joplin.port.resource_exists(resource_id)
 
 
+def test_resource_note_ids(joplin):
+    resource_id = joplin.port.create_resource(os.urandom(256))
+    assert joplin.port.get_resource_note_ids(resource_id) == []
+
+    note_id = _create_day_note(joplin.port, f"# 2098-03-14\n\n![](:/{resource_id})\n")
+
+    # Joplin indexes a note's resources in the background, not on save
+    deadline = time.monotonic() + 90
+    while (
+        joplin.port.get_resource_note_ids(resource_id) != [note_id]
+        and time.monotonic() < deadline
+    ):
+        time.sleep(1)
+    assert joplin.port.get_resource_note_ids(resource_id) == [note_id]
+
+
 def test_same_bytes_twice_raises(joplin):
     data = os.urandom(256)
     joplin.port.create_resource(data)
@@ -292,6 +309,20 @@ def test_clobber_next_update():
     # only the next update is clobbered
     joplin.update_note_body(note_id, "newer")
     assert joplin.get_note(note_id).body == "newer"
+
+
+def test_clobber_the_next_two_updates():
+    joplin = InMemoryJoplin()
+    note_id = joplin.add_note(TITLE, "original")
+    joplin.clobber_next_update(note_id, "stale 1")
+    joplin.clobber_next_update(note_id, "stale 2")
+
+    joplin.update_note_body(note_id, "new")
+    assert joplin.get_note(note_id).body == "stale 1"
+    joplin.update_note_body(note_id, "new")
+    assert joplin.get_note(note_id).body == "stale 2"
+    joplin.update_note_body(note_id, "new")
+    assert joplin.get_note(note_id).body == "new"
 
 
 def test_fail_next_update():

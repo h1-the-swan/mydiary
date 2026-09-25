@@ -35,6 +35,7 @@ from sqlmodel import Field, SQLModel
 from mydiary.joplin_connector import MyDiaryJoplin
 from .diary_note import (
     DiaryNote,
+    NoteClobbered,
     WordsConflict,
     refresh_note_mirror,
     sync_changed_notes,
@@ -589,7 +590,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"])
 
 
 @app.exception_handler(WordsConflict)
-def words_conflict_handler(request: Request, e: WordsConflict):
+@app.exception_handler(NoteClobbered)
+def diary_note_conflict_handler(request: Request, e: Exception):
     return JSONResponse(status_code=409, content={"detail": str(e)})
 
 

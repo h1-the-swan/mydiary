@@ -69,6 +69,11 @@ class JoplinPort(Protocol):
 
     def resource_exists(self, resource_id: str) -> bool: ...
 
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        """Ids of the notes that reference a resource. Joplin indexes this in
+        the background, so a note saved moments ago may not be counted yet."""
+        ...
+
     def get_note_tags(self, note_id: str) -> List[str]:
         """Titles of Joplin's own tags on a note."""
         ...
@@ -161,6 +166,11 @@ class HttpJoplin:
     def resource_exists(self, resource_id: str) -> bool:
         with _joplin_errors(f"looking up resource {resource_id}"):
             return self.client.resource_exists(resource_id)
+
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        url = f"{self.client.base_url}/resources/{resource_id}/notes"
+        with _joplin_errors(f"listing the notes of resource {resource_id}"):
+            return [item["id"] for item in self.client._yield_pages(url, ["id"])]
 
     def get_note_tags(self, note_id: str) -> List[str]:
         with _joplin_errors(f"getting the tags of note {note_id}"):

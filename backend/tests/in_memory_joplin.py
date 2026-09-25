@@ -62,7 +62,7 @@ class InMemoryJoplin:
         self.tags: Dict[str, str] = {}  # tag id -> title
         self.note_tag_ids: Dict[str, List[str]] = {}  # note id -> tag ids
         self.updates: List[Tuple[str, str]] = []
-        self._clobbers: Dict[str, str] = {}
+        self._clobbers: Dict[str, List[str]] = {}
         self._fail_next_update = False
         # Joplin's times are naive local datetimes; a fixed clock that moves
         # on every write keeps "updated since" comparisons deterministic
@@ -134,8 +134,8 @@ class InMemoryJoplin:
         n.body = body
         n.updated_time = self._tick()
         self.updates.append((note_id, body))
-        if note_id in self._clobbers:
-            n.body = self._clobbers.pop(note_id)
+        if self._clobbers.get(note_id):
+            n.body = self._clobbers[note_id].pop(0)
             n.updated_time = self._tick()
 
     # --- resources ---
@@ -159,6 +159,10 @@ class InMemoryJoplin:
 
     def resource_exists(self, resource_id: str) -> bool:
         return resource_id in self.resources
+
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        # always current, unlike Joplin's background index
+        return [n.id for n in self.notes.values() if f":/{resource_id}" in n.body]
 
     # --- tags ---
 
@@ -229,8 +233,9 @@ class InMemoryJoplin:
 
     def clobber_next_update(self, note_id: str, body: str) -> None:
         """After the next body update to this note lands, overwrite it with
-        `body`, the way the Joplin app's autosave writes back a stale copy."""
-        self._clobbers[note_id] = body
+        `body`, the way the Joplin app's autosave writes back a stale copy.
+        Called twice, it clobbers the next two updates."""
+        self._clobbers.setdefault(note_id, []).append(body)
 
     def fail_next_update(self) -> None:
         """Make the next body update raise JoplinError and change nothing."""

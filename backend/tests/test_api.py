@@ -1384,6 +1384,15 @@ class TestTags:
         finally:
             app.dependency_overrides.pop(get_joplin_port, None)
 
+    def test_note_clobbered_is_409(self):
+        from mydiary.api import diary_note_conflict_handler
+        from mydiary.diary_note import NoteClobbered
+
+        assert app.exception_handlers[NoteClobbered] is diary_note_conflict_handler
+        r = diary_note_conflict_handler(None, NoteClobbered("2026-09-13", ["Location"]))
+        assert r.status_code == 409
+        assert b"Location" in r.body
+
     def test_sync_one_day_words_conflict_is_409(self, session: Session, client: TestClient):
         from mydiary.api import get_joplin_port
         from tests.in_memory_joplin import InMemoryJoplin

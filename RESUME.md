@@ -14,7 +14,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 
 - [x] 1. Joplin port and `InMemoryJoplin`
 - [x] 2. Diary Note lookup and Note Mirror refresh
-- [ ] 3. `DiaryNote.edit()`
+- [x] 3. `DiaryNote.edit()`
 - [ ] 4. Map sync on `edit()`
 - [ ] 5. Photo sync on `edit()`
 - [ ] 6. Section registry, refresh and creation
@@ -23,7 +23,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 
 ## Next action
 
-Set issue 03's `Status:` to `claimed` and build `DiaryNote.edit()`. Before starting, decide where photo sync's "resource still used by another note" guard lives (gap (b) below).
+Step 4, in a fresh session: set issue 04's `Status:` to `claimed` and move map sync (`owntracks_maps._sync_day_map_to_note`) onto `DiaryNote.edit()`.
 
 ## Notes
 
@@ -31,7 +31,7 @@ Set issue 03's `Status:` to `claimed` and build `DiaryNote.edit()`. Before start
 - Never commit `.scratch/` or `docker-compose.local.yaml` (both in `.git/info/exclude`).
 - Baseline before step 1: 351 passed, 12 deselected (`external_api`) in the container.
 - Step 1 deviation: `MyDiaryJoplin` doesn't implement the port directly. Four port names (`get_note_id_by_date`, `update_note_body`, `create_resource`, `delete_resource`) collide with client methods whose return values (the sentinel, a `requests.Response`) legacy callers still read, so `HttpJoplin` in `mydiary/joplin_port.py` wraps the client. Fold it into the client in step 7, once nothing calls the legacy forms.
-- Spec gaps found in step 1: (a) note listing, settled in step 2 as `JoplinPort.yield_year_notes(year)`, empty for a missing year folder; (b) still open: the port's `delete_resource` is a plain delete, but photo sync today deletes with `ignore_id=note.id` so a resource another note still references is kept. Decide where that guard lives by step 3/5.
+- Spec gaps found in step 1: (a) note listing, settled in step 2 as `JoplinPort.yield_year_notes(year)`, empty for a missing year folder; (b) settled in step 3: `edit()` deletes a dropped resource only when no other note references it, going by the mirror and `JoplinPort.get_resource_note_ids`. Joplin's index lags about 4 s behind a save, so the mirror check matters.
 - Step 2: routes get the port from `get_joplin_port` (built by `open_joplin_port()` in api.py, which the hourly sync also uses). Route tests override `get_joplin_port` with an `InMemoryJoplin`; background-sync tests monkeypatch `api_module.open_joplin_port`. `get_joplin_client` is still there for the routes that haven't moved.
 - Step 2: `WordsConflict` maps to 409 through an app-wide exception handler, so any route that refreshes the mirror returns 409 on one.
 - Between steps 2 and 6, refresh (`update_joplin_note`) still merges Images with the append-only `update()`, and `MyDiaryDay.images` comes from the link rows. The mirror now adds links for 257 older notes that had none (see issue 02's Answer). On such a note that also has legacy refs, refresh could hit "could not update text" until step 6 takes Images out of refresh. Notes that already had links were exposed to this before.
@@ -43,3 +43,5 @@ Set issue 03's `Status:` to `claimed` and build `DiaryNote.edit()`. Before start
 - `tests/test_joplin_port.py` runs the contract against the real Joplin with `-m external_api`, in a `2098` folder of `mydiary_test`, deleting what it creates. It also creates and deletes a temporary tag and resources, which are profile-wide in Joplin, not per-notebook. Run it in the container: `docker compose exec -T backend pytest -p no:cacheprovider -m external_api tests/test_joplin_port.py`. It passed on 2026-09-25 and left no folder or tags behind. That run confirmed Joplin rejects a duplicate resource id and a PUT to a missing note, and answers `200 []` for a missing note's tags, which `InMemoryJoplin` now matches.
 - `black` is a dev dependency but the existing files aren't black-clean. New files are formatted with it; existing ones are left alone.
 - Container runs: `docker compose exec -T backend pytest -q -p no:cacheprovider` (`-p no:cacheprovider` avoids root-owned `.pytest_cache` in the bind mount).
+- Step 3: `edit()` runs the Words check on entry, re-reads the note just before building the body it PUTs, re-applies its sections onto the re-read body when it retries after a clobber, and on failure keeps any created resource the note turned out to reference. Issue 03's Answer lists where this departs from the spec.
+- Step 3: `InMemoryJoplin.clobber_next_update` queues clobbers, so calling it twice clobbers both the write and its retry.
