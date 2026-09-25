@@ -1535,7 +1535,7 @@ def owntracks_map_to_note(
     tz: str = "infer",
     force: bool = False,
     session: Session = Depends(get_session),
-    mydiary_joplin: MyDiaryJoplin = Depends(get_joplin_client),
+    joplin: JoplinPort = Depends(get_joplin_port),
 ):
     """Render the day's map(s) and write them into the note's Location section."""
     from .owntracks_maps import sync_day_map_to_note
@@ -1543,7 +1543,7 @@ def owntracks_map_to_note(
     dt_obj = _owntracks_day(dt, tz, session)
     try:
         result, num_maps = sync_day_map_to_note(
-            dt_obj, session=session, mydiary_joplin=mydiary_joplin, force=force
+            dt_obj, session=session, joplin=joplin, force=force
         )
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))

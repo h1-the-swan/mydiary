@@ -16,9 +16,10 @@ import pendulum
 from sqlmodel import Session, select
 
 from .db import engine
+from .diary_note import DiaryNote
 from .joplin_connector import MyDiaryJoplin
+from .joplin_port import HttpJoplin, JoplinPort
 from .map_render import RenderParams, render_day_map
-from .markdown_edits import MarkdownDoc
 from .models import OwnTracksDayMap
 from .mydiary_day import MyDiaryDay
 from .owntracks_connector import MyDiaryOwnTracks
@@ -30,8 +31,6 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 SECTION_TITLE = "Location"
-# the Location section goes right after the photos
-SECTION_AFTER = "Images"
 
 
 @dataclass(frozen=True)
@@ -175,29 +174,29 @@ def render_for_day(
 def sync_day_map_to_note(
     dt: datetime,
     session: Optional[Session] = None,
-    mydiary_joplin: Optional[MyDiaryJoplin] = None,
+    joplin: Optional[JoplinPort] = None,
     params: Optional[TrackParams] = None,
     force: bool = False,
     render: Optional[RenderParams] = None,
 ) -> Tuple[str, int]:
     """Render the day's map(s), upload to Joplin, and write the Location section.
 
-    Returns (result, number of maps written). Re-running for an unchanged day is
-    a no-op: the content hash covers both the processed track and the render
-    parameters.
+    Returns (result, number of maps). Re-running for an unchanged day is a
+    no-op: the content hash covers both the processed track and the render
+    parameters, so every panel reuses its resource and the section comes out
+    as the note already has it. `force` re-renders every panel regardless.
     """
     close_session = session is None
     if session is None:
         session = Session(engine)
-    close_joplin = mydiary_joplin is None
-    if mydiary_joplin is None:
-        mydiary_joplin = MyDiaryJoplin(init_config=False)
-        mydiary_joplin.__enter__()
     try:
-        return _sync_day_map_to_note(dt, session, mydiary_joplin, params, force, render)
+        if joplin is None:
+            with MyDiaryJoplin(init_config=False) as client:
+                return _sync_day_map_to_note(
+                    dt, session, HttpJoplin(client), params, force, render
+                )
+        return _sync_day_map_to_note(dt, session, joplin, params, force, render)
     finally:
-        if close_joplin:
-            mydiary_joplin.__exit__(None, None, None)
         if close_session:
             session.close()
 
@@ -205,7 +204,7 @@ def sync_day_map_to_note(
 def _sync_day_map_to_note(
     dt: datetime,
     session: Session,
-    mydiary_joplin: MyDiaryJoplin,
+    joplin: JoplinPort,
     params: Optional[TrackParams],
     force: bool,
     render: Optional[RenderParams] = None,
@@ -216,6 +215,10 @@ def _sync_day_map_to_note(
     render = render or RenderParams()
     _, panels = panels_for_day(dt, session, params, render)
 
+    diary_note = DiaryNote.find(joplin, diary_date)
+    if diary_note is None:
+        raise LookupError(f"no Joplin note for {diary_date}")
+
     existing = list(
         session.exec(
             select(OwnTracksDayMap)
@@ -223,71 +226,45 @@ def _sync_day_map_to_note(
             .order_by(OwnTracksDayMap.panel)
         )
     )
-
-    note_id = mydiary_joplin.get_note_id_by_date(dt)
-    if note_id is None or note_id == "does_not_exist":
-        raise LookupError(f"no Joplin note for {diary_date}")
-
-    # A resource can exist and still not be in the note: e.g. the note was open
-    # in the Joplin app when this ran before, and the app's own autosave
-    # clobbered the write with its stale in-memory copy. So "up to date" also
-    # requires the note body to still reference every expected resource, not
-    # just that the resources themselves are intact.
-    current_body = mydiary_joplin.get_note(note_id).body
-    if (
-        not force
-        and [row.content_hash for row in existing] == [p.content_hash for p in panels]
-        and all(
-            mydiary_joplin.resource_exists(row.joplin_resource_id) for row in existing
+    rows_changed = False
+    with diary_note.edit(session) as edit:
+        # an unchanged panel keeps its resource, so a day that gains areas
+        # re-uploads only the new panels and leaves its overview alone
+        reusable = (
+            {}
+            if force
+            else {
+                row.content_hash: row.joplin_resource_id
+                for row in existing
+                if joplin.resource_exists(row.joplin_resource_id)
+            }
         )
-        and all(f":/{row.joplin_resource_id}" in current_body for row in existing)
-    ):
-        logger.info(f"owntracks map for {diary_date} is already up to date")
-        return "no update", len(panels)
-
-    # an unchanged panel keeps its resource, so a day that gains areas re-uploads
-    # only the new panels and leaves its overview alone
-    reusable = (
-        {}
-        if force
-        else {
-            row.content_hash: row.joplin_resource_id
-            for row in existing
-            if mydiary_joplin.resource_exists(row.joplin_resource_id)
-        }
-    )
-    old_resource_ids = [row.joplin_resource_id for row in existing]
-
-    resource_ids: List[str] = []
-    created: List[str] = []
-    try:
+        resource_ids: List[str] = []
         for i, panel in enumerate(panels):
             resource_id = reusable.get(panel.content_hash)
             if resource_id is None:
-                data = render_day_map(
-                    panel.track, params, render, frame=panel.frame
-                )
+                data = render_day_map(panel.track, params, render, frame=panel.frame)
                 # Joplin takes the resource's mime from this extension, so it is
                 # the only thing the note needs to render a non-PNG map
                 title = f"map-{diary_date}" if i == 0 else f"map-{diary_date}-{i}"
-                r = mydiary_joplin.create_resource(
-                    data=data, title=title, ext=render.ext
-                )
-                r.raise_for_status()
-                resource_id = r.json()["id"]
-                created.append(resource_id)
+                resource_id = edit.add_resource(data, title=title, ext=render.ext)
             resource_ids.append(resource_id)
 
-        note = mydiary_joplin.get_note(note_id)
-        md_note = MarkdownDoc(note.body, parent=note)
-        # an old note predating this feature has no Location section at all, and
-        # update_joplin_note will never add one
-        section = md_note.ensure_section(SECTION_TITLE, after_title=SECTION_AFTER)
-        section.set_content(section_content(resource_ids, panels))
-        response = mydiary_joplin.update_note_body(note_id, md_note.txt)
-        response.raise_for_status()
+        edit.set_section(SECTION_TITLE, section_content(resource_ids, panels))
+        for row in existing:
+            if row.joplin_resource_id not in resource_ids:
+                edit.drop_resource(row.joplin_resource_id)
 
+        by_panel = {row.panel: row for row in existing}
         for i, (panel, resource_id) in enumerate(zip(panels, resource_ids)):
+            row = by_panel.get(i)
+            if (
+                row is not None
+                and row.content_hash == panel.content_hash
+                and row.joplin_resource_id == resource_id
+            ):
+                continue
+            rows_changed = True
             session.merge(
                 OwnTracksDayMap(
                     diary_date=diary_date,
@@ -303,25 +280,14 @@ def _sync_day_map_to_note(
         # a day that lost an area leaves rows behind that nothing points at
         for row in existing:
             if row.panel >= len(panels):
+                rows_changed = True
                 session.delete(row)
-        session.commit()
-    except Exception:
-        session.rollback()
-        for resource_id in created:
-            try:
-                mydiary_joplin.delete_resource(resource_id, force=True)
-            except Exception:
-                logger.warning(f"failed to clean up joplin resource {resource_id}")
-        raise
 
-    # the note now points at the new resources, so superseded ones are safe to drop
-    for resource_id in old_resource_ids:
-        if resource_id in resource_ids:
-            continue
-        try:
-            mydiary_joplin.delete_resource(resource_id, force=True)
-        except Exception:
-            logger.warning(f"failed to delete superseded resource {resource_id}")
+    # a map re-created because Joplin lost it counts, though the note and
+    # rows come out the same
+    if not edit.wrote and not rows_changed and not edit.created:
+        logger.info(f"owntracks map for {diary_date} is already up to date")
+        return "no update", len(panels)
     return "updated", len(panels)
 
 

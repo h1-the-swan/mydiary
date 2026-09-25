@@ -243,7 +243,10 @@ class DiaryNote:
 
         Commit your own pending writes before entering: a failed edit rolls
         back the whole session, and uncommitted SQLite writes held while
-        waiting on another edit's lock would block that edit's commit."""
+        waiting on another edit's lock would block that edit's commit.
+        Autoflush is off inside the block, so rows added there reach the
+        database only after Joplin has been written, and a query in the
+        block doesn't see them."""
         with _note_lock(self.id):
             note = self.read()
             # the mirror refresh at the end would raise it anyway; raising
@@ -252,8 +255,11 @@ class DiaryNote:
             check_words(session, note)
             edit = NoteEdit(self, note)
             try:
-                yield edit
-                written = edit._write(session)
+                # a flush starts SQLite's write lock, which would then be held
+                # through every Joplin request until the commit
+                with session.no_autoflush:
+                    yield edit
+                    written = edit._write(session)
                 refresh_note_mirror(session, self.joplin, written, commit=False)
                 session.commit()
             except BaseException:
@@ -274,6 +280,8 @@ class NoteEdit:
         self.sections: Dict[str, str] = {}
         self.created: List[str] = []
         self.dropped: List[str] = []
+        # whether the edit PUT the note; readable once the edit has exited
+        self.wrote = False
         # the body Joplin was last seen holding
         self._last_seen = note.body
 
@@ -358,6 +366,7 @@ class NoteEdit:
 
     def _put_and_read(self, body: str) -> JoplinNote:
         self.joplin.update_note_body(self.diary_note.id, body)
+        self.wrote = True
         # what Joplin holds as far as we know, should the read fail
         self._last_seen = body
         written = self.diary_note.read()
@@ -469,6 +478,9 @@ def refresh_note_mirror(
 
     if sync_dt is None:
         sync_dt = pendulum.now(tz="UTC")
+    # before anything flushes, so no Joplin request waits under SQLite's
+    # write lock
+    joplin_tags = joplin.get_note_tags(note.id)
     words = words_of(note.body)
     resource_ids = image_resource_ids_of(note.body)
 
@@ -504,7 +516,7 @@ def refresh_note_mirror(
     _rebuild_image_links(session, note, resource_ids)
     added, removed = sync_note_tags(session, note, commit=False)
     j_added, j_removed = sync_joplin_note_tags(
-        session, note.title, joplin.get_note_tags(note.id), commit=False
+        session, note.title, joplin_tags, commit=False
     )
     if commit is True:
         session.commit()

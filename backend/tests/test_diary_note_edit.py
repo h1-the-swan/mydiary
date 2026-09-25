@@ -58,6 +58,7 @@ class TestWrite:
         assert "## Google Calendar events\n\n| 9:00 | 10:00 | Walk |\n" in body
         assert "## Words\n\nhello\n" in body
         assert len(note.joplin.updates) == 1
+        assert edit.wrote is True
         db_note = db_session.get(JoplinNote, note.id)
         assert db_note.body == body
         assert db_note.has_words is True
@@ -69,12 +70,44 @@ class TestWrite:
             db_session.add(Dog(name="Ruffles"))
         assert dogs(db_session) == ["Ruffles"]
 
+    def test_caller_rows_are_not_flushed_while_joplin_is_called(
+        self, db_session: Session
+    ):
+        # a flush takes SQLite's write lock, and a stalled Joplin request
+        # made under it would lock every other writer out
+        note = diary_note()
+        joplin = note.joplin
+        pending_at = []
+        for name in ("update_note_body", "get_note", "get_note_tags"):
+            real = getattr(joplin, name)
+
+            def spy(*args, _real=real, _name=name, **kwargs):
+                pending_at.append((_name, bool(db_session.new)))
+                return _real(*args, **kwargs)
+
+            setattr(joplin, name, spy)
+
+        with note.edit(db_session) as edit:
+            db_session.add(Dog(name="Ruffles"))
+            db_session.exec(select(Dog)).all()  # would autoflush
+            edit.set_section("Spotify tracks", "a song")
+            pending_at.clear()  # the read on entering came before the add
+
+        assert {name for name, _ in pending_at} == {
+            "update_note_body",
+            "get_note",
+            "get_note_tags",
+        }
+        assert all(pending for _, pending in pending_at)
+        assert dogs(db_session) == ["Ruffles"]
+
     def test_no_op_edit_makes_no_put(self, db_session: Session):
         note = diary_note()
         with note.edit(db_session) as edit:
             edit.set_section("Google Calendar events", "None")
             db_session.add(Dog(name="Ruffles"))
         assert note.joplin.updates == []
+        assert edit.wrote is False
         # the caller's rows and the mirror are still committed
         assert dogs(db_session) == ["Ruffles"]
         assert db_session.get(JoplinNote, note.id).body == BODY

@@ -8,6 +8,7 @@ from PIL import Image
 from sqlmodel import Session, select
 
 from mydiary import owntracks_maps
+from mydiary.diary_note import NoteClobbered
 from mydiary.map_render import RenderParams
 from mydiary.markdown_edits import MarkdownDoc
 from mydiary.models import JoplinNote, OwnTracksDayMap, OwnTracksLocation
@@ -17,6 +18,7 @@ from mydiary.owntracks_maps import (
     section_content,
     sync_day_map_to_note,
 )
+from tests.in_memory_joplin import InMemoryJoplin
 
 TZ = "America/New_York"
 DAY = "2026-07-01"
@@ -43,52 +45,15 @@ None
 """
 
 
-class FakeResponse:
-    def __init__(self, payload):
-        self._payload = payload
-
-    def json(self):
-        return self._payload
-
-    def raise_for_status(self):
-        pass
+def joplin_with_note(body=NOTE_BODY, day=DAY):
+    joplin = InMemoryJoplin()
+    joplin.add_note(day, body)
+    return joplin
 
 
-class FakeJoplin:
-    """Stands in for MyDiaryJoplin so tests never touch the real diary."""
-
-    def __init__(self, body=NOTE_BODY, note_id="note-1"):
-        self.note = JoplinNote(id=note_id, title=DAY, body=body)
-        self.resources = {}
-        self.deleted = []
-        self.update_count = 0
-        self.exts = []
-
-    def get_note_id_by_date(self, dt):
-        return self.note.id
-
-    def get_note(self, id, fields=None):
-        return self.note
-
-    def create_resource(self, data, title=None, ext="jpg"):
-        import hashlib
-
-        resource_id = hashlib.md5(data).hexdigest()
-        self.resources[resource_id] = title
-        self.exts.append(ext)
-        return FakeResponse({"id": resource_id})
-
-    def resource_exists(self, resource_id):
-        return resource_id in self.resources
-
-    def delete_resource(self, resource_id, force=False):
-        self.deleted.append(resource_id)
-        self.resources.pop(resource_id, None)
-
-    def update_note_body(self, note_id, new_body):
-        self.note.body = new_body
-        self.update_count += 1
-        return FakeResponse({"id": note_id})
+def body_of(joplin):
+    (note,) = joplin.notes.values()
+    return note.body
 
 
 class FakeTileDownloader:
@@ -155,37 +120,44 @@ def dt():
 
 
 def test_writes_a_location_section_into_the_note(db_with_locations, dt):
-    joplin = FakeJoplin()
+    joplin = joplin_with_note()
     result, num_maps = sync_day_map_to_note(
-        dt, session=db_with_locations, mydiary_joplin=joplin
+        dt, session=db_with_locations, joplin=joplin
     )
     assert (result, num_maps) == ("updated", 1)
 
-    md = MarkdownDoc(joplin.note.body)
+    md = MarkdownDoc(body_of(joplin))
     section = md.get_section_by_title("Location")
     assert section.get_resource_ids() == list(joplin.resources)
     assert "3 stops" in section.content
     assert "Arrive | Depart | Duration | Where" in section.content
 
 
+def test_the_write_refreshes_the_note_mirror(db_with_locations, dt):
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    (note_id,) = joplin.notes
+    assert db_with_locations.get(JoplinNote, note_id).body == body_of(joplin)
+
+
 def test_location_section_lands_after_images(db_with_locations, dt):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    titles = [s.title for s in MarkdownDoc(joplin.note.body).sections if s.title]
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    titles = [s.title for s in MarkdownDoc(body_of(joplin)).sections if s.title]
     assert titles.index("Location") == titles.index("Images") + 1
 
 
 def test_handwritten_words_are_untouched(db_with_locations, dt):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert "Something handwritten that must survive." in joplin.note.body
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert "Something handwritten that must survive." in body_of(joplin)
     # and the existing photo reference is still there
-    assert ":/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in joplin.note.body
+    assert ":/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in body_of(joplin)
 
 
 def test_records_bookkeeping_row(db_with_locations, dt):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     row = db_with_locations.get(OwnTracksDayMap, (dt.date(), 0))
     assert row is not None
     assert row.joplin_resource_id in joplin.resources
@@ -196,9 +168,9 @@ def test_records_bookkeeping_row(db_with_locations, dt):
 def test_resource_is_uploaded_as_a_jpeg(db_with_locations, dt):
     # Joplin takes the resource's mime type from this extension, so it is what
     # decides whether the note renders the map at all
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert joplin.exts == ["jpg"]
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert [r.ext for r in joplin.resources.values()] == ["jpg"]
 
 
 def test_changing_only_the_render_params_changes_the_content_hash(db_with_locations, dt):
@@ -212,16 +184,19 @@ def test_changing_only_the_render_params_changes_the_content_hash(db_with_locati
 
 
 def test_rerunning_an_unchanged_day_is_a_noop(db_with_locations, dt):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert joplin.update_count == 1
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert len(joplin.updates) == 1
+    created_at = db_with_locations.get(OwnTracksDayMap, (dt.date(), 0)).created_at
 
-    result, _ = sync_day_map_to_note(
-        dt, session=db_with_locations, mydiary_joplin=joplin
-    )
+    result, _ = sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     assert result == "no update"
-    assert joplin.update_count == 1  # note not rewritten
+    assert len(joplin.updates) == 1  # note not rewritten
     assert len(joplin.resources) == 1  # and no orphan created
+    # nor the bookkeeping row
+    db_with_locations.expire_all()
+    row = db_with_locations.get(OwnTracksDayMap, (dt.date(), 0))
+    assert row.created_at == created_at
 
 
 def test_reruns_when_the_note_lost_the_map_reference(db_with_locations, dt):
@@ -229,27 +204,67 @@ def test_reruns_when_the_note_lost_the_map_reference(db_with_locations, dt):
     # our write with a stale copy: the resource still exists and the track is
     # unchanged, but the note body no longer references it, so this must not
     # be treated as "up to date"
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert joplin.update_count == 1
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert len(joplin.updates) == 1
 
-    joplin.note.body = NOTE_BODY  # the app clobbered the note back to this
+    (note_id,) = joplin.notes
+    joplin.edit_note(note_id, NOTE_BODY)  # the app clobbered the note back to this
 
-    result, _ = sync_day_map_to_note(
-        dt, session=db_with_locations, mydiary_joplin=joplin
-    )
+    result, _ = sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     assert result == "updated"
-    assert joplin.update_count == 2
-    md = MarkdownDoc(joplin.note.body)
+    assert len(joplin.updates) == 2
+    md = MarkdownDoc(body_of(joplin))
     section = md.get_section_by_title("Location")
     assert section.get_resource_ids() == list(joplin.resources)
+
+
+def test_a_map_joplin_lost_is_recreated(db_with_locations, dt):
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    (resource_id,) = joplin.resources
+    del joplin.resources[resource_id]  # the note still references it
+
+    result, _ = sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert result == "updated"
+    # the render is deterministic, so it comes back under the same id and the
+    # note needs no rewrite
+    assert list(joplin.resources) == [resource_id]
+    assert len(joplin.updates) == 1
+
+
+def test_a_write_clobbered_once_is_retried(db_with_locations, dt):
+    joplin = joplin_with_note()
+    (note_id,) = joplin.notes
+    joplin.clobber_next_update(note_id, NOTE_BODY)
+
+    result, _ = sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert result == "updated"
+    assert len(joplin.updates) == 2
+    section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
+    assert section.get_resource_ids() == list(joplin.resources)
+
+
+def test_a_write_that_keeps_being_clobbered_raises_and_leaves_nothing(
+    db_with_locations, dt
+):
+    joplin = joplin_with_note()
+    (note_id,) = joplin.notes
+    joplin.clobber_next_update(note_id, NOTE_BODY)
+    joplin.clobber_next_update(note_id, NOTE_BODY)
+
+    with pytest.raises(NoteClobbered):
+        sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert body_of(joplin) == NOTE_BODY
+    assert not joplin.resources  # the uploaded map is cleaned up
+    assert db_with_locations.get(OwnTracksDayMap, (dt.date(), 0)) is None
 
 
 def test_force_replaces_the_resource_and_deletes_the_old_one(
     db_with_locations, dt, monkeypatch
 ):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+    joplin = joplin_with_note()
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     first_id = next(iter(joplin.resources))
 
     # a different render produces different bytes, hence a different resource
@@ -260,36 +275,32 @@ def test_force_replaces_the_resource_and_deletes_the_old_one(
 
     monkeypatch.setattr(owntracks_maps, "render_day_map", _bigger)
     result, _ = sync_day_map_to_note(
-        dt, session=db_with_locations, mydiary_joplin=joplin, force=True
+        dt, session=db_with_locations, joplin=joplin, force=True
     )
     assert result == "updated"
-    assert first_id in joplin.deleted
     assert first_id not in joplin.resources
+    assert len(joplin.resources) == 1
 
 
 def test_missing_location_data_raises_lookup_error(db_session, dt):
     with pytest.raises(LookupError):
-        sync_day_map_to_note(dt, session=db_session, mydiary_joplin=FakeJoplin())
+        sync_day_map_to_note(dt, session=db_session, joplin=joplin_with_note())
 
 
 def test_a_day_with_no_note_raises_lookup_error(db_with_locations, dt):
-    # get_note_id_by_date returns the string "does_not_exist", never None, so
-    # a None-only check let this fall through into the Joplin calls instead --
-    # which the re-encode backfill catches per day and would have died on
-    joplin = FakeJoplin()
-    joplin.get_note_id_by_date = lambda _dt: "does_not_exist"
+    # the re-encode backfill catches this per day; anything else would stop it
+    joplin = InMemoryJoplin()
     with pytest.raises(LookupError):
-        sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
+        sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     assert not joplin.resources  # and no orphan resource was uploaded first
 
 
 def test_backfills_the_section_into_a_note_that_lacks_it(db_with_locations, dt):
-    # update_joplin_note skips sections it does not find, so an old note would
-    # never gain a Location section without ensure_section
-    joplin = FakeJoplin()
-    assert "## Location" not in joplin.note.body
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert joplin.note.body.count("## Location") == 1
+    # an old note predating maps has no Location section at all
+    joplin = joplin_with_note()
+    assert "## Location" not in body_of(joplin)
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert body_of(joplin).count("## Location") == 1
 
 
 def test_existing_section_is_replaced_not_duplicated(db_with_locations, dt):
@@ -298,10 +309,10 @@ def test_existing_section_is_replaced_not_duplicated(db_with_locations, dt):
         "## Location\n\n![](:/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)\n\nstale text\n\n"
         "## Google Calendar events",
     )
-    joplin = FakeJoplin(body=stale)
-    sync_day_map_to_note(dt, session=db_with_locations, mydiary_joplin=joplin)
-    assert joplin.note.body.count("## Location") == 1
-    assert "stale text" not in joplin.note.body
+    joplin = joplin_with_note(body=stale)
+    sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
+    assert body_of(joplin).count("## Location") == 1
+    assert "stale text" not in body_of(joplin)
 
 
 def test_section_content_without_a_resource_is_still_useful():
@@ -386,26 +397,24 @@ def test_a_single_area_day_hashes_as_it_did_before_panels_existed(
 def test_a_two_area_day_writes_an_overview_plus_one_map_per_area(
     db_two_areas, dt_two_areas
 ):
-    joplin = FakeJoplin()
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
     result, num_maps = sync_day_map_to_note(
-        dt_two_areas, session=db_two_areas, mydiary_joplin=joplin
+        dt_two_areas, session=db_two_areas, joplin=joplin
     )
     assert (result, num_maps) == ("updated", 3)
 
-    section = MarkdownDoc(joplin.note.body).get_section_by_title("Location")
+    section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
     assert len(section.get_resource_ids()) == 3
     # each area gets its own heading and itinerary, and the level-3 heading does
     # not split the Location section in two
     assert section.content.count("### ") == 2
     assert section.content.count("Arrive | Depart | Duration | Where") == 2
-    assert joplin.note.body.count("## Location") == 1
+    assert body_of(joplin).count("## Location") == 1
 
 
 def test_each_panel_gets_its_own_bookkeeping_row(db_two_areas, dt_two_areas):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(
-        dt_two_areas, session=db_two_areas, mydiary_joplin=joplin
-    )
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
+    sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
     rows = list(
         db_two_areas.exec(
             select(OwnTracksDayMap)
@@ -420,15 +429,13 @@ def test_each_panel_gets_its_own_bookkeeping_row(db_two_areas, dt_two_areas):
 
 
 def test_rerunning_a_two_area_day_is_a_noop(db_two_areas, dt_two_areas):
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt_two_areas, session=db_two_areas, mydiary_joplin=joplin)
-    assert joplin.update_count == 1
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
+    sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
+    assert len(joplin.updates) == 1
 
-    result, _ = sync_day_map_to_note(
-        dt_two_areas, session=db_two_areas, mydiary_joplin=joplin
-    )
+    result, _ = sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
     assert result == "no update"
-    assert joplin.update_count == 1
+    assert len(joplin.updates) == 1
     assert len(joplin.resources) == 3  # and no orphans
 
 
@@ -439,10 +446,10 @@ def test_a_day_that_gains_areas_reuses_its_overview_resource(
     # panel-0 row already, and only the two area panels are new work
     import mydiary.owntracks_maps as om
 
-    joplin = FakeJoplin()
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
     original = om.split_into_areas
     monkeypatch.setattr(om, "split_into_areas", lambda track, threshold_m=0: [])
-    sync_day_map_to_note(dt_two_areas, session=db_two_areas, mydiary_joplin=joplin)
+    sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
     assert len(joplin.resources) == 1
     overview_id = next(iter(joplin.resources))
 
@@ -450,12 +457,34 @@ def test_a_day_that_gains_areas_reuses_its_overview_resource(
     # autouse fixture's MYDIARY_CACHE_DIR and send tile writes at the real cache
     monkeypatch.setattr(om, "split_into_areas", original)
     result, num_maps = sync_day_map_to_note(
-        dt_two_areas, session=db_two_areas, mydiary_joplin=joplin
+        dt_two_areas, session=db_two_areas, joplin=joplin
     )
     assert (result, num_maps) == ("updated", 3)
     assert overview_id in joplin.resources  # reused, not re-uploaded
-    assert overview_id not in joplin.deleted
     assert len(joplin.resources) == 3
+
+
+def test_a_day_that_loses_areas_drops_their_maps_and_rows(
+    db_two_areas, dt_two_areas, monkeypatch
+):
+    import mydiary.owntracks_maps as om
+
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
+    sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
+    overview_id = db_two_areas.get(
+        OwnTracksDayMap, (dt_two_areas.date(), 0)
+    ).joplin_resource_id
+
+    monkeypatch.setattr(om, "split_into_areas", lambda track, threshold_m=0: [])
+    result, num_maps = sync_day_map_to_note(
+        dt_two_areas, session=db_two_areas, joplin=joplin
+    )
+    assert (result, num_maps) == ("updated", 1)
+    assert list(joplin.resources) == [overview_id]
+    rows = db_two_areas.exec(
+        select(OwnTracksDayMap).where(OwnTracksDayMap.diary_date == dt_two_areas.date())
+    ).all()
+    assert [r.panel for r in rows] == [0]
 
 
 def test_the_map_route_can_select_a_panel(db_two_areas, dt_two_areas):
@@ -476,8 +505,8 @@ def test_note_init_does_not_flatten_a_split_day_back_to_one_map(
     from mydiary.models import OwnTracksLocation
     from mydiary.mydiary_day import MyDiaryDay
 
-    joplin = FakeJoplin()
-    sync_day_map_to_note(dt_two_areas, session=db_two_areas, mydiary_joplin=joplin)
+    joplin = joplin_with_note(day=TWO_AREA_DAY)
+    sync_day_map_to_note(dt_two_areas, session=db_two_areas, joplin=joplin)
     rows = list(
         db_two_areas.exec(
             select(OwnTracksDayMap).where(

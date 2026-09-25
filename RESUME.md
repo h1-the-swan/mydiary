@@ -15,7 +15,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 - [x] 1. Joplin port and `InMemoryJoplin`
 - [x] 2. Diary Note lookup and Note Mirror refresh
 - [x] 3. `DiaryNote.edit()`
-- [ ] 4. Map sync on `edit()`
+- [x] 4. Map sync on `edit()`
 - [ ] 5. Photo sync on `edit()`
 - [ ] 6. Section registry, refresh and creation
 - [ ] 7. Cleanup (sentinels, readable body, shrink script, fakes, docs)
@@ -23,7 +23,7 @@ Every commit: stage, get a sub-agent review of the staged diff, fix, then show t
 
 ## Next action
 
-Step 4, in a fresh session: set issue 04's `Status:` to `claimed` and move map sync (`owntracks_maps._sync_day_map_to_note`) onto `DiaryNote.edit()`.
+Step 5: set issue 05's `Status:` to `claimed` and move photo sync (`image_sync.sync_note_images`) onto `DiaryNote.edit()`.
 
 ## Notes
 
@@ -45,3 +45,7 @@ Step 4, in a fresh session: set issue 04's `Status:` to `claimed` and move map s
 - Container runs: `docker compose exec -T backend pytest -q -p no:cacheprovider` (`-p no:cacheprovider` avoids root-owned `.pytest_cache` in the bind mount).
 - Step 3: `edit()` runs the Words check on entry, re-reads the note just before building the body it PUTs, re-applies its sections onto the re-read body when it retries after a clobber, and on failure keeps any created resource the note turned out to reference. Issue 03's Answer lists where this departs from the spec.
 - Step 3: `InMemoryJoplin.clobber_next_update` queues clobbers, so calling it twice clobbers both the write and its retry.
+- Step 4: `NoteEdit.wrote` says whether the edit PUT the note. Map sync reports "no update" when the edit didn't write and no `OwnTracksDayMap` row changed; an unchanged row is no longer re-merged, so its `created_at` stays put. `sync_day_map_to_note` takes `joplin: JoplinPort` (was `mydiary_joplin`). The re-encode script wraps its client in `HttpJoplin` and counts a `NoteClobbered` or `WordsConflict` day as failed instead of stopping.
+- Step 4: map sync now runs the Words check on entering and refreshes the mirror, so a note with a Words conflict gets a 409 from `/owntracks/map/{dt}/to_note`.
+- Step 4: `edit()` turns autoflush off for the caller's block and the write, and `refresh_note_mirror` fetches Joplin's tags before its first flush. Otherwise a caller's staged rows get flushed early, and SQLite's write lock is held through the Joplin requests (no timeout on them), which locks out every other writer while the Joplin app is stalled.
+- For step 5: `NoteEdit._delete_created` deletes a created resource the failed note doesn't reference without asking whether another note does. Ids are the md5 of the bytes, so the same photo on two days is one resource: if two edits add it concurrently and the creator fails, the other note loses it. Unlikely for maps, plausible for photos; give it the `_still_referenced` check (it needs the session) when photo sync moves over.
