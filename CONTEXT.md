@@ -28,7 +28,7 @@ A section the diarist owns. The app may seed it when the note is created, and af
 _Avoid_: user section, manual section
 
 **App-owned Section**:
-A section whose whole content the app decides, and replaces outright whenever it writes it. Images, Location, Google Calendar events and Spotify tracks are App-owned Sections, each with exactly one writer.
+A section whose whole content the app decides, and replaces outright whenever it writes it. Images, Location, Google Calendar events, Spotify tracks and Practice are App-owned Sections, each with exactly one writer.
 _Avoid_: generated section, auto section
 
 **Frozen Section**:

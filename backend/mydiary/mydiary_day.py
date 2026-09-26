@@ -20,6 +20,7 @@ from .models import (
     GoogleCalendarEvent,
     JoplinNote,
 )
+from .song_practice import RunSummary, practice_markdown
 from .db import Session, engine, select
 
 if TYPE_CHECKING:
@@ -62,6 +63,9 @@ class MyDiaryDay:
         owntracks_day_maps: List[
             OwnTracksDayMap
         ] = [],  # the day's rendered maps, ordered by panel
+        practice_runs: List[
+            RunSummary
+        ] = [],  # song practice runs recorded on this day
         rating: Optional[
             int
         ] = None,  # (emotional) rating for the day. should it be an enum? should it also include a text description (and be its own object type)?
@@ -79,6 +83,7 @@ class MyDiaryDay:
         self.google_calendar_events = google_calendar_events
         self.owntracks_locations = owntracks_locations
         self.owntracks_day_maps = owntracks_day_maps
+        self.practice_runs = practice_runs
         self.rating = rating
         self.flagged = flagged
 
@@ -162,6 +167,10 @@ class MyDiaryDay:
             )
         )
 
+        from .songs import runs_for_day
+
+        practice_runs = runs_for_day(session, dt)
+
         return cls(
             dt=dt,
             words=words,
@@ -171,6 +180,7 @@ class MyDiaryDay:
             google_calendar_events=google_calendar_events,
             owntracks_locations=owntracks_locations,
             owntracks_day_maps=owntracks_day_maps,
+            practice_runs=practice_runs,
             joplin_note_id=getattr(note, "id", None),
             **kwargs,
         )
@@ -229,11 +239,16 @@ class MyDiaryDay:
 
     def refreshed_sections(self) -> Dict[str, str]:
         """The App-owned Sections a refresh rewrites, as the day's data now
-        has them."""
-        return {
+        has them. Practice is only there on a day with practice runs, like
+        Location, so a refresh adds it to an older note once there are runs
+        and otherwise leaves the note without one."""
+        sections = {
             "Google Calendar events": self.google_calendar_events_markdown(),
             "Spotify tracks": self.spotify_tracks_markdown(timezone=self.dt.timezone),
         }
+        if self.practice_runs:
+            sections["Practice"] = self.practice_markdown()
+        return sections
 
     def images_markdown(self) -> str:
         from .diary_note import resource_ref
@@ -286,6 +301,9 @@ class MyDiaryDay:
             lines.append(t.to_markdown(timezone=timezone))
         return "\n".join(lines)
 
+    def practice_markdown(self) -> str:
+        return practice_markdown(self.practice_runs)
+
     def google_calendar_events_markdown(self) -> str:
         if not self.google_calendar_events:
             return "None"
@@ -310,9 +328,10 @@ class MyDiaryDay:
         return "\n".join(lines)
 
     def update_joplin_note(self, session: Optional[Session] = None, joplin_connector=None):
-        """Refresh the day's Diary Note: replace its Google Calendar events
-        and Spotify tracks with the day's data, adding either section if the
-        note lacks it. Nothing else in the note is written (ADR-0002)."""
+        """Refresh the day's Diary Note: replace its Google Calendar events,
+        Spotify tracks and, on a day with practice runs, Practice sections
+        with the day's data, adding any the note lacks. Nothing else in the
+        note is written (ADR-0002)."""
         from .diary_note import DiaryNote
 
         if joplin_connector is not None:

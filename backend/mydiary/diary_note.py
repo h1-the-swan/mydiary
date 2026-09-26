@@ -93,8 +93,9 @@ class SectionSpec:
 
 # Every section the app knows, in note order, and who owns it (ADR-0002). The
 # preamble above the first `##` heading, and any section not listed here, is
-# Written. A new note's template (`new_note_body`) and a section added to an
-# older note both follow this order.
+# Written. A new note's template (`new_note_body`) follows this order, and a
+# section added to an older note goes before the first known section that
+# comes after it (see `_insert_section`).
 SECTIONS: Tuple[SectionSpec, ...] = (
     SectionSpec("Words", Owner.WRITTEN),
     SectionSpec("Images", Owner.APP),
@@ -102,6 +103,7 @@ SECTIONS: Tuple[SectionSpec, ...] = (
     SectionSpec("Google Calendar events", Owner.APP),
     SectionSpec("Pocket articles", Owner.FROZEN),
     SectionSpec("Spotify tracks", Owner.APP),
+    SectionSpec("Practice", Owner.APP),
 )
 _SECTION_RANK = {spec.heading.lower(): i for i, spec in enumerate(SECTIONS)}
 
@@ -142,7 +144,8 @@ def _find_section(doc: MarkdownDoc, heading: str) -> Optional[MarkdownSection]:
 
 def _insert_section(doc: MarkdownDoc, heading: str) -> MarkdownSection:
     """Add an empty section before the first known section that comes after
-    it in the registry, or at the end."""
+    it in the registry, or at the end. A Written section keeps following the
+    known section it was written after."""
     rank = _SECTION_RANK[heading.lower()]
     index = len(doc.sections)
     for i, sec in enumerate(doc.sections):

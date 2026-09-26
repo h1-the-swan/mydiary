@@ -93,9 +93,15 @@ from .models import (
     SpellingBeePuzzleBase,
     SpellingBeeDefinition,
     SpellingBeeDefinitionBase,
+    SongArrangementBase,
+    SongArrangement,
+    PracticeRunBase,
+    PracticeRun,
 )
 from .nextcloud_connector import MyDiaryNextcloud
 from . import spelling_bee
+from . import songs
+from . import lrclib_connector
 from .dictionary_connector import fetch_definition
 from .spotify_connector import normalize_spotify_id
 from .pocket_connector import MyDiaryPocket
@@ -218,6 +224,90 @@ class PerformSongUpdate(SQLModel):
     capo: Optional[int] = None
     lyrics: Optional[str] = None
     learned_dt: Optional[datetime] = None
+
+
+class SongArrangementRead(SongArrangementBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SongArrangementCreate(SQLModel):
+    instrument: str
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    sheet: str = ""
+    source: str = "manual"
+
+
+class SongArrangementUpdate(SQLModel):
+    # instrument is fixed once created: a ukulele copy is a new arrangement
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    sheet: Optional[str] = None
+    source: Optional[str] = None
+
+
+class PracticeRunSectionIn(SQLModel):
+    section_key: str
+    stumbled: bool = False
+
+
+class PracticeRunCreate(SQLModel):
+    perform_song_id: int
+    arrangement_id: Optional[int] = None  # none for practice away from the instrument
+    practiced_at: Optional[datetime] = None  # defaults to now
+    note: Optional[str] = None
+    sections: List[PracticeRunSectionIn]
+
+
+class PracticeRunSectionRead(SQLModel):
+    section_key: str
+    stumbled: bool
+
+
+class PracticeRunRead(PracticeRunBase):
+    id: int
+    sections: List[PracticeRunSectionRead]
+
+
+class SectionLevelRead(SQLModel):
+    section_key: str
+    level: str
+    clean_streak: int
+    num_runs: int
+    last_practiced_at: Optional[datetime] = None
+    overridden: bool
+
+
+class SectionLevelOverrideIn(SQLModel):
+    section_key: str
+    level: str
+
+
+class SectionRename(SQLModel):
+    from_key: str
+    to_key: str
+
+
+class SectionRenameResult(SQLModel):
+    moved: int
+
+
+class LearningSongRead(SQLModel):
+    song: PerformSongRead
+    instruments: List[str]
+    # the sheet whose section order the queue card shows: guitar's if there is one
+    sheet: Optional[str] = None
+    levels: List[SectionLevelRead]
+    last_practiced_at: Optional[datetime] = None
+
+
+class LrclibLyricsRead(SQLModel):
+    track_name: str
+    artist_name: str
+    duration: Optional[float] = None
+    plain_lyrics: str
 
 
 class MyDiaryImageRead(MyDiaryImageBase):
@@ -1795,9 +1885,284 @@ def delete_perform_song(
     db_perform_song = session.get(PerformSong, perform_song_id)
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
+    songs.delete_song_practice_data(session, perform_song_id)
     session.delete(db_perform_song)
     session.commit()
     return {"ok": True}
+
+
+def _get_song_or_404(session: Session, perform_song_id: int) -> PerformSong:
+    song = session.get(PerformSong, perform_song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="PerformSong not found")
+    return song
+
+
+def _get_arrangement_or_404(session: Session, arrangement_id: int) -> SongArrangement:
+    arrangement = session.get(SongArrangement, arrangement_id)
+    if not arrangement:
+        raise HTTPException(status_code=404, detail="Arrangement not found")
+    return arrangement
+
+
+def _levels_read(session: Session, song_id: int) -> List[SectionLevelRead]:
+    return [
+        SectionLevelRead(section_key=key, **asdict(level))
+        for key, level in songs.levels_for_song(session, song_id).items()
+    ]
+
+
+def _run_read(run: PracticeRun, sections) -> PracticeRunRead:
+    return PracticeRunRead(
+        **run.model_dump(),
+        sections=[
+            PracticeRunSectionRead(section_key=s.section_key, stumbled=s.stumbled)
+            for s in sections
+        ],
+    )
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/arrangements",
+    operation_id="listSongArrangements",
+    response_model=List[SongArrangementRead],
+)
+def list_song_arrangements(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    return songs.arrangements_for_song(session, perform_song_id)
+
+
+@app.post(
+    "/performsongs/{perform_song_id}/arrangements",
+    operation_id="createSongArrangement",
+    response_model=SongArrangementRead,
+)
+def create_song_arrangement(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    arrangement: SongArrangementCreate,
+):
+    song = _get_song_or_404(session, perform_song_id)
+    try:
+        # exclude_unset: a key or capo left out comes from the song, but an
+        # explicit null (a cleared field) is kept
+        return songs.create_arrangement(
+            session, song, **arrangement.model_dump(exclude_unset=True)
+        )
+    except songs.ArrangementExists as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.get(
+    "/arrangements/{arrangement_id}",
+    operation_id="readSongArrangement",
+    response_model=SongArrangementRead,
+)
+def read_song_arrangement(
+    *, session: Session = Depends(get_session), arrangement_id: int
+):
+    return _get_arrangement_or_404(session, arrangement_id)
+
+
+@app.patch(
+    "/arrangements/{arrangement_id}",
+    operation_id="updateSongArrangement",
+    response_model=SongArrangementRead,
+)
+def update_song_arrangement(
+    *,
+    session: Session = Depends(get_session),
+    arrangement_id: int,
+    arrangement: SongArrangementUpdate,
+):
+    db_arrangement = _get_arrangement_or_404(session, arrangement_id)
+    return songs.update_arrangement(
+        session, db_arrangement, arrangement.model_dump(exclude_unset=True)
+    )
+
+
+@app.delete("/arrangements/{arrangement_id}", operation_id="deleteSongArrangement")
+def delete_song_arrangement(
+    *, session: Session = Depends(get_session), arrangement_id: int
+):
+    songs.delete_arrangement(session, _get_arrangement_or_404(session, arrangement_id))
+    return {"ok": True}
+
+
+@app.post(
+    "/practice/runs", operation_id="createPracticeRun", response_model=PracticeRunRead
+)
+def create_practice_run(
+    *, session: Session = Depends(get_session), run: PracticeRunCreate
+):
+    _get_song_or_404(session, run.perform_song_id)
+    arrangement = None
+    if run.arrangement_id is not None:
+        arrangement = _get_arrangement_or_404(session, run.arrangement_id)
+        if arrangement.perform_song_id != run.perform_song_id:
+            raise HTTPException(
+                status_code=422, detail="That arrangement belongs to another song"
+            )
+    try:
+        db_run = songs.create_run(
+            session,
+            run.perform_song_id,
+            [(s.section_key, s.stumbled) for s in run.sections],
+            arrangement=arrangement,
+            practiced_at=run.practiced_at,
+            note=run.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _run_read(db_run, songs.sections_for_runs(session, [db_run.id])[db_run.id])
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/practice/runs",
+    operation_id="listPracticeRunsForSong",
+    response_model=List[PracticeRunRead],
+)
+def list_practice_runs_for_song(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    runs = songs.runs_for_song(session, perform_song_id)
+    sections = songs.sections_for_runs(session, [r.id for r in runs])
+    return [_run_read(r, sections[r.id]) for r in runs]
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="readSectionLevels",
+    response_model=List[SectionLevelRead],
+)
+def read_section_levels(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    _get_song_or_404(session, perform_song_id)
+    return _levels_read(session, perform_song_id)
+
+
+@app.put(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="setSectionLevelOverride",
+    response_model=List[SectionLevelRead],
+)
+def set_section_level_override(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    override: SectionLevelOverrideIn,
+):
+    _get_song_or_404(session, perform_song_id)
+    try:
+        songs.set_override(session, perform_song_id, override.section_key, override.level)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return _levels_read(session, perform_song_id)
+
+
+@app.delete(
+    "/performsongs/{perform_song_id}/practice/levels",
+    operation_id="clearSectionLevelOverride",
+    response_model=List[SectionLevelRead],
+)
+def clear_section_level_override(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    section_key: str,
+):
+    _get_song_or_404(session, perform_song_id)
+    songs.clear_override(session, perform_song_id, section_key)
+    return _levels_read(session, perform_song_id)
+
+
+@app.post(
+    "/performsongs/{perform_song_id}/practice/rename",
+    operation_id="renamePracticeSection",
+    response_model=SectionRenameResult,
+)
+def rename_practice_section(
+    *,
+    session: Session = Depends(get_session),
+    perform_song_id: int,
+    rename: SectionRename,
+):
+    _get_song_or_404(session, perform_song_id)
+    moved = songs.rename_section(
+        session, perform_song_id, rename.from_key, rename.to_key
+    )
+    return SectionRenameResult(moved=moved)
+
+
+@app.get(
+    "/practice/learning",
+    operation_id="listLearningSongs",
+    response_model=List[LearningSongRead],
+)
+def list_learning_songs(*, session: Session = Depends(get_session)):
+    """The learning queue: never-practiced songs first, then the longest idle."""
+    queue = session.exec(
+        select(PerformSong).where(PerformSong.learned == False)  # noqa: E712
+    ).all()
+    rows = []
+    for song in queue:
+        arrangements = songs.arrangements_for_song(session, song.id)
+        by_instrument = {a.instrument: a for a in arrangements}
+        primary = by_instrument.get("guitar") or (arrangements[0] if arrangements else None)
+        rows.append(
+            LearningSongRead(
+                song=PerformSongRead.model_validate(song),
+                instruments=[a.instrument for a in arrangements],
+                sheet=primary.sheet if primary else None,
+                levels=_levels_read(session, song.id),
+                last_practiced_at=songs.last_practiced(session, song.id),
+            )
+        )
+    rows.sort(
+        key=lambda r: (
+            r.last_practiced_at is not None,
+            r.last_practiced_at or datetime.min,
+            r.song.name.lower(),
+        )
+    )
+    return rows
+
+
+def _spotify_duration_s(spotify_id: str) -> Optional[float]:
+    # best effort: without a duration the LRCLIB match is only looser
+    try:
+        from .spotify_connector import MyDiarySpotify
+
+        return MyDiarySpotify().sp.track(spotify_id)["duration_ms"] / 1000
+    except Exception as e:
+        logger.warning(f"no Spotify duration for {spotify_id}: {e}")
+        return None
+
+
+@app.get(
+    "/performsongs/{perform_song_id}/lyrics/lrclib",
+    operation_id="lookupLrclibLyrics",
+    response_model=LrclibLyricsRead,
+)
+def lookup_lrclib_lyrics(
+    *, session: Session = Depends(get_session), perform_song_id: int
+):
+    song = _get_song_or_404(session, perform_song_id)
+    duration = _spotify_duration_s(song.spotify_id) if song.spotify_id else None
+    try:
+        found = lrclib_connector.fetch_lyrics(song.name, song.artist_name, duration)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"LRCLIB lookup failed: {e}")
+    if found is None:
+        raise HTTPException(status_code=404, detail="No lyrics found on LRCLIB")
+    return LrclibLyricsRead(**asdict(found))
 
 
 @app.post("/dogs/", operation_id="createDog", response_model=DogRead)

@@ -18,15 +18,17 @@ latest Pocket item in the database omit the Pocket articles section (see
 
 ## Backend (`backend/mydiary/`)
 
-Modules are named for what they do: one `*_connector.py` per external service, with `api.py` holding every route and the APScheduler jobs. `owntracks_track.py`, `spelling_bee.py` and `hashtags.py` are pure functions with no I/O; keep them that way.
+Modules are named for what they do: one `*_connector.py` per external service, with `api.py` holding every route and the APScheduler jobs. `owntracks_track.py`, `spelling_bee.py`, `hashtags.py` and `song_practice.py` are pure functions with no I/O; keep them that way.
 
-The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
+The diary entry format is a Markdown document with named sections (words, images, Google Calendar events, Spotify tracks and, on days with practice, a Practice section; older entries also have a Pocket articles section). `MyDiaryDay.init_markdown()` generates the template; Joplin stores the actual notes.
 
 The image workflow (Nextcloud photos ↔ Joplin notes, manual uploads, thumbnail caching) is documented in [image-workflow.md](image-workflow.md).
 
 The location workflow (OwnTracks recorder → database → smoothed track → rendered map → Joplin note) is documented in [location-workflow.md](location-workflow.md).
 
 The tag system (`#slug` / `#namespace:slug` hashtags, the registry, sync, routes, UI) is documented in [tags.md](tags.md).
+
+The song-practice workflow (per-instrument ChordPro sheets, the fading practice sheet, the after-run check, the Practice diary section) is documented in [song-practice.md](song-practice.md).
 
 ### Diary Notes and Joplin
 
