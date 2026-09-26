@@ -32,7 +32,26 @@
                             <v-text-field
                                 v-model="submitPerformSong.spotify_id"
                                 label="Spotify ID"
+                                :hint="
+                                    spotifyNote
+                                        ? undefined
+                                        : 'Paste an ID or link to fill Name and Artist'
+                                "
+                                :loading="spotifyLoading"
+                                :error-messages="spotifyError"
+                                :messages="spotifyNote"
+                                @paste="onSpotifyPaste"
+                                @blur="lookupSpotify(submitPerformSong.spotify_id)"
                             ></v-text-field>
+                        </v-col>
+                        <v-col v-if="usedBy" cols="12">
+                            <v-alert type="warning" variant="tonal" density="compact">
+                                This recording is already used by
+                                <router-link
+                                    :to="{ name: 'performSong', params: { id: usedBy.id } }"
+                                    >{{ usedBy.name }}</router-link
+                                >. You can still save.
+                            </v-alert>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
@@ -116,7 +135,7 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue'
-import { watchEffect } from 'vue'
+import { watch, watchEffect } from 'vue'
 import { PerformSongUpdate } from '@/api'
 import { ref } from 'vue'
 import { useDate } from 'vuetify'
@@ -126,7 +145,9 @@ import {
     createPerformSong,
     PerformSongCreate,
     deletePerformSong,
+    lookupSpotifyTrack,
 } from '@/api'
+import { isAxiosError } from 'axios'
 import { useAppStore } from '@/store/app'
 import TagChips from '@/components/TagChips.vue'
 import { useRouter } from 'vue-router'
@@ -165,27 +186,27 @@ async function onSave() {
             submitPerformSong.value.learned_dt
         ).toISOString()
     }
-    if (
-        submitPerformSong.value.spotify_id &&
-        submitPerformSong.value.spotify_id.startsWith('http')
-    ) {
-        const spotifyIdURL = new URL(submitPerformSong.value.spotify_id)
-        const cleanedId = spotifyIdURL.pathname.split('/').at(-1)
-        submitPerformSong.value.spotify_id = cleanedId
-    }
-    if (!props.performSong) {
-        submitted.value = (
-            await createPerformSong(
-                submitPerformSong.value as PerformSongCreate
-            )
-        ).data
-    } else {
-        submitted.value = (
-            await updatePerformSong(
-                props.performSong.id,
-                submitPerformSong.value
-            )
-        ).data
+    // the backend normalizes the Spotify ID and rejects one Spotify doesn't know
+    try {
+        if (!props.performSong) {
+            submitted.value = (
+                await createPerformSong(
+                    submitPerformSong.value as PerformSongCreate
+                )
+            ).data
+        } else {
+            submitted.value = (
+                await updatePerformSong(
+                    props.performSong.id,
+                    submitPerformSong.value
+                )
+            ).data
+        }
+    } catch (e) {
+        const msg = spotifyIdErrorMessage(e)
+        if (msg === undefined) throw e
+        spotifyError.value = msg
+        return
     }
     snackbar.value = true
     app.loadPerformSongs()
@@ -197,6 +218,90 @@ async function onSave() {
         hash: toSheets ? '#arrangements' : undefined,
     })
 }
+// the 422 from a save carries FastAPI's validation-error shape
+function spotifyIdErrorMessage(e: unknown): string | undefined {
+    if (!isAxiosError(e) || e.response?.status !== 422) return
+    const detail = e.response.data?.detail
+    if (!Array.isArray(detail)) return
+    const err = detail.find(
+        (d: { loc?: string[] }) => d.loc?.at(-1) === 'spotify_id'
+    )
+    return err?.msg
+}
+
+const spotifyLoading = ref(false)
+const spotifyError = ref('')
+const spotifyNote = ref('')
+const usedById = ref<number | null>(null)
+const usedBy = computed(() => {
+    if (usedById.value === null) return
+    const song = app.performSongs?.find((s) => s.id === usedById.value)
+    return { id: usedById.value, name: song ? `“${song.name}”` : 'another song' }
+})
+// the value the last lookup was for, so blur after a paste doesn't repeat it
+let lookedUp = ''
+let lookupSeq = 0
+
+// also abandons a lookup in flight, so its answer can't land on a changed field
+function clearSpotifyStatus() {
+    lookupSeq++
+    spotifyLoading.value = false
+    spotifyError.value = ''
+    spotifyNote.value = ''
+    usedById.value = null
+}
+
+// an error or warning is about the value it was found for; typing drops it
+watch(
+    () => submitPerformSong.value.spotify_id,
+    (id) => {
+        if ((id ?? '').trim() !== lookedUp) clearSpotifyStatus()
+    }
+)
+
+// a pasted ID replaces the whole field: a partial Spotify ID is never wanted
+function onSpotifyPaste(e: ClipboardEvent) {
+    const text = e.clipboardData?.getData('text')
+    if (!text) return
+    e.preventDefault()
+    submitPerformSong.value.spotify_id = text.trim()
+    lookupSpotify(submitPerformSong.value.spotify_id)
+}
+
+async function lookupSpotify(raw: string | null | undefined) {
+    const id = (raw ?? '').trim()
+    if (id === lookedUp) return
+    lookedUp = id
+    clearSpotifyStatus()
+    if (!id) return
+    const seq = ++lookupSeq
+    spotifyLoading.value = true
+    try {
+        const track = (await lookupSpotifyTrack({ id })).data
+        if (seq !== lookupSeq) return
+        lookedUp = track.spotify_id
+        submitPerformSong.value.spotify_id = track.spotify_id
+        // never overwrite what's been typed
+        if (!submitPerformSong.value.name) {
+            submitPerformSong.value.name = track.name
+        }
+        if (!submitPerformSong.value.artist_name) {
+            submitPerformSong.value.artist_name = track.artist_name
+        }
+        const owner = track.used_by_perform_song_id ?? null
+        usedById.value = owner !== props.performSong?.id ? owner : null
+    } catch (e) {
+        if (seq !== lookupSeq) return
+        if (isAxiosError(e) && e.response?.status === 404) {
+            spotifyError.value = 'Spotify has no track with this ID'
+        } else {
+            spotifyNote.value = "Couldn't reach Spotify to check this ID. You can still save."
+        }
+    } finally {
+        if (seq === lookupSeq) spotifyLoading.value = false
+    }
+}
+
 async function onDelete() {
     if (!props.performSong) throw Error
     deletePerformSong(props.performSong.id)
@@ -207,6 +312,9 @@ watchEffect(() => {
         submitPerformSong.value.artist_name = props.performSong.artist_name
         submitPerformSong.value.learned = props.performSong.learned
         submitPerformSong.value.spotify_id = props.performSong.spotify_id
+        // the form stays mounted when moving between songs
+        lookedUp = props.performSong.spotify_id ?? ''
+        clearSpotifyStatus()
         submitPerformSong.value.notes = props.performSong.notes
         submitPerformSong.value.perform_url = props.performSong.perform_url
         submitPerformSong.value.created_at = dateFmt(

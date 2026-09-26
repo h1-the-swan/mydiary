@@ -18,14 +18,14 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 3. Routes: `lookupSpotifyTrack`, `searchSpotifyTracks`, with `used_by_perform_song_id`; route tests
 - [x] 4. Save path: None-guard (fixes the 500), `SpotifyTrack` upsert, 422 on unknown ID, save anyway if Spotify is unreachable; tests
 - [x] 5. Regenerate `api.ts` in the container
-- [ ] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
+- [x] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
 - [ ] 7. Form: "Find on Spotify" autocomplete
 - [ ] 8. Docs
 - [ ] Verification: pytest, build, lint vs baseline, Firefox checks listed in the plan
 
 ## Next action
 
-Step 6: fill the form from a pasted ID in `mydiary-vuetify/src/components/PerformSongEdit.vue`. Look up on paste and on blur via `lookupSpotifyTrack`, write the normalized ID back, fill Name/Artist only when empty, show a spinner, an inline error, and the "used by" warning with a link; show a save 422 on the field; drop the old URL cleaning in `onSave`.
+Step 7: the "Find on Spotify" `v-autocomplete` at the top of `PerformSongEdit.vue` (debounced ~300 ms, `no-filter`, item slot with thumbnail / title / artist / album · year / "already in your songs" badge). Picking a result runs the same fill as a pasted ID, reusing the result instead of a second lookup. The user asked to stop before step 8 (docs).
 
 ## Notes
 
@@ -38,3 +38,5 @@ Step 6: fill the form from a pasted ID in `mydiary-vuetify/src/components/Perfor
 - Step 4: the save routes depend on `get_mydiary_spotify_or_none`, which returns None rather than raising, so a save never fails when Spotify is down. `get_mydiary_spotify` (lookup and search) wraps it and raises 502. On update, an unchanged ID is looked up only when its `SpotifyTrack` row is missing, and "not found" is then only logged, so an old song whose track Spotify has pulled can still be edited. A blank ID is stored as None, and anything that doesn't normalize to a bare 22-character ID is a 422 before any lookup. The 422 `detail` uses FastAPI's validation-error shape (`loc: ["body", "spotify_id"]`). `test_api.py`'s client overrides the dependency to None so its PerformSong tests never reach Spotify.
 - Step 3: routes take the connector through a `get_mydiary_spotify` dependency (tests override it with a fake, like `get_session`). It turns a `SpotifyOauthError` from the constructor (e.g. no client ID) into a 502. The response model is `TrackSummaryRead` in `api.py`, and the routes are plain `def`s. Through the proxy the backend is at `http://localhost:8087/api/...`.
 - No Joplin writes are needed for this feature. Don't press "Init note" or add photos/maps in the worktree app.
+- Step 6: a paste replaces the whole Spotify ID field (`preventDefault`, then look up the clipboard text), because on `paste` the v-model hasn't updated yet. `lookedUp` stops a blur right after a paste from looking up again, and a sequence number drops stale responses. A 404 is a red field error; any other failure is a neutral message, since the save still works. The "used by" warning ignores the song being edited. If two songs share a recording and the one being edited has the lower id, the backend reports that one, so no warning shows (rare, accepted).
+- Playwright MCP wasn't available in the 2026-09-26 session, so step 6 was checked by build, lint and curl only. The Firefox checks in the plan still need doing.
