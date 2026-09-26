@@ -30,6 +30,8 @@ The tag system (`#slug` / `#namespace:slug` hashtags, the registry, sync, routes
 
 The song-practice workflow (per-instrument ChordPro sheets, the fading practice sheet, the after-run check, the Practice diary section) is documented in [song-practice.md](song-practice.md).
 
+Filling a PerformSong's name and artist from Spotify (lookup by pasted ID, the "Find on Spotify" search, and storing the Reference Recording's track row on save) is documented in [performsong-spotify.md](performsong-spotify.md).
+
 ### Diary Notes and Joplin
 
 The terms used here (Diary Note, Note Mirror, Written, App-owned and Frozen Sections) are defined in [CONTEXT.md](../CONTEXT.md). Who may write which section is recorded in [ADR 0002](adr/0002-diary-note-sections-have-one-owner.md).

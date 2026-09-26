@@ -497,6 +497,16 @@ export interface TimeZoneChange {
   tz_after: string;
 }
 
+export interface TrackSummaryRead {
+  spotify_id: string;
+  name: string;
+  artist_name: string;
+  album_name?: string | null;
+  release_year?: number | null;
+  thumbnail_url?: string | null;
+  used_by_perform_song_id?: number | null;
+}
+
 export type DbStatusParams = {
 more?: boolean;
 };
@@ -570,6 +580,14 @@ year?: number | null;
 export type ReadSpotifyHistoryParams = {
 offset?: number;
 limit?: number;
+};
+
+export type LookupSpotifyTrackParams = {
+id: string;
+};
+
+export type SearchSpotifyTracksParams = {
+q: string;
 };
 
 export type JoplinInitNoteParams = {
@@ -995,6 +1013,34 @@ export const spotifyHistoryCount = (
  ): Promise<AxiosResponse<number>> => {
     return axios.get(
       `/spotify/history/count`,options
+    );
+  }
+
+/**
+ * One track, by Spotify ID, URI or open.spotify.com URL.
+ * @summary Lookup Spotify Track
+ */
+export const lookupSpotifyTrack = (
+    params: LookupSpotifyTrackParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TrackSummaryRead>> => {
+    return axios.get(
+      `/spotify/tracks/lookup`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+
+/**
+ * Up to 10 tracks from Spotify's whole catalog.
+ * @summary Search Spotify Tracks
+ */
+export const searchSpotifyTracks = (
+    params: SearchSpotifyTracksParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<TrackSummaryRead[]>> => {
+    return axios.get(
+      `/spotify/tracks/search`,{
+    ...options,
+        params: {...params, ...options?.params},}
     );
   }
 
@@ -1868,6 +1914,8 @@ export type ReadPocketArticlesResult = AxiosResponse<PocketArticleRead[]>
 export type UpdatePocketArticleResult = AxiosResponse<PocketArticleRead>
 export type ReadSpotifyHistoryResult = AxiosResponse<SpotifyTrackHistoryRead[]>
 export type SpotifyHistoryCountResult = AxiosResponse<number>
+export type LookupSpotifyTrackResult = AxiosResponse<TrackSummaryRead>
+export type SearchSpotifyTracksResult = AxiosResponse<TrackSummaryRead[]>
 export type GetSpotifyImageUrlResult = AxiosResponse<string>
 export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
 export type JoplinGetNoteIdResult = AxiosResponse<string>

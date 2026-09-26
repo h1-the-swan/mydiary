@@ -26,9 +26,11 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
+import requests
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler
+from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler, SpotifyOauthError
 from spotipy import SpotifyException
+from sqlmodel import SQLModel
 
 from .models import (
     SpotifyTrack,
@@ -56,6 +58,50 @@ def normalize_spotify_id(s: str) -> str:
         return s
 
 
+class SpotifyTrackNotFound(Exception):
+    """Spotify says there is no track with this ID (or the ID isn't a track ID)"""
+
+
+class SpotifyUnavailable(Exception):
+    """Spotify couldn't be asked: network error, auth failure, rate limit, 5xx"""
+
+
+# errors meaning Spotify couldn't be asked, besides SpotifyException. EOFError is
+# spotipy prompting on stdin for a token it can't refresh.
+UNAVAILABLE_ERRORS = (SpotifyOauthError, requests.exceptions.RequestException, EOFError)
+
+
+class TrackSummary(SQLModel):
+    # what the PerformSong form shows for one Spotify track
+    spotify_id: str
+    name: str
+    artist_name: str  # every artist, joined with ", " like SpotifyTrackBase.parse_track
+    album_name: Optional[str] = None
+    release_year: Optional[int] = None
+    thumbnail_url: Optional[str] = None
+
+    @classmethod
+    def from_track(cls, t: Dict) -> "TrackSummary":
+        album = t.get("album") or {}
+        # release_date is "YYYY", "YYYY-MM" or "YYYY-MM-DD"; some tracks have "0000"
+        year = (album.get("release_date") or "")[:4]
+        release_year = int(year) if year.isdigit() and int(year) > 0 else None
+        # the smallest album image is the one a list row needs
+        images = album.get("images") or []
+        thumbnail_url = None
+        if images:
+            smallest = min(images, key=lambda img: img.get("width") or float("inf"))
+            thumbnail_url = smallest.get("url")
+        return cls(
+            spotify_id=t["id"],
+            name=t["name"],
+            artist_name=", ".join(artist["name"] for artist in t["artists"]),
+            album_name=album.get("name"),
+            release_year=release_year,
+            thumbnail_url=thumbnail_url,
+        )
+
+
 class MyDiarySpotify:
     def __init__(self, sp: Optional[spotipy.Spotify] = None) -> None:
         self.sp = sp
@@ -65,12 +111,67 @@ class MyDiarySpotify:
             self.sp.auth_manager = SpotifyOAuth(
                 scope=scopes,
                 open_browser=False,
+                requests_timeout=5,
                 cache_handler=CacheFileHandler(
                     cache_path=os.environ.get("SPOTIFY_TOKEN_CACHE_PATH", None)
                 ),
             )
 
         self.context_cache = {}
+
+    def get_track(self, spotify_id: str) -> Dict:
+        """Fetch one track's data from Spotify, by ID, URI or open.spotify.com URL.
+
+        Raises SpotifyTrackNotFound or SpotifyUnavailable.
+        """
+        try:
+            track_id = normalize_spotify_id(spotify_id.strip())
+        except ValueError as e:
+            raise SpotifyTrackNotFound(str(e)) from e
+        if not track_id:
+            raise SpotifyTrackNotFound("empty spotify id")
+        self._check_token()
+        try:
+            t = self.sp.track(track_id)
+        except SpotifyException as e:
+            # 400 is a malformed ID, 404 a well-formed one with no track
+            if e.http_status in (400, 404):
+                raise SpotifyTrackNotFound(track_id) from e
+            raise SpotifyUnavailable(str(e)) from e
+        except UNAVAILABLE_ERRORS as e:
+            raise SpotifyUnavailable(str(e)) from e
+        if not t:
+            # spotipy returns None for a 200 whose body isn't JSON
+            raise SpotifyUnavailable(f"empty response for track {track_id}")
+        return t
+
+    def _check_token(self) -> None:
+        # with no cached token, spotipy falls back to prompting on stdin, which
+        # in the backend container raises EOFError (and prints a prompt to the
+        # logs). Treat a missing token as Spotify being unavailable instead.
+        cache_handler = getattr(self.sp.auth_manager, "cache_handler", None)
+        if cache_handler is not None and cache_handler.get_cached_token() is None:
+            raise SpotifyUnavailable("no cached Spotify token")
+
+    def lookup_track(self, spotify_id: str) -> TrackSummary:
+        return TrackSummary.from_track(self.get_track(spotify_id))
+
+    def search_tracks(self, q: str, limit: int = 10) -> List[TrackSummary]:
+        """Search Spotify's catalog for tracks. Raises SpotifyUnavailable."""
+        q = q.strip()
+        if not q:
+            return []
+        self._check_token()
+        try:
+            r = self.sp.search(q, limit=limit, type="track")
+        except (SpotifyException,) + UNAVAILABLE_ERRORS as e:
+            raise SpotifyUnavailable(str(e)) from e
+        if not r:
+            raise SpotifyUnavailable(f"empty response for search {q!r}")
+        # items can contain nulls for tracks Spotify has pulled
+        return [
+            TrackSummary.from_track(t) for t in r["tracks"]["items"] if t is not None
+        ]
 
     def new_session(self, engine=engine):
         with Session(engine) as session:

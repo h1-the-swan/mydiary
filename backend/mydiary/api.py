@@ -3,11 +3,13 @@ from datetime import datetime, date
 import requests
 import io
 import json
+import re
 import secrets
 import threading
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
+from urllib.parse import urlsplit
 from fastapi import (
     Depends,
     FastAPI,
@@ -30,6 +32,8 @@ from sqlalchemy import desc, all_, String, cast, or_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
+import spotipy
+from spotipy.oauth2 import SpotifyOauthError
 
 from mydiary.joplin_connector import MyDiaryJoplin
 from .diary_note import (
@@ -66,6 +70,7 @@ from .models import (
     Recipe,
     RecipeBase,
     RecipeEventBase,
+    SpotifyTrack,
     SpotifyTrackBase,
     SpotifyTrackHistoryBase,
     SpotifyTrackHistory,
@@ -103,7 +108,13 @@ from . import spelling_bee
 from . import songs
 from . import lrclib_connector
 from .dictionary_connector import fetch_definition
-from .spotify_connector import normalize_spotify_id
+from .spotify_connector import (
+    MyDiarySpotify,
+    SpotifyTrackNotFound,
+    SpotifyUnavailable,
+    TrackSummary,
+    normalize_spotify_id,
+)
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
 
@@ -210,6 +221,11 @@ class PerformSongRead(PerformSongBase):
 
 class PerformSongCreate(PerformSongBase):
     pass
+
+
+class TrackSummaryRead(TrackSummary):
+    # the lowest-id PerformSong whose Reference Recording is this track, if any
+    used_by_perform_song_id: Optional[int] = None
 
 
 class PerformSongUpdate(SQLModel):
@@ -529,6 +545,25 @@ def open_joplin_port():
 def get_joplin_port():
     with open_joplin_port() as joplin:
         yield joplin
+
+
+def get_mydiary_spotify_or_none() -> Optional[MyDiarySpotify]:
+    # retries off: urllib3 honors Retry-After, so a rate-limited call would
+    # otherwise hold the request open for as long as Spotify asks
+    try:
+        return MyDiarySpotify(spotipy.Spotify(retries=0, status_retries=0))
+    except SpotifyOauthError as e:
+        # e.g. no client ID in the environment
+        logger.warning(f"Spotify client not configured: {e}")
+        return None
+
+
+def get_mydiary_spotify(
+    mydiary_spotify: Optional[MyDiarySpotify] = Depends(get_mydiary_spotify_or_none),
+) -> MyDiarySpotify:
+    if mydiary_spotify is None:
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
+    return mydiary_spotify
 
 
 # handler = logging.StreamHandler()
@@ -1128,6 +1163,67 @@ async def read_spotify_history(
 async def spotify_history_count(*, session: Session = Depends(get_session)):
     stmt = select(func.count(SpotifyTrackHistory.id))
     return session.exec(stmt).one()
+
+
+def _with_used_by(
+    session: Session, summaries: List[TrackSummary]
+) -> List[TrackSummaryRead]:
+    ids = [s.spotify_id for s in summaries]
+    stmt = (
+        select(PerformSong.spotify_id, func.min(PerformSong.id))
+        .where(PerformSong.spotify_id.in_(ids))
+        .group_by(PerformSong.spotify_id)
+    )
+    used_by = dict(session.exec(stmt).all()) if ids else {}
+    return [
+        TrackSummaryRead(
+            **s.model_dump(), used_by_perform_song_id=used_by.get(s.spotify_id)
+        )
+        for s in summaries
+    ]
+
+
+# plain defs: spotipy blocks, which would stall the event loop
+@app.get(
+    "/spotify/tracks/lookup",
+    operation_id="lookupSpotifyTrack",
+    response_model=TrackSummaryRead,
+)
+def lookup_spotify_track(
+    *,
+    session: Session = Depends(get_session),
+    mydiary_spotify: MyDiarySpotify = Depends(get_mydiary_spotify),
+    id: str,
+):
+    """One track, by Spotify ID, URI or open.spotify.com URL."""
+    try:
+        summary = mydiary_spotify.lookup_track(id)
+    except SpotifyTrackNotFound:
+        raise HTTPException(status_code=404, detail=f"No Spotify track found for {id!r}")
+    except SpotifyUnavailable as e:
+        logger.warning(f"Spotify lookup failed: {e}")
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
+    return _with_used_by(session, [summary])[0]
+
+
+@app.get(
+    "/spotify/tracks/search",
+    operation_id="searchSpotifyTracks",
+    response_model=List[TrackSummaryRead],
+)
+def search_spotify_tracks(
+    *,
+    session: Session = Depends(get_session),
+    mydiary_spotify: MyDiarySpotify = Depends(get_mydiary_spotify),
+    q: str,
+):
+    """Up to 10 tracks from Spotify's whole catalog."""
+    try:
+        summaries = mydiary_spotify.search_tracks(q)
+    except SpotifyUnavailable as e:
+        logger.warning(f"Spotify search failed: {e}")
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
+    return _with_used_by(session, summaries)
 
 
 @app.get(
@@ -1792,13 +1888,86 @@ def sync_note_images_route(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+def _spotify_id_error(msg: str) -> HTTPException:
+    # shaped like FastAPI's own validation errors, so the form can put it on the field
+    return HTTPException(
+        status_code=422,
+        detail=[{"loc": ["body", "spotify_id"], "msg": msg, "type": "value_error"}],
+    )
+
+
+SPOTIFY_TRACK_ID_RE = re.compile(r"[0-9A-Za-z]{22}")
+
+
+def _normalize_spotify_id_or_422(spotify_id: Optional[str]) -> Optional[str]:
+    """A bare track ID from an ID, URI or URL; None for a missing or blank one."""
+    spotify_id = (spotify_id or "").strip()
+    if not spotify_id:
+        return None
+    try:
+        normalized = normalize_spotify_id(spotify_id)
+    except ValueError:
+        normalized = ""
+    # also catches what normalize_spotify_id passes through untouched, like a
+    # link with no scheme, which Spotify would resolve but we'd store as is
+    if not SPOTIFY_TRACK_ID_RE.fullmatch(normalized) or not _is_track_link(
+        spotify_id, normalized
+    ):
+        raise _spotify_id_error(f"Not a Spotify track ID or link: {spotify_id}")
+    return normalized
+
+
+def _is_track_link(given: str, normalized: str) -> bool:
+    # an album or artist link has a valid-looking ID too, which would be stored
+    # as is whenever Spotify can't be asked to reject it
+    if given == normalized:
+        return True  # a bare ID
+    if ":" in given and not re.match(r"https?://", given):
+        parts = given.split(":")
+    else:
+        parts = urlsplit(given).path.split("/")
+    return len(parts) >= 2 and parts[-2] == "track"
+
+
+def _save_reference_recording(
+    session: Session,
+    mydiary_spotify: Optional[MyDiarySpotify],
+    spotify_id: str,
+    reject_unknown: bool = True,
+) -> None:
+    """Upsert the SpotifyTrack row for a PerformSong's Reference Recording.
+
+    Doesn't commit: the row goes in with the PerformSong. If Spotify can't be
+    reached, the PerformSong is saved without the row.
+    """
+    if mydiary_spotify is None:
+        logger.warning(f"Spotify not configured; saving {spotify_id} without its track")
+        return
+    try:
+        track = mydiary_spotify.get_track(spotify_id)
+    except SpotifyTrackNotFound:
+        if reject_unknown:
+            raise _spotify_id_error(f"Spotify has no track with ID {spotify_id}")
+        logger.warning(f"Spotify has no track {spotify_id}; keeping the ID")
+        return
+    except SpotifyUnavailable as e:
+        logger.warning(f"Spotify unavailable; saving {spotify_id} without its track: {e}")
+        return
+    mydiary_spotify.save_one_track_but_not_history(track, session=session, commit=False)
+
+
 @app.post(
     "/performsongs/", operation_id="createPerformSong", response_model=PerformSongRead
 )
 def create_perform_song(
-    *, session: Session = Depends(get_session), perform_song: PerformSongCreate
+    *,
+    session: Session = Depends(get_session),
+    mydiary_spotify: Optional[MyDiarySpotify] = Depends(get_mydiary_spotify_or_none),
+    perform_song: PerformSongCreate,
 ):
-    perform_song.spotify_id = normalize_spotify_id(perform_song.spotify_id)
+    perform_song.spotify_id = _normalize_spotify_id_or_422(perform_song.spotify_id)
+    if perform_song.spotify_id:
+        _save_reference_recording(session, mydiary_spotify, perform_song.spotify_id)
     db_perform_song = PerformSong.model_validate(perform_song)
     session.add(db_perform_song)
     session.commit()
@@ -1851,6 +2020,7 @@ def read_perform_song(
 def update_perform_song(
     *,
     session: Session = Depends(get_session),
+    mydiary_spotify: Optional[MyDiarySpotify] = Depends(get_mydiary_spotify_or_none),
     perform_song_id: int,
     perform_song: PerformSongUpdate,
 ):
@@ -1858,10 +2028,16 @@ def update_perform_song(
     if not db_perform_song:
         raise HTTPException(status_code=404, detail="PerformSong not found")
     perform_song_data = perform_song.model_dump(exclude_unset=True)
-    if perform_song_data.get("spotify_id"):
-        perform_song_data["spotify_id"] = normalize_spotify_id(
-            perform_song_data["spotify_id"]
-        )
+    if "spotify_id" in perform_song_data:
+        spotify_id = _normalize_spotify_id_or_422(perform_song_data["spotify_id"])
+        perform_song_data["spotify_id"] = spotify_id
+        changed = spotify_id != db_perform_song.spotify_id
+        # an unchanged ID is looked up only to fill in a missing track row, and
+        # isn't rejected if Spotify no longer has it
+        if spotify_id and (changed or session.get(SpotifyTrack, spotify_id) is None):
+            _save_reference_recording(
+                session, mydiary_spotify, spotify_id, reject_unknown=changed
+            )
     db_perform_song.sqlmodel_update(perform_song_data)
     session.add(db_perform_song)
     session.commit()

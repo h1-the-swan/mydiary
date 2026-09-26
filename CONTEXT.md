@@ -43,3 +43,13 @@ _Avoid_: image (when a Map could be meant), thumbnail
 **Map**:
 A rendered picture of a Diary Day's location track, shown in the Location section. A Map is generated and is never a Photo.
 _Avoid_: location image, map photo
+
+### Songs
+
+**PerformSong**:
+A piece of music the diarist learns and performs. Either still being learned (in the learning queue) or learned.
+_Avoid_: song (unqualified), track, tune
+
+**Reference Recording**:
+The Spotify track a PerformSong is learned from. It may be a cover or a live version and need not be the original. A PerformSong has at most one, and its name and artist can seed the PerformSong's own.
+_Avoid_: Spotify ID (when the recording is meant), original, source track

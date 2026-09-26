@@ -20,7 +20,7 @@ from mydiary.models import (
     SpellingBeeMiss,
     SpellingBeePuzzle,
 )
-from mydiary.api import app, get_session
+from mydiary.api import app, get_mydiary_spotify_or_none, get_session
 
 
 @pytest.fixture(name="session")
@@ -48,6 +48,8 @@ def client_fixture(session: Session):
         return session
 
     app.dependency_overrides[get_session] = get_session_override
+    # PerformSong saves look up their track; never reach the real Spotify here
+    app.dependency_overrides[get_mydiary_spotify_or_none] = lambda: None
     client = TestClient(app)
     yield client
     app.dependency_overrides.clear()
