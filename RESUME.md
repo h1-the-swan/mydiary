@@ -19,13 +19,13 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 4. Save path: None-guard (fixes the 500), `SpotifyTrack` upsert, 422 on unknown ID, save anyway if Spotify is unreachable; tests
 - [x] 5. Regenerate `api.ts` in the container
 - [x] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
-- [ ] 7. Form: "Find on Spotify" autocomplete
+- [x] 7. Form: "Find on Spotify" autocomplete
 - [ ] 8. Docs
 - [ ] Verification: pytest, build, lint vs baseline, Firefox checks listed in the plan
 
 ## Next action
 
-Step 7: the "Find on Spotify" `v-autocomplete` at the top of `PerformSongEdit.vue` (debounced ~300 ms, `no-filter`, item slot with thumbnail / title / artist / album · year / "already in your songs" badge). Picking a result runs the same fill as a pasted ID, reusing the result instead of a second lookup. The user asked to stop before step 8 (docs).
+Paused before step 8 at the user's request. Before or alongside step 8, run the plan's Firefox checks (Playwright MCP wasn't available for steps 6 and 7). Then step 8: docs.
 
 ## Notes
 
@@ -40,3 +40,4 @@ Step 7: the "Find on Spotify" `v-autocomplete` at the top of `PerformSongEdit.vu
 - No Joplin writes are needed for this feature. Don't press "Init note" or add photos/maps in the worktree app.
 - Step 6: a paste replaces the whole Spotify ID field (`preventDefault`, then look up the clipboard text), because on `paste` the v-model hasn't updated yet. `lookedUp` stops a blur right after a paste from looking up again, and a sequence number drops stale responses. A 404 is a red field error; any other failure is a neutral message, since the save still works. The "used by" warning ignores the song being edited. If two songs share a recording and the one being edited has the lower id, the backend reports that one, so no warning shows (rare, accepted).
 - Playwright MCP wasn't available in the 2026-09-26 session, so step 6 was checked by build, lint and curl only. The Firefox checks in the plan still need doing.
+- Step 7: a picked search result goes through `applyTrack`, the same function a looked-up ID uses, so there's no second lookup. Picking puts the result's title in the search box, and the search `watch` skips a query equal to the picked title. `v-model:search` is written as `:search` + `@update:search`, because the editor's Vue 2 lint rule flags the argument form.

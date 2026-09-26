@@ -8,6 +8,50 @@
             <v-card-text>
                 <v-container class="pa-0">
                     <v-row>
+                        <v-col cols="12">
+                            <!-- results come filtered from Spotify, hence no-filter -->
+                            <v-autocomplete
+                                v-model="picked"
+                                :search="searchText"
+                                @update:search="searchText = $event"
+                                :items="searchResults"
+                                :loading="searching"
+                                :error-messages="searchError"
+                                item-title="name"
+                                item-value="spotify_id"
+                                label="Find on Spotify"
+                                prepend-inner-icon="mdi-magnify"
+                                return-object
+                                no-filter
+                                clearable
+                                :hide-no-data="searchText.trim().length < 2"
+                                :no-data-text="searching ? 'Searching…' : 'No tracks found'"
+                                @update:model-value="onPick"
+                            >
+                                <template #item="{ props: itemProps, item }">
+                                    <v-list-item
+                                        v-bind="itemProps"
+                                        :title="item.name"
+                                        :subtitle="trackSubtitle(item)"
+                                    >
+                                        <template #prepend>
+                                            <v-avatar rounded="0" size="40">
+                                                <v-img
+                                                    v-if="item.thumbnail_url"
+                                                    :src="item.thumbnail_url"
+                                                />
+                                                <v-icon v-else icon="mdi-music" />
+                                            </v-avatar>
+                                        </template>
+                                        <template v-if="usedByOther(item) !== null" #append>
+                                            <v-chip size="x-small" color="warning">
+                                                already in your songs
+                                            </v-chip>
+                                        </template>
+                                    </v-list-item>
+                                </template>
+                            </v-autocomplete>
+                        </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
                                 v-model="submitPerformSong.name"
@@ -146,6 +190,8 @@ import {
     PerformSongCreate,
     deletePerformSong,
     lookupSpotifyTrack,
+    searchSpotifyTracks,
+    TrackSummaryRead,
 } from '@/api'
 import { isAxiosError } from 'axios'
 import { useAppStore } from '@/store/app'
@@ -256,6 +302,10 @@ watch(
     () => submitPerformSong.value.spotify_id,
     (id) => {
         if ((id ?? '').trim() !== lookedUp) clearSpotifyStatus()
+        // a picked result stays shown only while it's the song's recording
+        if (picked.value && (id ?? '').trim() !== picked.value.spotify_id) {
+            picked.value = null
+        }
     }
 )
 
@@ -266,6 +316,81 @@ function onSpotifyPaste(e: ClipboardEvent) {
     e.preventDefault()
     submitPerformSong.value.spotify_id = text.trim()
     lookupSpotify(submitPerformSong.value.spotify_id)
+}
+
+// the song already using this recording, not counting the one being edited
+function usedByOther(track: TrackSummaryRead): number | null {
+    const owner = track.used_by_perform_song_id ?? null
+    return owner !== props.performSong?.id ? owner : null
+}
+
+// shared by a looked-up ID and a picked search result
+function applyTrack(track: TrackSummaryRead) {
+    clearSpotifyStatus()
+    lookedUp = track.spotify_id
+    submitPerformSong.value.spotify_id = track.spotify_id
+    // never overwrite what's been typed
+    if (!submitPerformSong.value.name) {
+        submitPerformSong.value.name = track.name
+    }
+    if (!submitPerformSong.value.artist_name) {
+        submitPerformSong.value.artist_name = track.artist_name
+    }
+    usedById.value = usedByOther(track)
+}
+
+const picked = ref<TrackSummaryRead | null>(null)
+const searchText = ref('')
+const searchResults = ref<TrackSummaryRead[]>([])
+const searching = ref(false)
+const searchError = ref('')
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let searchSeq = 0
+
+function trackSubtitle(track: TrackSummaryRead) {
+    const album = [track.album_name, track.release_year]
+        .filter((x) => x)
+        .join(' · ')
+    return album ? `${track.artist_name} — ${album}` : track.artist_name
+}
+
+watch(searchText, (text) => {
+    clearTimeout(searchTimer)
+    const seq = ++searchSeq
+    searching.value = false
+    searchError.value = ''
+    const q = (text ?? '').trim()
+    if (q.length < 2) {
+        searchResults.value = []
+        return
+    }
+    // picking a result puts its title in the box; that's not a new search
+    if (q === picked.value?.name) return
+    searching.value = true
+    searchTimer = setTimeout(async () => {
+        try {
+            const results = (await searchSpotifyTracks({ q })).data
+            if (seq === searchSeq) searchResults.value = results
+        } catch {
+            if (seq === searchSeq) searchError.value = "Couldn't reach Spotify"
+        } finally {
+            if (seq === searchSeq) searching.value = false
+        }
+    }, 300)
+})
+
+function onPick(track: TrackSummaryRead | null) {
+    if (track) applyTrack(track)
+}
+
+function resetSearch() {
+    clearTimeout(searchTimer)
+    searchSeq++
+    picked.value = null
+    searchText.value = ''
+    searchResults.value = []
+    searchError.value = ''
+    searching.value = false
 }
 
 async function lookupSpotify(raw: string | null | undefined) {
@@ -279,17 +404,7 @@ async function lookupSpotify(raw: string | null | undefined) {
     try {
         const track = (await lookupSpotifyTrack({ id })).data
         if (seq !== lookupSeq) return
-        lookedUp = track.spotify_id
-        submitPerformSong.value.spotify_id = track.spotify_id
-        // never overwrite what's been typed
-        if (!submitPerformSong.value.name) {
-            submitPerformSong.value.name = track.name
-        }
-        if (!submitPerformSong.value.artist_name) {
-            submitPerformSong.value.artist_name = track.artist_name
-        }
-        const owner = track.used_by_perform_song_id ?? null
-        usedById.value = owner !== props.performSong?.id ? owner : null
+        applyTrack(track)
     } catch (e) {
         if (seq !== lookupSeq) return
         if (isAxiosError(e) && e.response?.status === 404) {
@@ -315,6 +430,7 @@ watchEffect(() => {
         // the form stays mounted when moving between songs
         lookedUp = props.performSong.spotify_id ?? ''
         clearSpotifyStatus()
+        resetSearch()
         submitPerformSong.value.notes = props.performSong.notes
         submitPerformSong.value.perform_url = props.performSong.perform_url
         submitPerformSong.value.created_at = dateFmt(
