@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 
-from types import SimpleNamespace
-
 import pendulum
 import pytest
+from sqlmodel import Session
 
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.song_practice import RunSummary
 
-from tests.fakes import FakeJoplin, make_note
+from tests.in_memory_joplin import InMemoryJoplin
 
 DT = pendulum.datetime(2026, 9, 18, tz="America/New_York")
 RUN = RunSummary("Paper Lanterns", "ukulele", ["Bridge"], DT.add(hours=20))
@@ -34,27 +33,39 @@ def test_no_section_without_runs():
     assert "## Practice" not in MyDiaryDay(dt=DT, practice_runs=[]).init_markdown()
 
 
-class RecordingJoplin(FakeJoplin):
-    def __init__(self, notes):
-        super().__init__(notes)
-        self.bodies = {}
-
-    def update_note_body(self, note_id, body):
-        self.bodies[note_id] = body
-        return SimpleNamespace(status_code=200)
+BODY = (
+    "# Sep 18, 2026\n\ntimezone: America/New_York\n\n## Words\n\n## Images\n\n"
+    "## Google Calendar events\n\nNone\n\n## Spotify tracks\n\nNone\n"
+)
 
 
-def test_update_adds_section_to_an_existing_note(monkeypatch):
-    monkeypatch.setattr(MyDiaryDay, "save_note_and_words_to_db", lambda self, session: None)
-    body = (
-        "# Sep 18, 2026\n\ntimezone: America/New_York\n\n## Words\n\n## Images\n\n"
-        "## Google Calendar events\n\nNone\n\n## Spotify tracks\n\nNone\n"
+def refresh(joplin: InMemoryJoplin, session: Session, runs) -> str:
+    note_id = next(iter(joplin.notes))
+    MyDiaryDay(dt=DT, practice_runs=runs, joplin_connector=joplin).update_joplin_note(
+        session=session
     )
-    note = make_note("2026-09-18", body, note_id="n1")
-    joplin = RecordingJoplin([note])
-    day = MyDiaryDay(dt=DT, practice_runs=[RUN], joplin_note_id="n1")
-    day.update_joplin_note(session=None, joplin_connector=joplin)
-    new_body = joplin.bodies["n1"]
+    return joplin.notes[note_id].body
+
+
+def test_update_adds_section_to_an_existing_note(db_session: Session):
+    joplin = InMemoryJoplin()
+    joplin.add_note("2026-09-18", BODY)
+    new_body = refresh(joplin, db_session, [RUN])
     assert "## Practice" in new_body
     assert "stumbled on Bridge" in new_body
     assert new_body.index("## Spotify tracks") < new_body.index("## Practice")
+
+
+def test_update_without_runs_adds_no_section(db_session: Session):
+    joplin = InMemoryJoplin()
+    joplin.add_note("2026-09-18", BODY)
+    assert "## Practice" not in refresh(joplin, db_session, [])
+
+
+def test_update_replaces_the_section(db_session: Session):
+    joplin = InMemoryJoplin()
+    joplin.add_note("2026-09-18", BODY + "\n## Practice\n\n- an old run\n")
+    new_body = refresh(joplin, db_session, [RUN])
+    assert "an old run" not in new_body
+    assert new_body.count("## Practice") == 1
+    assert "stumbled on Bridge" in new_body

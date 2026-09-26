@@ -293,11 +293,15 @@ back to its plain name. Stumbles are listed in sheet order. Like Location, the
 section only appears on days that have something in it.
 
 `runs_for_day()` in `songs.py` gathers the runs; `practice_markdown()` in
-`song_practice.py` formats them. `update_joplin_note()` refreshes only the
-sections a note already has, so the update path first calls
-`MarkdownDoc.ensure_section("Practice", after_title="Spotify tracks")`, which
-adds the section to a note initialized before the day's first run. The
-Location section is backfilled the same way.
+`song_practice.py` formats them. Practice is an App-owned Section in the
+Diary Note's section registry (see
+[architecture.md](architecture.md#diary-notes-and-joplin)), and refreshing a
+note (`update_joplin_note()`) rewrites it along with Google Calendar events and
+Spotify tracks. On a day with runs, a refresh adds the section to a note
+created before the day's first run. It goes at the end, since no known section
+follows it, so any section the diarist added after Spotify tracks stays
+before it. On a day without runs, a refresh adds no Practice section and
+leaves an existing one as it was.
 
 ## Routes
 
@@ -347,7 +351,7 @@ The four tables were added by alembic revision `64fa81d8c2b8`.
 | `tests/test_songs.py` | the tables and their constraints, key and capo inheritance, deleting a sheet while keeping its runs, run validation, the level gathering, the history move including the merge case, and `runs_for_day` in the day's timezone |
 | `tests/test_song_practice_api.py` | every route, including the 409, the 422s, lyrics-only runs, the override round trip, the rename and the learning queue |
 | `tests/test_lrclib.py` | the connector against a fake `requests`: the exact match, the search fallback, artist preference, skipped instrumentals, errors. A live lookup is marked `external_api` |
-| `tests/test_mydiary_day_practice.py` | the Practice section's Markdown, its absence on a day with no runs, and `ensure_section` backfilling it into an existing note |
+| `tests/test_mydiary_day_practice.py` | the Practice section's Markdown, its absence on a day with no runs, and a refresh adding it to an existing note or replacing it (against `InMemoryJoplin`) |
 | `src/chordpro.test.ts` | the parser, the importers (including the chord-vs-lyric case), keys and transposition, the directive editing and the fading masks |
 | `src/chords.test.ts` | chord lookup across spellings and suffixes, and the svguitar conversion including barres |
 | `src/practice.test.ts` | `capoOrNull` on the values a cleared number field produces |

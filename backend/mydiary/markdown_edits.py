@@ -1,16 +1,9 @@
 # -*- coding: utf-8 -*-
 
-DESCRIPTION = """Make edits to Markdown docs, prioritizing making sure nothing is lost from original."""
+DESCRIPTION = """Split Markdown docs into `## ` sections and replace a section's content."""
 
 from collections import OrderedDict
-from typing import Any, Generator, List, Optional, Tuple
-import difflib
-import re
-
-import logging
-
-root_logger = logging.getLogger()
-logger = root_logger.getChild(__name__)
+from typing import Any, Generator, List, Tuple
 
 
 class MarkdownDoc:
@@ -79,36 +72,6 @@ class MarkdownDoc:
         # this_section_txt = "\n".join(this_section)
         yield this_section_title, this_section
 
-    def ensure_section(
-        self, title: str, after_title: Optional[str] = None
-    ) -> "MarkdownSection":
-        """Return the named section, adding an empty one if the note lacks it.
-
-        Notes written before a section existed will never gain it through
-        update_joplin_note, which skips sections it does not already find. This
-        is how a new section gets backfilled into an old note.
-        """
-        try:
-            return self.get_section_by_title(title)
-        except KeyError:
-            pass
-        section = MarkdownSection(
-            [f"{'#' * 2} {title}", ""], title=title, parent=self, level=2
-        )
-        index = len(self.sections)
-        if after_title is not None:
-            for i, sec in enumerate(self.sections):
-                if sec.title.lower() == after_title.lower():
-                    index = i + 1
-                    break
-        self.sections.insert(index, section)
-        return section
-
-    def get_image_resource_ids(self):
-        sec = self.get_section_by_title('images')
-        resource_ids = sec.get_resource_ids()
-        return resource_ids
-
     def refresh_all_sections(self):
         for sec in self.sections:
             sec.refresh()
@@ -143,17 +106,10 @@ class MarkdownSection:
     def __str__(self) -> str:
         return self.txt
 
-    def get_resource_ids(self) -> List[str]:
-        # example of a resource id:
-        # "![](:/f04c1849b3e64b5ca151a737720s0132)"
-        return re.findall(r"!\[.*?\]\(:/([a-zA-Z0-9]+?)\)", self.content)
-
     def set_content(self, new_content: str) -> str:
         """Replace this section's content unconditionally, preserving the heading line.
 
-        Unlike update(), this allows removals and empty content. Only use it for
-        sections fully owned by the application (e.g. the images section); update()
-        remains the safe path for sections that may contain handwritten text.
+        Only for App-owned Sections: see `DiaryNote.edit()` and ADR-0002.
         """
         heading_line = self.lines[0] if self.lines else f"{'#' * self.level} {self.title}"
         new_content = new_content.strip()
@@ -165,44 +121,3 @@ class MarkdownSection:
             self.lines = [heading_line, ""]
         self.refresh()
         return "updated"
-
-    def update(self, new_txt: str, force: bool = False) -> str:
-        new_sec = MarkdownSection(new_txt.split("\n"))
-        if not new_sec.content or new_sec.content == "None":
-            # no new text to replace. do nothing
-            return "no update"
-        if self.txt == new_txt:
-            # new text is the same as old text. do nothing
-            return "no update"
-
-        if force is True:
-            replace = True
-        else:
-            replace = False
-            if not self.content or self.content == "None":
-                # no old text exists. safe to replace
-                replace = True
-            else:
-                s = difflib.SequenceMatcher(
-                    None, self.content.splitlines(), new_sec.content.splitlines()
-                )
-                tags = [opcode[0] for opcode in s.get_opcodes()]
-                if all(tag in ["equal", "insert"] for tag in tags):
-                    # no merge conflicts (no lines are marked to delete or replace). safe to replace old text with new text
-                    replace = True
-                else:
-                    logger.debug(tags)
-        if replace is True:
-            # self.txt = new_txt
-            self.lines = new_txt.split("\n")
-            # self.content = self.get_content()
-            self.refresh()
-            return "updated"
-
-        logger.debug(new_txt)
-        from difflib import Differ
-
-        logger.debug(MarkdownSection(new_txt.splitlines()).content)
-        for x in Differ().compare(self.lines, new_txt.splitlines()):
-            logger.debug(x)
-        raise RuntimeError("could not update text")

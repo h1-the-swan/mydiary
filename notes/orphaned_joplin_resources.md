@@ -29,8 +29,8 @@ which created Joplin resources but never wrote to the database).
 
 Harmless to the current workflow: `joplinNoteImages` reads resource ids from note
 markdown (not the DB), so the 14 stale rows never render as "in the note", and if
-one of those photos is re-added, `create_thumbnail` detects the existing resource
-by content hash and reuses it (no collision). The orphans only waste storage in
+one of those photos is re-added, `NoteEdit.add_resource` detects the existing
+resource by content hash and reuses it (no collision). The orphans only waste storage in
 the Joplin data directory.
 
 ## Cleanup options (not yet done)

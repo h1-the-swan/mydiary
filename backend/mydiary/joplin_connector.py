@@ -8,24 +8,17 @@ import requests
 import subprocess
 import hashlib
 from pathlib import Path
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from time import sleep
 import pendulum
 from timeit import default_timer as timer
 from typing import Any, Collection, Dict, List, Optional, Tuple, Union, Generator
 
-from .core import get_hash_from_txt, reduce_image_size, reduce_size_recurse
-from sqlalchemy import update
-
 from .models import (
     JoplinNote,
-    JoplinNoteImageLink,
     JoplinFolder,
-    MyDiaryImage,
-    MyDiaryWords,
 )
-from .db import engine, Session, select
+from .db import engine, Session
 
 import logging
 
@@ -87,16 +80,6 @@ JOPLIN_CONFIG = {
 
 def title_from_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d")
-
-
-@dataclass
-class NoteSyncSummary:
-    """What a note sync did. `notes_checked` counts listings, not fetches."""
-
-    notes_checked: int = 0
-    notes_synced: int = 0
-    tags_added: int = 0
-    tags_removed: int = 0
 
 
 class MyDiaryJoplin:
@@ -284,37 +267,29 @@ class MyDiaryJoplin:
 
     def get_note_id_by_title(
         self, title, parent_notebook_id: Optional[str] = None
-    ) -> str:
+    ) -> Optional[str]:
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
+        # a conflict copy Joplin set aside keeps the original's folder and
+        # title, so it would otherwise look like a second note for the day
         items = [
             item
-            for item in self.yield_notes_by_subfolder_id(parent_notebook_id)
-            if item["title"] == title
+            for item in self.yield_notes_by_subfolder_id(
+                parent_notebook_id, fields=["id", "title", "is_conflict"]
+            )
+            if item["title"] == title and not item.get("is_conflict")
         ]
 
         if not items:
             logger.debug(
                 f"no note found with title {title} (parent_notebook_id={parent_notebook_id})"
             )
-            return "does_not_exist"
+            return None
 
         if len(items) > 1:
             raise RuntimeError(f"more than one note found with title {title}")
 
         return items[0]["id"]
-
-    def get_note_id_by_date(self, dt: datetime) -> str:
-        title = title_from_date(dt)
-        logger.debug(f"title: {title}")
-        subfolder_title = str(dt.year)
-        logger.debug(f"subfolder_title: {subfolder_title}")
-        subfolder_id = self.get_subfolder_id(subfolder_title)
-        logger.debug(f"subfolder_id: {subfolder_id}")
-        logger.debug(
-            f"getting note id (title={title}, parent_notebook_id={subfolder_id})"
-        )
-        return self.get_note_id_by_title(title, parent_notebook_id=subfolder_id)
 
     def get_note(self, id: str, fields: Optional[List[str]] = None) -> JoplinNote:
         if fields is None:
@@ -332,117 +307,8 @@ class MyDiaryJoplin:
             "fields": fields,
         }
         r = requests.get(f"{self.base_url}/notes/{id}", params=params)
+        r.raise_for_status()
         return JoplinNote.from_api_response(r)
-
-    def sync_note_api_to_db_obj(
-        self,
-        note: Union[str, JoplinNote],
-        session: Session,
-        commit: bool = True,
-        sync_dt: Optional[datetime] = None,
-    ) -> Tuple[int, int]:
-        """Mirror one note from the API into the database, and sync its tags.
-
-        Refreshes the JoplinNote row (body, hash, flags, sync time), updates
-        the MyDiaryWords row in place (creating it the first time the note
-        has words), and brings the day's note-sourced tag links in line with
-        the hashtags in the body. Returns the tag (added, removed) counts.
-        """
-        from .tags import sync_joplin_note_tags, sync_note_tags
-
-        if not isinstance(note, JoplinNote):
-            note = self.get_note(note)
-        if sync_dt is None:
-            sync_dt = pendulum.now(tz="UTC")
-
-        words_content = ""
-        resource_ids: List[str] = []
-        if note.body:
-            md_note = note.md_note
-            try:
-                words_content = md_note.get_section_by_title("words").get_content()
-            except KeyError:
-                pass  # no Words section: nothing to mirror into MyDiaryWords
-            try:
-                resource_ids = md_note.get_image_resource_ids()
-            except KeyError:
-                pass  # no Images section either
-
-        self._rekey_recreated_note(note, session)
-
-        db_words = session.exec(
-            select(MyDiaryWords).where(MyDiaryWords.joplin_note_id == note.id)
-        ).one_or_none()
-        if words_content:
-            words_hash = get_hash_from_txt(words_content)
-            if db_words is None:
-                session.add(MyDiaryWords.from_joplin_note(note))
-            elif db_words.hash != words_hash:
-                # in place: assigning a fresh row to note.words would leave the
-                # old one behind with a NULL note id (no delete-orphan cascade)
-                db_words.txt = words_content
-                db_words.hash = words_hash
-                db_words.updated_at = note.updated_time
-                db_words.note_title = note.title
-                session.add(db_words)
-
-        note.has_words = len(words_content) > 0
-        note.has_images = len(resource_ids) > 0
-        note.time_last_api_sync = sync_dt
-        session.merge(note)
-        session.flush()
-        added, removed = sync_note_tags(session, note, commit=False)
-        # Joplin's own tags on the note, one way; a second request per note
-        j_added, j_removed = sync_joplin_note_tags(
-            session, note.title, self.get_note_tags(note.id), commit=False
-        )
-        if commit is True:
-            session.commit()
-        return added + j_added, removed + j_removed
-
-    def _rekey_recreated_note(self, note: JoplinNote, session: Session) -> None:
-        """Move a mirrored note onto a new Joplin id.
-
-        A note deleted and re-created in the Joplin app keeps its date title
-        but gets a new id, and titles are unique in the mirror. Rather than
-        fail the insert, the old row and everything keyed on it (words, image
-        links) are moved to the new id. Tag links are keyed by title, so they
-        need nothing."""
-        if session.get(JoplinNote, note.id) is not None:
-            return
-        stale = session.exec(
-            select(JoplinNote).where(JoplinNote.title == note.title)
-        ).one_or_none()
-        if stale is None:
-            return
-        old_id = stale.id
-        logger.warning(
-            f"note {note.title!r} was re-created in Joplin: {old_id} -> {note.id}"
-        )
-        session.expunge(stale)
-        for model in (MyDiaryWords, JoplinNoteImageLink):
-            session.execute(
-                update(model)
-                .where(model.joplin_note_id == old_id)
-                .values(joplin_note_id=note.id)
-            )
-        session.execute(
-            update(JoplinNote).where(JoplinNote.id == old_id).values(id=note.id)
-        )
-        session.flush()
-
-    def sync_one_day(self, session: Session, dt: datetime) -> "NoteSyncSummary":
-        """Mirror the one note for a day, if it exists."""
-        summary = NoteSyncSummary()
-        note_id = self.get_note_id_by_date(dt)
-        if note_id == "does_not_exist":
-            return summary
-        summary.notes_checked = 1
-        added, removed = self.sync_note_api_to_db_obj(note_id, session)
-        summary.notes_synced = 1
-        summary.tags_added = added
-        summary.tags_removed = removed
-        return summary
 
     def _yield_pages(self, url: str, fields: List[str]) -> Generator[Dict, None, None]:
         params = {
@@ -473,82 +339,6 @@ class MyDiaryJoplin:
     def yield_tag_note_ids(self, tag_id: str) -> Generator[str, None, None]:
         for item in self._yield_pages(f"{self.base_url}/tags/{tag_id}/notes", ["id"]):
             yield item["id"]
-
-    def sync_joplin_tags(self, session: Session) -> Tuple[int, int]:
-        """Reconcile every diary day's joplin-sourced links with Joplin.
-
-        Tagging a note in Joplin does not change the note's updated_time, so
-        the per-note "fetch what changed" rule cannot see it. This reads from
-        the tag side instead: one listing of all tags, then one request per
-        tag for its notes. Notes outside the mirror (other notebooks, or not
-        yet fetched) are ignored."""
-        from .tags import sync_joplin_tags_bulk
-
-        title_by_note_id = dict(session.exec(select(JoplinNote.id, JoplinNote.title)).all())
-        titles_by_day: Dict[str, List[str]] = {}
-        for tag in self.yield_all_tags():
-            for note_id in self.yield_tag_note_ids(tag["id"]):
-                day = title_by_note_id.get(note_id)
-                if day is not None:
-                    titles_by_day.setdefault(day, []).append(tag["title"])
-        return sync_joplin_tags_bulk(session, titles_by_day)
-
-    def sync_notes_from_api(
-        self, session: Session, force: bool = False
-    ) -> "NoteSyncSummary":
-        """Mirror every diary note whose Joplin copy is newer than the mirror.
-
-        The listing is cheap (100 notes per request, no bodies). A body is
-        fetched only for a note that is new, edited (updated_time newer, with
-        a second's slack because both sides are naive local datetimes), was
-        never given a body, or was never synced. `force` fetches all of them.
-        A note that fails to sync is logged and skipped, not fatal."""
-        summary = NoteSyncSummary()
-        known = {
-            note_id: (updated_time, body_is_null, sync_is_null)
-            for note_id, updated_time, body_is_null, sync_is_null in session.exec(
-                select(
-                    JoplinNote.id,
-                    JoplinNote.updated_time,
-                    JoplinNote.body.is_(None),
-                    JoplinNote.time_last_api_sync.is_(None),
-                )
-            ).all()
-        }
-        fields = ["id", "parent_id", "title", "updated_time"]
-        for item in self.yield_all_mydiary_notes(fields=fields):
-            summary.notes_checked += 1
-            api_updated = datetime.fromtimestamp(item["updated_time"] / 1000)
-            row = known.get(item["id"])
-            needs_fetch = (
-                force
-                or row is None
-                or row[1]
-                or row[2]
-                or api_updated > row[0] + timedelta(seconds=1)
-            )
-            if not needs_fetch:
-                continue
-            try:
-                added, removed = self.sync_note_api_to_db_obj(item["id"], session)
-            except Exception:
-                logger.exception(
-                    f"failed to sync note {item['id']} ({item.get('title')})"
-                )
-                session.rollback()
-                continue
-            summary.notes_synced += 1
-            summary.tags_added += added
-            summary.tags_removed += removed
-        try:
-            added, removed = self.sync_joplin_tags(session)
-        except Exception:
-            logger.exception("failed to sync Joplin's note tags")
-            session.rollback()
-        else:
-            summary.tags_added += added
-            summary.tags_removed += removed
-        return summary
 
     def update_note_body(self, note_id: str, new_body: str):
         return requests.put(
@@ -607,62 +397,6 @@ class MyDiaryJoplin:
         )
         return response
 
-    # def add_image_to_note(
-    #     self,
-    #     image_bytes: bytes,
-    #     size: Tuple[int, int] = (512, 512),
-    #     bytes_threshold: int = 60000,
-    # ) -> Union[requests.Response, None]:
-    #     if len(image_bytes) > bytes_threshold:
-    #         image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-    #     r = mydiary_joplin.create_resource(data=image_bytes)
-    #     r.raise_for_status()
-    #     resource_id = r.json()["id"]
-    #     resource_ids.append(f"![](:/{resource_id})")
-    #     logger.debug(f"new resource id: {resource_id}")
-    #     return r
-
-    def joplin_reduce_image_size(
-        self,
-        resource_id: str,
-        size: Tuple[int, int] = (512, 512),
-        bytes_threshold: int = 60000,
-        delete_original: bool = False,
-    ) -> Union[requests.Response, None]:
-        # check to make sure image isn't associated with more than one note
-        r = requests.get(
-            f"{self.base_url}/resources/{resource_id}/notes",
-            params={"token": self.token},
-        )
-        r_items = r.json().get("items", [])
-        if len(r_items) > 1:
-            logger.warning(
-                f"more than one note is associated with resource {resource_id}:"
-            )
-            logger.warning(r_items)
-            if delete_original is True:
-                raise RuntimeError(
-                    f"delete_original is set to True, but this resource ({resource_id}) is associated with more than one note"
-                )
-
-        resource_file = requests.get(
-            f"{self.base_url}/resources/{resource_id}/file",
-            params={"token": self.token},
-        )
-        image_bytes: bytes = resource_file.content
-        if len(image_bytes) > bytes_threshold:
-            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-        else:
-            logger.debug(
-                f"did not reduce the size of image (resource id: {resource_id} because it was already under the threshold ({bytes_threshold} bytes)"
-            )
-            return None
-        r = self.create_resource(data=image_bytes)
-        if delete_original is True:
-            logger.debug(f"deleting original image: {resource_id}")
-            self.delete_resource(resource_id, force=True)
-        return r
-
     def delete_resource(
         self,
         resource_id: str,
@@ -694,46 +428,6 @@ class MyDiaryJoplin:
         )
         return r
 
-    def create_thumbnail(
-        self,
-        image_bytes: bytes,
-        name: Optional[str] = None,
-        nextcloud_path: Optional[str] = None,
-        created_at: Optional[pendulum.DateTime] = None,
-    ) -> MyDiaryImage:
-        size = (512, 512)
-        bytes_threshold = 60000
-        orig_image_hash = hashlib.md5()
-        orig_image_hash.update(image_bytes)
-        if len(image_bytes) > bytes_threshold:
-            image_bytes = reduce_size_recurse(image_bytes, size, bytes_threshold)
-        image_hash = hashlib.md5()
-        image_hash.update(image_bytes)
-        # the resource id is the hash of the image bytes, so identical image
-        # content maps to a single Joplin resource; creating it again would fail
-        # on the unique-id constraint
-        resource_id = image_hash.hexdigest()
-        if self.resource_exists(resource_id):
-            logger.debug(f"reusing existing joplin resource {resource_id}")
-        else:
-            r = self.create_resource(data=image_bytes, title=name)
-            r.raise_for_status()
-            resource_id = r.json()["id"]
-        if created_at is None:
-            created_at = pendulum.now(tz="UTC")
-        mydiary_image = MyDiaryImage(
-            hash=image_hash.hexdigest(),
-            name=name,
-            filepath=None,
-            nextcloud_path=nextcloud_path,
-            description=None,
-            thumbnail_size=len(image_bytes),
-            joplin_resource_id=resource_id,
-            created_at=created_at.in_timezone("UTC"),
-            orig_image_hash=orig_image_hash.hexdigest(),
-        )
-        return mydiary_image
-
     def get_resource_file(self, resource_id: str) -> bytes:
         r = requests.get(
             f"{self.base_url}/resources/{resource_id}/file",
@@ -741,28 +435,6 @@ class MyDiaryJoplin:
         )
         r.raise_for_status()
         return r.content
-
-    def get_info_all_days(
-        self, min_dt=pendulum.parse("2022-01-01"), max_dt=pendulum.today()
-    ) -> List[Dict]:
-        dt = min_dt
-        data = []
-        while dt < max_dt:
-            note_id = self.get_note_id_by_date(dt)
-            if note_id and note_id != "does_not_exist":
-                note = self.get_note(note_id)
-                words_content = note.md_note.get_section_by_title("words").get_content()
-                resource_ids = note.md_note.get_image_resource_ids()
-                data.append(
-                    {
-                        "title": note.title,
-                        "note_id": note_id,
-                        "has_words": len(words_content) > 0,
-                        "has_images": len(resource_ids) > 0,
-                    }
-                )
-            dt = dt.add(days=1)
-        return data
 
     def yield_notes_by_subfolder_id(
         self,
@@ -789,18 +461,9 @@ class MyDiaryJoplin:
         }
         while has_more:
             r = requests.get(url, params=params)
+            r.raise_for_status()
             resp = r.json()
             for note in resp["items"]:
                 yield note
             has_more = resp["has_more"]
             params["page"] += 1
-
-    def yield_all_mydiary_notes(
-        self, fields: Optional[List[str]] = None
-    ) -> Generator[Dict, None, None]:
-        min_year = 2022
-        max_year = pendulum.yesterday().year
-        for year in range(min_year, max_year + 1):
-            subfolder_id = self.get_subfolder_id(str(year))
-            for note in self.yield_notes_by_subfolder_id(subfolder_id, fields=fields):
-                yield note

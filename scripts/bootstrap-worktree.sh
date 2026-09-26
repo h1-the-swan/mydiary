@@ -349,9 +349,9 @@ cat <<EOF
 
     Joplin and the OwnTracks recorder are single instances on the host, shared
     with the primary stack. Reads are harmless. Joplin WRITES are not: anything
-    that reaches init_or_update_joplin_note -- the "Init note" button, or
-    POST /joplin/init_note/{dt} -- edits your real diary notes, and with a
-    '$DB_MODE' database behind it that is very likely not what you want.
+    that creates or edits a Diary Note -- the "Init note" button, adding photos
+    or a map, POST /joplin/update_note/{dt} -- edits your real diary notes, and
+    with a '$DB_MODE' database behind it that is very likely not what you want.
 
     Tear down with:  docker compose down -v
 EOF

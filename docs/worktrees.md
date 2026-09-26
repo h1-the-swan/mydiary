@@ -81,9 +81,10 @@ pins it to the right one.
 Still shared, and not solved: Joplin and the OwnTracks recorder are single
 instances on the host, and every stack talks to the same ones. Reading from
 either is harmless. **Joplin writes are not** — anything reaching
-`init_or_update_joplin_note` (the "Init note" button, or
-`POST /joplin/init_note/{dt}`) edits the real diary notes, and it will do that
-with whatever the worktree's database happens to contain. Point
+`DiaryNote.create()` or `DiaryNote.edit()` (the "Init note" button, adding photos
+or a map, `POST /joplin/update_note/{dt}`, the `joplin_init*` / `joplin_update*`
+scripts) edits the real diary notes, and it will do that with whatever the
+worktree's database happens to contain. Point
 `JOPLIN_NOTEBOOK_ID` at a scratch notebook if a feature needs to exercise those
 paths.
 

@@ -219,10 +219,12 @@ a hyphen in the slug), and the name is kept as the tag's label.
 
 Diary prose is written in the Joplin app, not in this frontend, so the
 database only knows about a hashtag once the note has been pulled in. Three
-paths do that; all of them end in `sync_note_api_to_db_obj()` in
-[joplin_connector.py](../backend/mydiary/joplin_connector.py), which refreshes
+paths do that; all of them end in `refresh_note_mirror()` in
+[diary_note.py](../backend/mydiary/diary_note.py), which refreshes
 the `joplinnote` mirror (body, hash, flags, sync time), updates the
-`mydiarywords` row in place, and calls `sync_note_tags()`.
+`mydiarywords` row in place, rebuilds the note's image links, and calls
+`sync_note_tags()` and `sync_joplin_note_tags()`. Every write to a note through
+`DiaryNote.edit()` or `DiaryNote.create()` ends in the same refresh.
 
 | Path | When | What it fetches |
 |---|---|---|
@@ -237,10 +239,13 @@ In a **git worktree** stack the scheduler is off (`MYDIARY_ENABLE_SCHEDULER=0`),
 so use the button or the route; the sync only reads from Joplin, so it is safe
 against the shared instance.
 
-Two behaviours of the sync worth knowing: a note without a Words or Images
-section is fine (no words row, `has_words=False`); and a note deleted and
+Three behaviours of the sync worth knowing: a note without a Words or Images
+section is fine (no words row, `has_words=False`); a note deleted and
 re-created in the Joplin app under the same date title is moved onto its new
-id (words and image links follow it) rather than failing the unique title.
+id (words and image links follow it) rather than failing the unique title; and
+a note whose words would be lost or overwritten raises `WordsConflict` (see
+[architecture.md](architecture.md#diary-notes-and-joplin)), which the hourly
+sync logs and skips and a route returns as 409.
 
 ## Routes
 
@@ -292,7 +297,7 @@ theme defaults in `plugins/vuetify.ts`.
 |---|---|
 | `tests/test_hashtags.py` | the grammar and normalisation, case by case, with no database |
 | `tests/test_tags.py` | the model constraints, get-or-create, the note/manual link precedence, `set_target_tags`, resolution (exact, none, ambiguous, unregistered), hydration that skips deleted rows |
-| `tests/test_joplin_sync.py` | one-note and all-notes sync against `tests/fakes.py::FakeJoplin`, an in-memory stand-in for the Joplin client: words updated in place, missing sections, empty bodies, a re-created note, the fetch-only-what-changed rule, `force` |
+| `tests/test_diary_note.py` | the mirror refresh and one-note and all-notes sync against `tests/in_memory_joplin.py::InMemoryJoplin`: words updated in place, missing sections, empty bodies, a re-created note, image links, the Words check, the fetch-only-what-changed rule, `force`, Joplin's own tags |
 | `tests/test_api.py::TestTags` | every route, including the 409s, the per-day sync through a fake client, the background all-notes case, and the mirror refresh on `GET /joplin/get_note` |
 | `tests/test_migration_tags.py` | the migration, run by the real alembic as a subprocess |
 

@@ -34,7 +34,9 @@ logger = root_logger.getChild(__name__)
 
 from mydiary.core import get_last_timezone
 from mydiary.db import engine
+from mydiary.diary_note import NoteClobbered, WordsConflict
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.joplin_port import HttpJoplin
 from mydiary.models import OwnTracksDayMap
 from mydiary.owntracks_maps import render_for_day, sync_day_map_to_note
 
@@ -60,6 +62,7 @@ def start_of_day(diary_date, session: Session) -> pendulum.DateTime:
 
 def main(args):
     with Session(engine) as session, MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        joplin = HttpJoplin(mydiary_joplin)
         # this selects the *days* to visit, not the maps to re-encode: one
         # sync_day_map_to_note re-renders every panel the day has. A day can now
         # hold several map rows, so filtering to panel 0 -- the overview, the one
@@ -103,9 +106,7 @@ def main(args):
                         continue
                     after = len(data)
                 else:
-                    result, _ = sync_day_map_to_note(
-                        dt, session=session, mydiary_joplin=mydiary_joplin
-                    )
+                    result, _ = sync_day_map_to_note(dt, session=session, joplin=joplin)
                     if result == "no update":
                         logger.info(f"{diary_date}: already up to date")
                         num_skipped += 1
@@ -115,6 +116,12 @@ def main(args):
             except LookupError as e:
                 # no Joplin note for the day, or no usable location data left
                 logger.warning(f"{diary_date}: skipped -- {e}")
+                num_failed += 1
+                continue
+            except (NoteClobbered, WordsConflict, ValueError) as e:
+                # the note is open in the Joplin app, its words need a look, or
+                # its sections can't be told apart (Location twice, say)
+                logger.error(f"{diary_date}: not written -- {e}")
                 num_failed += 1
                 continue
 

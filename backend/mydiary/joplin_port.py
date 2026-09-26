@@ -1,0 +1,195 @@
+# -*- coding: utf-8 -*-
+"""The narrow port the app uses to talk to Joplin, and its HTTP adapter.
+
+`JoplinPort` covers only what talks to Joplin: finding, listing, reading,
+creating and updating notes, creating and deleting resources, reading tags, and the year
+subfolders notes are filed in. `HttpJoplin` implements it over the Joplin data
+API. Tests use `InMemoryJoplin` (tests/in_memory_joplin.py), which implements
+the same port without any HTTP.
+
+A missing note is `None` here. Only the `joplin_get_note_id` route turns that
+into the `"does_not_exist"` string the frontend reads.
+"""
+
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import (
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    runtime_checkable,
+)
+
+import requests
+
+from .joplin_connector import MyDiaryJoplin, title_from_date
+from .models import JoplinNote
+
+
+class JoplinError(Exception):
+    """A Joplin request failed, or named a note or resource Joplin doesn't have."""
+
+
+@dataclass(frozen=True)
+class NoteListing:
+    """A note as a folder listing gives it: enough to tell whether it changed."""
+
+    id: str
+    title: str
+    updated_time: datetime  # naive local time, like JoplinNote's
+
+
+@runtime_checkable
+class JoplinPort(Protocol):
+    def get_note_id_by_date(self, dt: date) -> Optional[str]:
+        """The id of the Diary Note titled `YYYY-MM-DD` in the year's subfolder.
+        Conflict copies Joplin set aside (`is_conflict`) don't count."""
+        ...
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        """Every note in a year's subfolder, without bodies, leaving out
+        conflict copies. Nothing if the folder is missing."""
+        ...
+
+    def get_note(self, note_id: str) -> JoplinNote:
+        """The whole note, body included, as a fresh unattached instance."""
+        ...
+
+    def create_note(self, title: str, body: str, folder_id: str) -> str:
+        """Create a note in a folder and return its id."""
+        ...
+
+    def update_note_body(self, note_id: str, body: str) -> None: ...
+
+    def create_resource(
+        self, data: bytes, title: Optional[str] = None, ext: str = "jpg"
+    ) -> str:
+        """Store a file and return its id, the md5 of `data`.
+
+        The id is derived from the content, so storing bytes that are already
+        stored raises. Check `resource_exists` first to reuse one."""
+        ...
+
+    def delete_resource(self, resource_id: str) -> None: ...
+
+    def resource_exists(self, resource_id: str) -> bool: ...
+
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        """Ids of the notes that reference a resource. Joplin indexes this in
+        the background, so a note saved moments ago may not be counted yet."""
+        ...
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        """Titles of Joplin's own tags on a note."""
+        ...
+
+    def yield_all_tags(self) -> Iterator[Dict[str, str]]:
+        """Every tag, as `{"id": ..., "title": ...}`."""
+        ...
+
+    def yield_tag_note_ids(self, tag_id: str) -> Iterator[str]: ...
+
+    def get_or_create_year_folder(self, year: int) -> str:
+        """The id of the notebook's subfolder for a year, created if missing."""
+        ...
+
+
+@contextmanager
+def _joplin_errors(what: str) -> Generator[None, None, None]:
+    try:
+        yield
+    except requests.RequestException as e:
+        raise JoplinError(f"{what}: {e}") from e
+
+
+class HttpJoplin:
+    """`JoplinPort` over the Joplin data API, by way of `MyDiaryJoplin`.
+
+    Several client methods return the raw `requests.Response`, which the
+    `external_api` test fixtures still read. This adapter turns those
+    into the port's return values, and any failed request into `JoplinError`."""
+
+    def __init__(self, client: MyDiaryJoplin) -> None:
+        self.client = client
+
+    def get_note_id_by_date(self, dt: date) -> Optional[str]:
+        # the year's folder only: `get_note_id_by_title` with no folder
+        # searches the notebook root instead
+        with _joplin_errors(f"finding the note for {dt}"):
+            folder_id = self.client.get_subfolder_id(str(dt.year))
+            if folder_id is None:
+                return None
+            return self.client.get_note_id_by_title(
+                title_from_date(dt), parent_notebook_id=folder_id
+            )
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        with _joplin_errors(f"listing the {year} notes"):
+            folder_id = self.client.get_subfolder_id(str(year))
+            if folder_id is None:
+                return
+            for item in self.client.yield_notes_by_subfolder_id(
+                folder_id, fields=["id", "title", "updated_time", "is_conflict"]
+            ):
+                if item.get("is_conflict"):
+                    continue
+                yield NoteListing(
+                    id=item["id"],
+                    title=item["title"],
+                    updated_time=datetime.fromtimestamp(item["updated_time"] / 1000),
+                )
+
+    def get_note(self, note_id: str) -> JoplinNote:
+        with _joplin_errors(f"getting note {note_id}"):
+            return self.client.get_note(note_id)
+
+    def create_note(self, title: str, body: str, folder_id: str) -> str:
+        with _joplin_errors(f"creating note {title}"):
+            r = self.client.post_note(title=title, body=body, parent_id=folder_id)
+            r.raise_for_status()
+        return r.json()["id"]
+
+    def update_note_body(self, note_id: str, body: str) -> None:
+        with _joplin_errors(f"updating note {note_id}"):
+            self.client.update_note_body(note_id, body).raise_for_status()
+
+    def create_resource(
+        self, data: bytes, title: Optional[str] = None, ext: str = "jpg"
+    ) -> str:
+        with _joplin_errors("creating a resource"):
+            r = self.client.create_resource(data=data, title=title, ext=ext)
+            r.raise_for_status()
+        return r.json()["id"]
+
+    def delete_resource(self, resource_id: str) -> None:
+        with _joplin_errors(f"deleting resource {resource_id}"):
+            self.client.delete_resource(resource_id, force=True).raise_for_status()
+
+    def resource_exists(self, resource_id: str) -> bool:
+        with _joplin_errors(f"looking up resource {resource_id}"):
+            return self.client.resource_exists(resource_id)
+
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        url = f"{self.client.base_url}/resources/{resource_id}/notes"
+        with _joplin_errors(f"listing the notes of resource {resource_id}"):
+            return [item["id"] for item in self.client._yield_pages(url, ["id"])]
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        with _joplin_errors(f"getting the tags of note {note_id}"):
+            return self.client.get_note_tags(note_id)
+
+    def yield_all_tags(self) -> Iterator[Dict[str, str]]:
+        with _joplin_errors("listing tags"):
+            yield from self.client.yield_all_tags()
+
+    def yield_tag_note_ids(self, tag_id: str) -> Iterator[str]:
+        with _joplin_errors(f"listing the notes of tag {tag_id}"):
+            yield from self.client.yield_tag_note_ids(tag_id)
+
+    def get_or_create_year_folder(self, year: int) -> str:
+        with _joplin_errors(f"finding the {year} folder"):
+            return self.client.get_subfolder_id(str(year), create_if_not_exists=True)

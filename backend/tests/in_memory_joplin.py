@@ -1,0 +1,267 @@
+# -*- coding: utf-8 -*-
+"""An in-memory Joplin that implements the whole JoplinPort."""
+
+import hashlib
+import uuid
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from typing import Dict, Iterator, List, Optional, Tuple
+
+from mydiary.core import get_hash_from_txt
+from mydiary.joplin_connector import title_from_date
+from mydiary.joplin_port import JoplinError, NoteListing
+from mydiary.models import JoplinNote
+
+
+@dataclass
+class StoredFolder:
+    id: str
+    title: str
+    parent_id: str
+
+
+@dataclass
+class StoredNote:
+    id: str
+    parent_id: str
+    title: str
+    body: str
+    created_time: datetime
+    updated_time: datetime
+    # a copy Joplin set aside when two versions of a note collided; the app
+    # files it under Conflicts, but it keeps the original's folder and title
+    is_conflict: bool = False
+
+
+@dataclass
+class StoredResource:
+    data: bytes
+    title: str
+    ext: str
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex
+
+
+class InMemoryJoplin:
+    """A Joplin notebook held in memory, filed by year like the real diary.
+
+    It shares no code with `MyDiaryJoplin` on purpose: a method missing here
+    fails with AttributeError instead of falling through to real HTTP.
+
+    Beyond the port, tests get direct access to `folders`, `notes`,
+    `resources` and `updates` (every body the app PUT, in order), plus a few
+    controls: `add_note` and `tag_note` to seed, `edit_note` and `untag_note`
+    for changes made in the Joplin app, `clobber_next_update` to
+    stand in for the Joplin app's autosave writing back a stale copy,
+    `set_aside_conflict` for Joplin keeping both sides of such a collision,
+    and `fail_next_update`."""
+
+    def __init__(self, notebook_id: str = "0" * 32) -> None:
+        self.notebook_id = notebook_id
+        self.folders: Dict[str, StoredFolder] = {}
+        self.notes: Dict[str, StoredNote] = {}
+        self.resources: Dict[str, StoredResource] = {}
+        self.tags: Dict[str, str] = {}  # tag id -> title
+        self.note_tag_ids: Dict[str, List[str]] = {}  # note id -> tag ids
+        self.updates: List[Tuple[str, str]] = []
+        self._clobbers: Dict[str, List[str]] = {}
+        self._fail_next_update = False
+        # Joplin's times are naive local datetimes; a fixed clock that moves
+        # on every write keeps "updated since" comparisons deterministic
+        self._clock = datetime(2026, 1, 1, 12, 0, 0)
+
+    def _tick(self) -> datetime:
+        self._clock += timedelta(minutes=1)
+        return self._clock
+
+    def _stored_note(self, note_id: str) -> StoredNote:
+        try:
+            return self.notes[note_id]
+        except KeyError:
+            raise JoplinError(f"no note {note_id}") from None
+
+    # --- notes ---
+
+    def get_note_id_by_date(self, dt: date) -> Optional[str]:
+        folder_id = self._year_folder_id(dt.year)
+        if folder_id is None:
+            return None
+        title = title_from_date(dt)
+        ids = [
+            n.id
+            for n in self.notes.values()
+            if n.parent_id == folder_id and n.title == title and not n.is_conflict
+        ]
+        if len(ids) > 1:
+            raise RuntimeError(f"more than one note found with title {title}")
+        return ids[0] if ids else None
+
+    def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
+        folder_id = self._year_folder_id(year)
+        for n in list(self.notes.values()):
+            if folder_id is not None and n.parent_id == folder_id and not n.is_conflict:
+                yield NoteListing(id=n.id, title=n.title, updated_time=n.updated_time)
+
+    def get_note(self, note_id: str) -> JoplinNote:
+        n = self._stored_note(note_id)
+        return JoplinNote(
+            id=n.id,
+            parent_id=n.parent_id,
+            title=n.title,
+            body=n.body,
+            created_time=n.created_time,
+            updated_time=n.updated_time,
+            body_hash=get_hash_from_txt(n.body) if n.body else None,
+        )
+
+    def create_note(self, title: str, body: str, folder_id: str) -> str:
+        # like Joplin, this doesn't check that the folder exists
+        now = self._tick()
+        note_id = _new_id()
+        self.notes[note_id] = StoredNote(
+            id=note_id,
+            parent_id=folder_id,
+            title=title,
+            body=body,
+            created_time=now,
+            updated_time=now,
+        )
+        return note_id
+
+    def update_note_body(self, note_id: str, body: str) -> None:
+        if self._fail_next_update:
+            self._fail_next_update = False
+            raise JoplinError(f"updating note {note_id}: simulated failure")
+        n = self._stored_note(note_id)
+        n.body = body
+        n.updated_time = self._tick()
+        self.updates.append((note_id, body))
+        if self._clobbers.get(note_id):
+            n.body = self._clobbers[note_id].pop(0)
+            n.updated_time = self._tick()
+
+    # --- resources ---
+
+    def create_resource(
+        self, data: bytes, title: Optional[str] = None, ext: str = "jpg"
+    ) -> str:
+        resource_id = hashlib.md5(data).hexdigest()
+        if resource_id in self.resources:
+            raise JoplinError(f"resource {resource_id} already exists")
+        if ext and ext.startswith("."):
+            ext = ext[1:]
+        self.resources[resource_id] = StoredResource(
+            data=data, title=resource_id if title is None else title, ext=ext
+        )
+        return resource_id
+
+    def delete_resource(self, resource_id: str) -> None:
+        if self.resources.pop(resource_id, None) is None:
+            raise JoplinError(f"no resource {resource_id}")
+
+    def resource_exists(self, resource_id: str) -> bool:
+        return resource_id in self.resources
+
+    def get_resource_note_ids(self, resource_id: str) -> List[str]:
+        # always current, unlike Joplin's background index
+        return [n.id for n in self.notes.values() if f":/{resource_id}" in n.body]
+
+    # --- tags ---
+
+    def get_note_tags(self, note_id: str) -> List[str]:
+        # Joplin answers 200 with no tags for a note it doesn't have
+        return [self.tags[t] for t in self.note_tag_ids.get(note_id, [])]
+
+    def yield_all_tags(self) -> Iterator[Dict[str, str]]:
+        for tag_id, title in self.tags.items():
+            yield {"id": tag_id, "title": title}
+
+    def yield_tag_note_ids(self, tag_id: str) -> Iterator[str]:
+        if tag_id not in self.tags:
+            raise JoplinError(f"no tag {tag_id}")
+        for note_id, tag_ids in self.note_tag_ids.items():
+            if tag_id in tag_ids:
+                yield note_id
+
+    # --- folders ---
+
+    def _year_folder_id(self, year: int) -> Optional[str]:
+        ids = [
+            f.id
+            for f in self.folders.values()
+            if f.parent_id == self.notebook_id and f.title == str(year)
+        ]
+        if len(ids) > 1:
+            raise RuntimeError(f"More than one subfolder with title {year}")
+        return ids[0] if ids else None
+
+    def get_or_create_year_folder(self, year: int) -> str:
+        folder_id = self._year_folder_id(year)
+        if folder_id is None:
+            folder_id = _new_id()
+            self.folders[folder_id] = StoredFolder(
+                id=folder_id, title=str(year), parent_id=self.notebook_id
+            )
+        return folder_id
+
+    # --- test controls ---
+
+    def add_note(self, title: str, body: str) -> str:
+        """Seed a Diary Note titled `YYYY-MM-DD`, filed in its year's folder."""
+        folder_id = self.get_or_create_year_folder(int(title[:4]))
+        return self.create_note(title, body, folder_id)
+
+    def edit_note(self, note_id: str, body: str) -> None:
+        """Change a note's body the way the diarist would in the Joplin app:
+        its updated_time moves on, but it isn't recorded in `updates`."""
+        n = self._stored_note(note_id)
+        n.body = body
+        n.updated_time = self._tick()
+
+    def untag_note(self, note_id: str, title: str) -> None:
+        tag_ids = self.note_tag_ids.get(note_id, [])
+        self.note_tag_ids[note_id] = [t for t in tag_ids if self.tags[t] != title]
+
+    def tag_note(self, note_id: str, title: str) -> None:
+        """Put one of Joplin's own tags on a note, creating the tag if needed."""
+        self._stored_note(note_id)
+        tag_id = next((i for i, t in self.tags.items() if t == title), None)
+        if tag_id is None:
+            tag_id = _new_id()
+            self.tags[tag_id] = title
+        tag_ids = self.note_tag_ids.setdefault(note_id, [])
+        if tag_id not in tag_ids:
+            tag_ids.append(tag_id)
+
+    def clobber_next_update(self, note_id: str, body: str) -> None:
+        """After the next body update to this note lands, overwrite it with
+        `body`, the way the Joplin app's autosave writes back a stale copy.
+        Called twice, it clobbers the next two updates."""
+        self._clobbers.setdefault(note_id, []).append(body)
+
+    def set_aside_conflict(self, note_id: str, app_body: str) -> str:
+        """What Joplin did when the app's autosave collided with a write
+        (seen 2026-09-26): the note's current body goes to a new conflict
+        note in the same folder under the same title, and the note gets
+        `app_body` back with an updated_time older than that write. Returns
+        the conflict note's id."""
+        n = self._stored_note(note_id)
+        conflict_id = _new_id()
+        self.notes[conflict_id] = StoredNote(
+            id=conflict_id,
+            parent_id=n.parent_id,
+            title=n.title,
+            body=n.body,
+            created_time=n.created_time,
+            updated_time=n.updated_time,
+            is_conflict=True,
+        )
+        n.body = app_body
+        n.updated_time -= timedelta(seconds=20)
+        return conflict_id
+
+    def fail_next_update(self) -> None:
+        """Make the next body update raise JoplinError and change nothing."""
+        self._fail_next_update = True

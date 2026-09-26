@@ -3,8 +3,11 @@ import pytest
 import requests
 from pathlib import Path
 
+from mydiary.diary_note import image_resource_ids_of, refresh_note_mirror
+from mydiary.image_sync import shrink_photo
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.joplin_port import HttpJoplin
 from mydiary.models import JoplinNote, JoplinNoteImageLink, MyDiaryWords
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -112,13 +115,14 @@ def test_add_images(
         created_at = pendulum.from_format(
             image_name, "YY-MM-DD HH-mm-ss SSSS", tz="America/New_York"
         )
-        mydiary_image = joplin_client.create_thumbnail(
-            image_bytes,
-            name=image_name,
-            nextcloud_path=fp.name,
-            created_at=created_at,
+        photo = shrink_photo(image_bytes)
+        port = HttpJoplin(joplin_client)
+        resource_id = photo.hash
+        if not port.resource_exists(resource_id):
+            resource_id = port.create_resource(photo.data, title=image_name)
+        mydiary_image = photo.image_row(
+            resource_id, name=image_name, nextcloud_path=fp.name, created_at=created_at
         )
-        resource_id = mydiary_image.joplin_resource_id
         resource_ids.append(resource_id)
         note_image_link = JoplinNoteImageLink(
             note=db_note,
@@ -132,11 +136,7 @@ def test_add_images(
     try:
         resource_ids_md = [f"![](:/{resource_id})" for resource_id in resource_ids]
         assert (len(resource_ids_md)) == 2
-        new_txt = sec_images.txt
-        new_txt += "\n"
-        new_txt += "\n\n".join(resource_ids_md)
-        new_txt += "\n"
-        sec_images.update(new_txt)
+        sec_images.set_content("\n\n".join(resource_ids_md))
         for item in resource_ids_md:
             assert item in sec_images.txt
             assert item in md_note.txt
@@ -144,7 +144,7 @@ def test_add_images(
         r_put_note.raise_for_status()
 
         note_refreshed = joplin_client.get_note(note_id)
-        assert len(note_refreshed.md_note.get_image_resource_ids()) == 2
+        assert len(image_resource_ids_of(note_refreshed.body)) == 2
 
     finally:
         for resource_id in resource_ids:
@@ -173,16 +173,15 @@ def test_alter_note_and_sync(
     sec_words = md_note.get_section_by_title("words")
     assert sec_words.get_content() == "Test words."
     new_words = "Test altered words."
-    new_words_md = f"## Words\n\n"
-    new_words_md += f"{new_words}\n\n"
-    status = sec_words.update(new_words_md, force=True)
+    status = sec_words.set_content(new_words)
     assert status == "updated"
     assert sec_words.get_content() == new_words
     assert new_words in md_note.txt
     r_put_note = joplin_client.update_note_body(note_id, md_note.txt)
     r_put_note.raise_for_status()
 
-    joplin_client.sync_note_api_to_db_obj(note_id, session=loaded_db, commit=True)
+    port = HttpJoplin(joplin_client)
+    refresh_note_mirror(loaded_db, port, port.get_note(note_id))
 
     db_note = loaded_db.get(JoplinNote, note_id)
     assert db_note.time_last_api_sync > orig_sync_dt
