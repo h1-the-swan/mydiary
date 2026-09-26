@@ -337,6 +337,12 @@ function applyTrack(track: TrackSummaryRead) {
         submitPerformSong.value.artist_name = track.artist_name
     }
     usedById.value = usedByOther(track)
+    // the warning names the song from the store's list, which a form opened
+    // directly hasn't loaded yet, or which predates that song
+    const owner = usedById.value
+    if (owner !== null && !app.performSongs?.some((s) => s.id === owner)) {
+        app.loadPerformSongs()
+    }
 }
 
 const picked = ref<TrackSummaryRead | null>(null)
