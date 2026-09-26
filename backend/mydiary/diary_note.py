@@ -541,14 +541,19 @@ class NoteEdit:
         return False
 
 
-def words_of(body: Optional[str]) -> str:
-    """The content of a body's Words section, or "" if it has none."""
+def section_content(body: Optional[str], heading: str) -> str:
+    """The content of a body's section, or "" if it has none."""
     if not body:
         return ""
     try:
-        return MarkdownDoc(body).get_section_by_title("words").get_content()
+        return MarkdownDoc(body).get_section_by_title(heading).get_content()
     except KeyError:
         return ""
+
+
+def words_of(body: Optional[str]) -> str:
+    """The content of a body's Words section, or "" if it has none."""
+    return section_content(body, "words")
 
 
 def image_resource_ids_of(body: Optional[str]) -> List[str]:

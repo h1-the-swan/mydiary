@@ -1555,3 +1555,64 @@ class TestTags:
             {"title": "2026-09-12", "note_id": full, "has_words": True, "has_images": True},
             {"title": "2026-09-14", "note_id": bare, "has_words": False, "has_images": False},
         ]
+
+
+class TestNoteRouteDays:
+    """`init_note` and `update_note` work out the day in the diary's timezone,
+    not the container's (UTC)."""
+
+    @pytest.fixture
+    def diary_tz(self, session: Session):
+        session.add(
+            TimeZoneChange(
+                changed_at=pendulum.datetime(2031, 3, 1, 12, tz="UTC"),
+                tz_before="America/New_York",
+                tz_after="Pacific/Auckland",
+            )
+        )
+        session.commit()
+
+    @pytest.fixture
+    def seen(self, monkeypatch):
+        from types import SimpleNamespace
+
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+
+        seen = []
+
+        def from_dt(dt, **kwargs):
+            seen.append(dt)
+            return SimpleNamespace(
+                update_joplin_note=lambda session: None,
+                init_joplin_note=lambda session, body: None,
+                joplin_note_id="n1",
+            )
+
+        monkeypatch.setattr(api_module.MyDiaryDay, "from_dt", from_dt)
+        app.dependency_overrides[get_joplin_port] = lambda: InMemoryJoplin()
+        yield seen
+        app.dependency_overrides.pop(get_joplin_port, None)
+
+    @pytest.mark.parametrize(
+        "route, kwargs", [("update_note", {}), ("init_note", {"json": "body"})]
+    )
+    def test_defaults_to_the_diary_timezone(
+        self, client: TestClient, diary_tz, seen, route, kwargs
+    ):
+        r = client.post(f"/joplin/{route}/2031-03-10", **kwargs)
+        assert r.status_code == 200
+        (dt,) = seen
+        assert dt.timezone_name == "Pacific/Auckland"
+        assert dt.to_date_string() == "2031-03-10"
+
+    def test_an_explicit_timezone_wins(self, client: TestClient, diary_tz, seen):
+        r = client.post("/joplin/update_note/2031-03-10", params={"tz": "UTC"})
+        assert r.status_code == 200
+        assert seen[0].timezone_name == "UTC"
+
+    def test_no_timezone_changes_falls_back_to_local(self, client: TestClient, seen):
+        r = client.post("/joplin/update_note/2031-03-10")
+        assert r.status_code == 200
+        assert seen[0].to_date_string() == "2031-03-10"

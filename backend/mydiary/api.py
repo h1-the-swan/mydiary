@@ -1184,19 +1184,14 @@ def joplin_get_note_id(
 )
 def joplin_init_note(
     dt: str,
-    tz: str = "local",
+    tz: str = "infer",
     session: Session = Depends(get_session),
     joplin: JoplinPort = Depends(get_joplin_port),
     body: Optional[str] = Body(None),
 ) -> str:
     # a plain def: creating waits on a lock for the day, which would block the
     # event loop
-    if dt == "today":
-        dt = pendulum.today(tz=tz)
-    elif dt == "yesterday":
-        dt = pendulum.yesterday(tz=tz)
-    else:
-        dt = pendulum.parse(dt, tz=tz)
+    dt = _diary_day(dt, tz, session)
     try:
         if body:
             # body is supplied, so no need to sync with external APIs
@@ -1292,18 +1287,13 @@ def joplin_get_note_images(
 )
 def joplin_update_note(
     dt: str,
-    tz: str = "local",
+    tz: str = "infer",
     session: Session = Depends(get_session),
     joplin: JoplinPort = Depends(get_joplin_port),
 ):
     # a plain def: the edit waits on the note's lock, which would block the
     # event loop
-    if dt == "today":
-        dt = pendulum.today(tz=tz)
-    elif dt == "yesterday":
-        dt = pendulum.yesterday(tz=tz)
-    else:
-        dt = pendulum.parse(dt, tz=tz)
+    dt = _diary_day(dt, tz, session)
     try:
         day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
@@ -1410,11 +1400,12 @@ async def get_nextcloud_image(url: str, request: Request):
     )
 
 
-def _owntracks_day(dt: str, tz: str, session: Session) -> pendulum.DateTime:
+def _diary_day(dt: str, tz: str, session: Session) -> pendulum.DateTime:
     """Resolve a day string to a timezone-aware start-of-day.
 
-    Defaults to the inferred timezone rather than "local": the container runs on
-    UTC, and for a map the day boundary decides what is on it.
+    Callers default to "infer" (the diary's timezone that day) rather than
+    "local": the container runs on UTC, and the day boundary decides what goes
+    on a map or into a note's Spotify and calendar sections.
     """
     if tz == "infer":
         try:
@@ -1457,7 +1448,7 @@ def owntracks_locations_for_day(
     """The day's raw location fixes, before any smoothing."""
     from .owntracks_connector import MyDiaryOwnTracks
 
-    dt_obj = _owntracks_day(dt, tz, session)
+    dt_obj = _diary_day(dt, tz, session)
     locations = MyDiaryOwnTracks().get_locations_for_day(dt_obj, session=session)
     return {
         "type": "FeatureCollection",
@@ -1507,7 +1498,7 @@ def owntracks_track_for_day(
         track_to_geojson,
     )
 
-    dt_obj = _owntracks_day(dt, tz, session)
+    dt_obj = _diary_day(dt, tz, session)
     params = _track_params(
         max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
     )
@@ -1544,7 +1535,7 @@ def owntracks_day_map_image(
     from .map_render import RenderParams
     from .owntracks_maps import render_for_day
 
-    dt_obj = _owntracks_day(dt, tz, session)
+    dt_obj = _diary_day(dt, tz, session)
     params = _track_params(
         max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
     )
@@ -1589,7 +1580,7 @@ def owntracks_areas_for_day(
     from .owntracks_maps import day_track
     from .owntracks_track import split_into_areas
 
-    dt_obj = _owntracks_day(dt, tz, session)
+    dt_obj = _diary_day(dt, tz, session)
     params = _track_params(
         max_acc, stay_radius_m, stay_minutes, gap_minutes, gap_metres, dwell_max_kmh
     )
@@ -1641,7 +1632,7 @@ def owntracks_map_to_note(
     """Render the day's map(s) and write them into the note's Location section."""
     from .owntracks_maps import sync_day_map_to_note
 
-    dt_obj = _owntracks_day(dt, tz, session)
+    dt_obj = _diary_day(dt, tz, session)
     try:
         result, num_maps = sync_day_map_to_note(
             dt_obj, session=session, joplin=joplin, force=force

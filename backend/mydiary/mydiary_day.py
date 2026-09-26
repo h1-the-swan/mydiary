@@ -1,4 +1,6 @@
 from re import S
+import re
+from collections import Counter
 from typing import TYPE_CHECKING, Any, List, Dict, Tuple, Union, Optional
 from enum import Enum, IntEnum
 from requests import Response
@@ -31,6 +33,21 @@ import logging
 
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
+
+
+_SPOTIFY_PLAY = re.compile(r"spotify:track:(\w+)")
+
+
+def dropped_plays(old: str, new: str) -> int:
+    """How many of the plays and embedded resources in `old` Spotify tracks
+    content are missing from `new`, counting a track played twice as two
+    plays."""
+    from .diary_note import resource_ids_in
+
+    def items(text: str) -> Counter:
+        return Counter(_SPOTIFY_PLAY.findall(text)) + Counter(resource_ids_in(text))
+
+    return sum((items(old) - items(new)).values())
 
 
 def make_markdown_table_header(columns: List[str]) -> str:
@@ -331,7 +348,8 @@ class MyDiaryDay:
         """Refresh the day's Diary Note: replace its Google Calendar events,
         Spotify tracks and, on a day with practice runs, Practice sections
         with the day's data, adding any the note lacks. Nothing else in the
-        note is written (ADR-0002)."""
+        note is written (ADR-0002). Spotify tracks are left alone if the new
+        content would drop a play or an embedded resource the note has."""
         from .diary_note import DiaryNote
 
         if joplin_connector is not None:
@@ -347,9 +365,23 @@ class MyDiaryDay:
         self._refresh(session, diary_note)
 
     def _refresh(self, session: Session, diary_note: "DiaryNote") -> None:
+        from .diary_note import section_content
+
         self.joplin_note_id = diary_note.id
         with diary_note.edit(session) as edit:
             for heading, content in self.refreshed_sections().items():
+                if heading == "Spotify tracks":
+                    # the note may have been built with other day boundaries,
+                    # and the database is the only other copy of those plays
+                    old = section_content(edit.note.body, heading)
+                    dropped = dropped_plays(old, content)
+                    if dropped:
+                        logger.warning(
+                            f"not refreshing Spotify tracks on "
+                            f"{self.dt.to_date_string()}: it would drop "
+                            f"{dropped} play(s) or embed(s) the note has"
+                        )
+                        continue
                 edit.set_section(heading, content)
         if edit.wrote:
             logger.info(f"updated note: {self.dt.to_date_string()}")

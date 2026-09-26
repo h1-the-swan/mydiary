@@ -14,7 +14,7 @@ from mydiary import pocket_connector
 from mydiary.diary_note import DiaryNote, NoteExists, WordsConflict, new_note_body
 from mydiary.markdown_edits import MarkdownDoc
 from mydiary.models import GoogleCalendarEvent, JoplinNote, MyDiaryWords
-from mydiary.mydiary_day import MyDiaryDay
+from mydiary.mydiary_day import MyDiaryDay, dropped_plays
 from mydiary.spotify_connector import MyDiarySpotify
 from tests.in_memory_joplin import InMemoryJoplin
 
@@ -238,6 +238,59 @@ class TestRefresh:
 
         assert len(joplin.updates) == 1
         assert loaded_db.get(JoplinNote, note_id).body == joplin.notes[note_id].body
+
+    def test_keeps_spotify_tracks_that_would_lose_a_play(
+        self, loaded_db: Session, events, tracks
+    ):
+        joplin = InMemoryJoplin()
+        body = new_note_body(
+            PREAMBLE,
+            {
+                "Words": "hi",
+                "Google Calendar events": "None",
+                "Spotify tracks": make_day(None, tracks=tracks).spotify_tracks_markdown(
+                    timezone=DT.timezone
+                ),
+            },
+        )
+        note_id = joplin.add_note(TITLE, body)
+
+        # built with other day boundaries: the first play falls on another day
+        make_day(joplin, events, tracks[1:]).update_joplin_note(session=loaded_db)
+
+        new_body = joplin.notes[note_id].body
+        assert section_txt(new_body, "Spotify tracks") == section_txt(
+            body, "Spotify tracks"
+        )
+        # the rest of the refresh still happened
+        assert events[1].summary in section_txt(new_body, "Google Calendar events")
+
+    def test_replaces_spotify_tracks_that_only_gain_plays(
+        self, loaded_db: Session, tracks
+    ):
+        joplin = InMemoryJoplin()
+        fewer = make_day(None, tracks=tracks[1:]).spotify_tracks_markdown(
+            timezone=DT.timezone
+        )
+        note_id = joplin.add_note(
+            TITLE, new_note_body(PREAMBLE, {"Words": "hi", "Spotify tracks": fewer})
+        )
+        day = make_day(joplin, tracks=tracks)
+
+        day.update_joplin_note(session=loaded_db)
+
+        assert section_txt(joplin.notes[note_id].body, "Spotify tracks").strip() == (
+            "## Spotify tracks\n\n" + day.spotify_tracks_markdown(timezone=DT.timezone)
+        )
+
+    def test_dropped_plays_counts_repeats(self):
+        a, b = "spotify:track:aaa", "spotify:track:bbb"
+        assert dropped_plays(f"{a}\n{b}", f"{b}\n{a}\nspotify:track:ccc") == 0
+        assert dropped_plays(f"{a}\n{a}\n{b}", f"{a}\n{b}") == 1
+        assert dropped_plays(f"{a}\n{b}", "None") == 2
+        assert dropped_plays("None", "None") == 0
+        # an image someone put in the section counts too
+        assert dropped_plays(f"None\n\n{LEGACY_REF}", "None") == 1
 
     def test_refreshes_the_mirror(self, db_session: Session, events):
         joplin = InMemoryJoplin()
