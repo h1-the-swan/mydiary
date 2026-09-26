@@ -194,6 +194,18 @@ class TestCreatePerformSong:
         track = session.get(SpotifyTrack, LANTERNS.spotify_id)
         assert (track.name, track.artist_name) == (LANTERNS.name, LANTERNS.artist_name)
 
+    @pytest.mark.parametrize(
+        "given",
+        [
+            f"spotify:track:{LANTERNS.spotify_id}",
+            f"https://open.spotify.com/intl-de/track/{LANTERNS.spotify_id}",
+        ],
+    )
+    def test_track_uri_and_link_forms(self, client, fake_spotify, given):
+        r = client.post("/performsongs/", json={**self.song, "spotify_id": given})
+        assert r.status_code == 200, r.text
+        assert r.json()["spotify_id"] == LANTERNS.spotify_id
+
     def test_updates_existing_track_row(self, client, session):
         session.add(SpotifyTrack(spotify_id=ORCHARD.spotify_id, name="Old Name", artist_name="x", uri="u"))
         session.commit()
@@ -214,6 +226,10 @@ class TestCreatePerformSong:
             "https://spotify.link/aBcD1234",
             # no scheme: normalize_spotify_id passes it through untouched
             "open.spotify.com/track/0FakeTrackLanterns0000",
+            # right shape, but not a track: stored as is if Spotify can't check
+            "https://open.spotify.com/album/0FakeTrackLanterns0000",
+            "https://open.spotify.com/artist/0FakeTrackLanterns0000?si=x",
+            "spotify:album:0FakeTrackLanterns0000",
         ],
     )
     def test_not_a_spotify_track_id_is_422(self, client, session, fake_spotify, given):

@@ -9,6 +9,7 @@ import threading
 import pendulum
 from typing import Dict, List, Optional, Set, Tuple, Union, Any
 from pathlib import Path
+from urllib.parse import urlsplit
 from fastapi import (
     Depends,
     FastAPI,
@@ -1909,9 +1910,23 @@ def _normalize_spotify_id_or_422(spotify_id: Optional[str]) -> Optional[str]:
         normalized = ""
     # also catches what normalize_spotify_id passes through untouched, like a
     # link with no scheme, which Spotify would resolve but we'd store as is
-    if not SPOTIFY_TRACK_ID_RE.fullmatch(normalized):
+    if not SPOTIFY_TRACK_ID_RE.fullmatch(normalized) or not _is_track_link(
+        spotify_id, normalized
+    ):
         raise _spotify_id_error(f"Not a Spotify track ID or link: {spotify_id}")
     return normalized
+
+
+def _is_track_link(given: str, normalized: str) -> bool:
+    # an album or artist link has a valid-looking ID too, which would be stored
+    # as is whenever Spotify can't be asked to reject it
+    if given == normalized:
+        return True  # a bare ID
+    if ":" in given and not re.match(r"https?://", given):
+        parts = given.split(":")
+    else:
+        parts = urlsplit(given).path.split("/")
+    return len(parts) >= 2 and parts[-2] == "track"
 
 
 def _save_reference_recording(

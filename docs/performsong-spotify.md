@@ -36,8 +36,8 @@ whole catalog about 300 ms after typing stops (two characters minimum) and
 lists up to 10 tracks, each with album art, title, artist, album and release
 year. Album and year are what distinguish studio, live and remastered versions.
 Picking a result goes through `applyTrack()`, the same function a looked-up ID
-uses, with the result it already has and no second request. The picked title stays in the search box,
-and the search watcher ignores a query equal to it.
+uses, with the result it already has and no second request. The picked title
+stays in the search box, and the search watcher ignores a query equal to it.
 
 **Already used.** A track that is already some PerformSong's Reference
 Recording gets an "already in your songs" badge in the search results. After a
@@ -67,18 +67,22 @@ built (no client ID configured, for example).
 
 `createPerformSong` and `updatePerformSong` normalize the ID on the backend.
 A blank ID is stored as None. Anything that doesn't reduce to a bare
-22-character track ID is a 422 before Spotify is asked. The 422 uses FastAPI's
-validation-error shape with `loc: ["body", "spotify_id"]`, and the form shows
-its message on the Spotify ID field.
+22-character track ID is a 422 before Spotify is asked, and so is a URL or URI
+for anything but a track: an album or artist link has a valid-looking ID of its
+own, which would otherwise be stored whenever Spotify can't check it. The 422
+uses FastAPI's validation-error shape with `loc: ["body", "spotify_id"]`, and
+the form shows its message on the Spotify ID field.
 
 With an ID, the save also upserts the track's `SpotifyTrack` row through
 `save_one_track_but_not_history(commit=False)`, in the same transaction as the
 PerformSong, so the song joins up with listening history. Then:
 
 - If Spotify has no such track, the save is rejected with a 422.
-- If Spotify can't be reached, or the token is missing or can't be refreshed, the song is
-  saved without the track row and a warning is logged. The row can be
-  backfilled later.
+- If Spotify can't be reached, or the token is missing or can't be
+  refreshed, the song is saved without the track row and a warning is logged.
+  The row can be backfilled later.
+- If no Spotify client is configured (no client ID, for example), the same
+  happens, with its own log message.
 - On update, an unchanged ID is looked up only when its `SpotifyTrack` row is
   missing. If Spotify no longer has that track, a warning is logged and the
   save goes ahead. An old song whose recording Spotify has pulled can still be
@@ -89,11 +93,11 @@ The save routes use `get_mydiary_spotify_or_none`, which returns None where
 
 ## Spotify client behaviour
 
-- `MyDiarySpotify.get_track()` returns the raw track dict and raises
-  `SpotifyTrackNotFound` (the input isn't a track ID, or Spotify answered 400
-  or 404) or `SpotifyUnavailable`
-  (anything else). `lookup_track()` wraps it in a `TrackSummary`, and the save
-  path passes the raw dict to `save_one_track_but_not_history`.
+- `MyDiarySpotify.get_track()` returns the raw track dict. It raises
+  `SpotifyTrackNotFound` when the input isn't a track ID or Spotify answered
+  400 or 404, and `SpotifyUnavailable` for anything else. `lookup_track()`
+  wraps the dict in a `TrackSummary`, and the save path passes it to
+  `save_one_track_but_not_history`.
 - With no cached token, spotipy prompts for one on stdin, which raises
   `EOFError` in the container. `_check_token()` catches the missing token
   first, and `UNAVAILABLE_ERRORS` includes `EOFError` as a backstop; both end up
