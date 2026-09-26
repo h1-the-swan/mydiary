@@ -785,12 +785,13 @@ def sync_joplin_tags(session: Session, joplin: JoplinPort) -> Tuple[int, int]:
 def sync_changed_notes(
     session: Session, joplin: JoplinPort, force: bool = False
 ) -> NoteSyncSummary:
-    """Mirror every Diary Note whose Joplin copy is newer than the mirror.
+    """Mirror every Diary Note whose Joplin copy differs from the mirror.
 
     The listing is cheap (no bodies). A body is fetched only for a note that
-    is new, edited (updated_time newer, with a second's slack because both
-    sides are naive local datetimes), was never given a body, or was never
-    synced. `force` fetches all of them. A note that fails to sync, including
+    is new, changed (updated_time different, with a second's slack because
+    both sides are naive local datetimes), was never given a body, or was
+    never synced. A collision with the Joplin app's autosave can put back a
+    copy with an older updated_time, so a difference either way counts. `force` fetches all of them. A note that fails to sync, including
     one with a `WordsConflict`, is logged and skipped, not fatal."""
     summary = NoteSyncSummary()
     known = {
@@ -813,7 +814,7 @@ def sync_changed_notes(
                 or row is None
                 or row[1]
                 or row[2]
-                or item.updated_time > row[0] + timedelta(seconds=1)
+                or abs(item.updated_time - row[0]) > timedelta(seconds=1)
             )
             if not needs_fetch:
                 continue

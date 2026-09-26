@@ -43,12 +43,16 @@ def main(args):
                 "body",
                 "created_time",
                 "updated_time",
+                "is_conflict",
             ]
             now = pendulum.now().in_timezone("UTC")
             logger.info(f"starting year: {year}. subfolder_id: {subfolder_id}")
             for note in mydiary_joplin.yield_notes_by_subfolder_id(
                 subfolder_id, fields=fields
             ):
+                if note.get("is_conflict"):
+                    # a copy Joplin set aside, under the same title
+                    continue
                 existing = session.exec(
                     select(JoplinNote).where(JoplinNote.title == note["title"])
                 ).one_or_none()

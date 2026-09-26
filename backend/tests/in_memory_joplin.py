@@ -28,6 +28,9 @@ class StoredNote:
     body: str
     created_time: datetime
     updated_time: datetime
+    # a copy Joplin set aside when two versions of a note collided; the app
+    # files it under Conflicts, but it keeps the original's folder and title
+    is_conflict: bool = False
 
 
 @dataclass
@@ -51,8 +54,9 @@ class InMemoryJoplin:
     `resources` and `updates` (every body the app PUT, in order), plus a few
     controls: `add_note` and `tag_note` to seed, `edit_note` and `untag_note`
     for changes made in the Joplin app, `clobber_next_update` to
-    stand in for the Joplin app's autosave writing back a stale copy, and
-    `fail_next_update`."""
+    stand in for the Joplin app's autosave writing back a stale copy,
+    `set_aside_conflict` for Joplin keeping both sides of such a collision,
+    and `fail_next_update`."""
 
     def __init__(self, notebook_id: str = "0" * 32) -> None:
         self.notebook_id = notebook_id
@@ -88,7 +92,7 @@ class InMemoryJoplin:
         ids = [
             n.id
             for n in self.notes.values()
-            if n.parent_id == folder_id and n.title == title
+            if n.parent_id == folder_id and n.title == title and not n.is_conflict
         ]
         if len(ids) > 1:
             raise RuntimeError(f"more than one note found with title {title}")
@@ -97,7 +101,7 @@ class InMemoryJoplin:
     def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
         folder_id = self._year_folder_id(year)
         for n in list(self.notes.values()):
-            if folder_id is not None and n.parent_id == folder_id:
+            if folder_id is not None and n.parent_id == folder_id and not n.is_conflict:
                 yield NoteListing(id=n.id, title=n.title, updated_time=n.updated_time)
 
     def get_note(self, note_id: str) -> JoplinNote:
@@ -236,6 +240,27 @@ class InMemoryJoplin:
         `body`, the way the Joplin app's autosave writes back a stale copy.
         Called twice, it clobbers the next two updates."""
         self._clobbers.setdefault(note_id, []).append(body)
+
+    def set_aside_conflict(self, note_id: str, app_body: str) -> str:
+        """What Joplin did when the app's autosave collided with a write
+        (seen 2026-09-26): the note's current body goes to a new conflict
+        note in the same folder under the same title, and the note gets
+        `app_body` back with an updated_time older than that write. Returns
+        the conflict note's id."""
+        n = self._stored_note(note_id)
+        conflict_id = _new_id()
+        self.notes[conflict_id] = StoredNote(
+            id=conflict_id,
+            parent_id=n.parent_id,
+            title=n.title,
+            body=n.body,
+            created_time=n.created_time,
+            updated_time=n.updated_time,
+            is_conflict=True,
+        )
+        n.body = app_body
+        n.updated_time -= timedelta(seconds=20)
+        return conflict_id
 
     def fail_next_update(self) -> None:
         """Make the next body update raise JoplinError and change nothing."""

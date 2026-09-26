@@ -46,12 +46,13 @@ class NoteListing:
 @runtime_checkable
 class JoplinPort(Protocol):
     def get_note_id_by_date(self, dt: date) -> Optional[str]:
-        """The id of the Diary Note titled `YYYY-MM-DD` in the year's subfolder."""
+        """The id of the Diary Note titled `YYYY-MM-DD` in the year's subfolder.
+        Conflict copies Joplin set aside (`is_conflict`) don't count."""
         ...
 
     def yield_year_notes(self, year: int) -> Iterator[NoteListing]:
-        """Every note in a year's subfolder, without bodies. Nothing if the
-        folder is missing."""
+        """Every note in a year's subfolder, without bodies, leaving out
+        conflict copies. Nothing if the folder is missing."""
         ...
 
     def get_note(self, note_id: str) -> JoplinNote:
@@ -132,8 +133,10 @@ class HttpJoplin:
             if folder_id is None:
                 return
             for item in self.client.yield_notes_by_subfolder_id(
-                folder_id, fields=["id", "title", "updated_time"]
+                folder_id, fields=["id", "title", "updated_time", "is_conflict"]
             ):
+                if item.get("is_conflict"):
+                    continue
                 yield NoteListing(
                     id=item["id"],
                     title=item["title"],

@@ -90,6 +90,12 @@ class TestFind:
     def test_missing_is_none(self):
         assert DiaryNote.find(InMemoryJoplin(), date(2026, 9, 13)) is None
 
+    def test_a_conflict_copy_is_not_the_diary_note(self):
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note(DAY, WORDS)
+        joplin.set_aside_conflict(note_id, WORDS)
+        assert DiaryNote.find(joplin, date(2026, 9, 13)).id == note_id
+
 
 class TestRefreshMirror:
     def test_mirrors_the_note_and_its_tags(self, db_session: Session):
@@ -457,6 +463,43 @@ class TestSyncChangedNotes:
         summary = sync_changed_notes(db_session, joplin)
         assert summary.notes_synced == 1
         assert db_session.get(JoplinNote, note_id).body == "#a"
+
+    def test_a_collision_is_mirrored_from_the_app_copy(self, db_session: Session):
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2026-09-11", with_words(""))
+        joplin.update_note_body(note_id, with_words("") + "## Location\n\na map\n")
+        sync_changed_notes(db_session, joplin)
+        # the app's autosave collided with that write: Joplin set it aside
+        # and put the app's copy back, dated before the write
+        joplin.set_aside_conflict(note_id, with_words("typed in the app"))
+
+        summary = sync_changed_notes(db_session, joplin)
+
+        assert (summary.notes_checked, summary.notes_synced) == (1, 1)
+        row = db_session.get(JoplinNote, note_id)
+        assert row.body == with_words("typed in the app")
+        assert row.updated_time == joplin.notes[note_id].updated_time
+
+    def test_a_mirror_row_on_a_conflict_copy_moves_to_the_note(
+        self, db_session: Session
+    ):
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2026-09-11", with_words("set aside"))
+        conflict_id = joplin.set_aside_conflict(note_id, with_words("the note"))
+        # mirrored by a sync that still listed conflict copies
+        refresh_note_mirror(db_session, joplin, joplin.get_note(conflict_id))
+
+        # twice: listing both, the second sync would move the row back
+        sync_changed_notes(db_session, joplin)
+        sync_changed_notes(db_session, joplin)
+
+        db_session.expire_all()
+        assert db_session.get(JoplinNote, conflict_id) is None
+        assert db_session.get(JoplinNote, note_id).body == with_words("the note")
+        words = db_session.exec(
+            select(MyDiaryWords).where(MyDiaryWords.joplin_note_id == note_id)
+        ).one()
+        assert words.txt == "the note"
 
     def test_notes_outside_the_year_folders_are_not_listed(self, db_session: Session):
         joplin = InMemoryJoplin()

@@ -270,10 +270,14 @@ class MyDiaryJoplin:
     ) -> Optional[str]:
         if not parent_notebook_id:
             parent_notebook_id = self.notebook_id
+        # a conflict copy Joplin set aside keeps the original's folder and
+        # title, so it would otherwise look like a second note for the day
         items = [
             item
-            for item in self.yield_notes_by_subfolder_id(parent_notebook_id)
-            if item["title"] == title
+            for item in self.yield_notes_by_subfolder_id(
+                parent_notebook_id, fields=["id", "title", "is_conflict"]
+            )
+            if item["title"] == title and not item.get("is_conflict")
         ]
 
         if not items:
