@@ -17,7 +17,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 2. Connector: `TrackSummary`, `lookup_track`, `search_tracks`, two exception types, unit tests
 - [x] 3. Routes: `lookupSpotifyTrack`, `searchSpotifyTracks`, with `used_by_perform_song_id`; route tests
 - [x] 4. Save path: None-guard (fixes the 500), `SpotifyTrack` upsert, 422 on unknown ID, save anyway if Spotify is unreachable; tests
-- [ ] 5. Regenerate `api.ts` in the container
+- [x] 5. Regenerate `api.ts` in the container
 - [ ] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
 - [ ] 7. Form: "Find on Spotify" autocomplete
 - [ ] 8. Docs
@@ -25,7 +25,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 ## Next action
 
-Step 5 (the user asked to pause before starting it). Regenerate the client in the container: `docker compose exec mydiary-vuetify npm run generateClientAPI`. Check that `api.ts` gains `lookupSpotifyTrack`, `searchSpotifyTracks` and the `TrackSummaryRead` type, and that nothing else changes unexpectedly.
+Step 6: fill the form from a pasted ID in `mydiary-vuetify/src/components/PerformSongEdit.vue`. Look up on paste and on blur via `lookupSpotifyTrack`, write the normalized ID back, fill Name/Artist only when empty, show a spinner, an inline error, and the "used by" warning with a link; show a save 422 on the field; drop the old URL cleaning in `onSave`.
 
 ## Notes
 
