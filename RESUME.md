@@ -14,7 +14,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 ## Steps
 
 - [x] 1. Scaffold: CONTEXT.md glossary (PerformSong, Reference Recording) + this RESUME.md
-- [ ] 2. Connector: `TrackSummary`, `lookup_track`, `search_tracks`, two exception types, unit tests
+- [x] 2. Connector: `TrackSummary`, `lookup_track`, `search_tracks`, two exception types, unit tests
 - [ ] 3. Routes: `lookupSpotifyTrack`, `searchSpotifyTracks`, with `used_by_perform_song_id`; route tests
 - [ ] 4. Save path: None-guard (fixes the 500), `SpotifyTrack` upsert, 422 on unknown ID, save anyway if Spotify is unreachable; tests
 - [ ] 5. Regenerate `api.ts` in the container
@@ -25,11 +25,14 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 ## Next action
 
-Step 2. Add `TrackSummary`, `lookup_track`, `search_tracks` and the two exception types to `backend/mydiary/spotify_connector.py`, with unit tests using a fake `sp`.
+Step 3 (the user asked to pause before starting it). Add `lookupSpotifyTrack` (`GET /spotify/tracks/lookup?id=`, 404 on `SpotifyTrackNotFound`, 502 on `SpotifyUnavailable`) and `searchSpotifyTracks` (`GET /spotify/tracks/search?q=`, 502) to `api.py`, each returning `TrackSummary` plus `used_by_perform_song_id`, with route tests that patch the connector.
 
 ## Notes
 
 - Bootstrapped 2026-09-26 with `--db snapshot`: ports 8087 (app) and 3002 (vite). Scheduler off; token cache mounted from the primary.
 - The Spotify token cache is shared with the primary stack. Lookups and searches are fine; avoid anything that forces a token refresh loop.
 - Baselines (2026-09-26, before step 1): pytest 552 passed, 28 deselected; `npm run lint` 24 errors, 0 warnings; `npm run build` succeeds.
+- Step 2 added `MyDiarySpotify.get_track(id)` (raw track dict, same two exceptions) beside `lookup_track`, which the plan doesn't list. Step 4's save path uses it to hand the dict to `save_one_track_but_not_history`. `TrackSummary` lives in `spotify_connector.py`.
+- With no usable token cache, spotipy prompts on stdin, which raises `EOFError` in the container. `_check_token` and `UNAVAILABLE_ERRORS` turn that into `SpotifyUnavailable`. `SpotifyOAuth` now has `requests_timeout=5`.
+- For step 4: a 429 with a large `Retry-After` can block a call for a long time, because spotipy's default client retries and urllib3 honors the header. Consider a client with retries off for the save-path and interactive lookups.
 - No Joplin writes are needed for this feature. Don't press "Init note" or add photos/maps in the worktree app.
