@@ -30,6 +30,7 @@ from sqlalchemy import desc, all_, String, cast, or_
 from sqlalchemy.sql.functions import count
 from sqlalchemy.orm import make_transient_to_detached
 from sqlmodel import Field, SQLModel
+from spotipy.oauth2 import SpotifyOauthError
 
 from mydiary.joplin_connector import MyDiaryJoplin
 from .diary_note import (
@@ -103,7 +104,13 @@ from . import spelling_bee
 from . import songs
 from . import lrclib_connector
 from .dictionary_connector import fetch_definition
-from .spotify_connector import normalize_spotify_id
+from .spotify_connector import (
+    MyDiarySpotify,
+    SpotifyTrackNotFound,
+    SpotifyUnavailable,
+    TrackSummary,
+    normalize_spotify_id,
+)
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
 
@@ -210,6 +217,11 @@ class PerformSongRead(PerformSongBase):
 
 class PerformSongCreate(PerformSongBase):
     pass
+
+
+class TrackSummaryRead(TrackSummary):
+    # the lowest-id PerformSong whose Reference Recording is this track, if any
+    used_by_perform_song_id: Optional[int] = None
 
 
 class PerformSongUpdate(SQLModel):
@@ -529,6 +541,15 @@ def open_joplin_port():
 def get_joplin_port():
     with open_joplin_port() as joplin:
         yield joplin
+
+
+def get_mydiary_spotify() -> MyDiarySpotify:
+    try:
+        return MyDiarySpotify()
+    except SpotifyOauthError as e:
+        # e.g. no client ID in the environment
+        logger.warning(f"Spotify client not configured: {e}")
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
 
 
 # handler = logging.StreamHandler()
@@ -1128,6 +1149,67 @@ async def read_spotify_history(
 async def spotify_history_count(*, session: Session = Depends(get_session)):
     stmt = select(func.count(SpotifyTrackHistory.id))
     return session.exec(stmt).one()
+
+
+def _with_used_by(
+    session: Session, summaries: List[TrackSummary]
+) -> List[TrackSummaryRead]:
+    ids = [s.spotify_id for s in summaries]
+    stmt = (
+        select(PerformSong.spotify_id, func.min(PerformSong.id))
+        .where(PerformSong.spotify_id.in_(ids))
+        .group_by(PerformSong.spotify_id)
+    )
+    used_by = dict(session.exec(stmt).all()) if ids else {}
+    return [
+        TrackSummaryRead(
+            **s.model_dump(), used_by_perform_song_id=used_by.get(s.spotify_id)
+        )
+        for s in summaries
+    ]
+
+
+# plain defs: spotipy blocks, which would stall the event loop
+@app.get(
+    "/spotify/tracks/lookup",
+    operation_id="lookupSpotifyTrack",
+    response_model=TrackSummaryRead,
+)
+def lookup_spotify_track(
+    *,
+    session: Session = Depends(get_session),
+    mydiary_spotify: MyDiarySpotify = Depends(get_mydiary_spotify),
+    id: str,
+):
+    """One track, by Spotify ID, URI or open.spotify.com URL."""
+    try:
+        summary = mydiary_spotify.lookup_track(id)
+    except SpotifyTrackNotFound:
+        raise HTTPException(status_code=404, detail=f"No Spotify track found for {id!r}")
+    except SpotifyUnavailable as e:
+        logger.warning(f"Spotify lookup failed: {e}")
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
+    return _with_used_by(session, [summary])[0]
+
+
+@app.get(
+    "/spotify/tracks/search",
+    operation_id="searchSpotifyTracks",
+    response_model=List[TrackSummaryRead],
+)
+def search_spotify_tracks(
+    *,
+    session: Session = Depends(get_session),
+    mydiary_spotify: MyDiarySpotify = Depends(get_mydiary_spotify),
+    q: str,
+):
+    """Up to 10 tracks from Spotify's whole catalog."""
+    try:
+        summaries = mydiary_spotify.search_tracks(q)
+    except SpotifyUnavailable as e:
+        logger.warning(f"Spotify search failed: {e}")
+        raise HTTPException(status_code=502, detail="Spotify is unavailable")
+    return _with_used_by(session, summaries)
 
 
 @app.get(

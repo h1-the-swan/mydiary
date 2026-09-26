@@ -15,7 +15,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 - [x] 1. Scaffold: CONTEXT.md glossary (PerformSong, Reference Recording) + this RESUME.md
 - [x] 2. Connector: `TrackSummary`, `lookup_track`, `search_tracks`, two exception types, unit tests
-- [ ] 3. Routes: `lookupSpotifyTrack`, `searchSpotifyTracks`, with `used_by_perform_song_id`; route tests
+- [x] 3. Routes: `lookupSpotifyTrack`, `searchSpotifyTracks`, with `used_by_perform_song_id`; route tests
 - [ ] 4. Save path: None-guard (fixes the 500), `SpotifyTrack` upsert, 422 on unknown ID, save anyway if Spotify is unreachable; tests
 - [ ] 5. Regenerate `api.ts` in the container
 - [ ] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
@@ -25,7 +25,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 ## Next action
 
-Step 3 (the user asked to pause before starting it). Add `lookupSpotifyTrack` (`GET /spotify/tracks/lookup?id=`, 404 on `SpotifyTrackNotFound`, 502 on `SpotifyUnavailable`) and `searchSpotifyTracks` (`GET /spotify/tracks/search?q=`, 502) to `api.py`, each returning `TrackSummary` plus `used_by_perform_song_id`, with route tests that patch the connector.
+Step 4: the save path. In `create_perform_song` / `update_perform_song`, normalize the ID only when one is given (regression test for the 500 on no ID). Then fetch the track with `MyDiarySpotify.get_track` (via the `get_mydiary_spotify` dependency) and upsert the `SpotifyTrack` row with `save_one_track_but_not_history(commit=False)` in the same transaction. `SpotifyTrackNotFound` → 422 naming the field; `SpotifyUnavailable` → save anyway and log a warning. Tests for all four.
 
 ## Notes
 
@@ -35,4 +35,5 @@ Step 3 (the user asked to pause before starting it). Add `lookupSpotifyTrack` (`
 - Step 2 added `MyDiarySpotify.get_track(id)` (raw track dict, same two exceptions) beside `lookup_track`, which the plan doesn't list. Step 4's save path uses it to hand the dict to `save_one_track_but_not_history`. `TrackSummary` lives in `spotify_connector.py`.
 - With no usable token cache, spotipy prompts on stdin, which raises `EOFError` in the container. `_check_token` and `UNAVAILABLE_ERRORS` turn that into `SpotifyUnavailable`. `SpotifyOAuth` now has `requests_timeout=5`.
 - For step 4: a 429 with a large `Retry-After` can block a call for a long time, because spotipy's default client retries and urllib3 honors the header. Consider a client with retries off for the save-path and interactive lookups.
+- Step 3: routes take the connector through a `get_mydiary_spotify` dependency (tests override it with a fake, like `get_session`). It turns a `SpotifyOauthError` from the constructor (e.g. no client ID) into a 502. The response model is `TrackSummaryRead` in `api.py`, and the routes are plain `def`s. Through the proxy the backend is at `http://localhost:8087/api/...`.
 - No Joplin writes are needed for this feature. Don't press "Init note" or add photos/maps in the worktree app.
