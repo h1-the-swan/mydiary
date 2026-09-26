@@ -1,3 +1,4 @@
+import inspect
 import json
 from datetime import datetime
 import pendulum
@@ -1393,6 +1394,56 @@ class TestTags:
             assert r.json()["added"] == [IPHONE_PATH_1]
             assert session.get(JoplinNote, note_id).has_images is True
             r = client.post(f"/images/sync_note/{not_diary}", json=[IPHONE_PATH_1])
+            assert r.status_code == 404
+        finally:
+            app.dependency_overrides.pop(get_joplin_port, None)
+
+    def test_upload_images_to_note(self, session: Session, client: TestClient, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.api import get_joplin_port
+        from tests.in_memory_joplin import InMemoryJoplin
+        from tests.test_image_sync import FakeNextcloud, small_jpeg
+
+        # a plain def, so waiting on the note lock runs in the threadpool, off the event loop
+        assert not inspect.iscoroutinefunction(api_module.upload_images_to_note)
+        taken = "mydiary_uploads/2024/05/beach%20day.jpg"
+        uploaded = {taken: b"an earlier upload"}
+
+        class UploadingNextcloud(FakeNextcloud):
+            def mkdirs(self, path):
+                pass
+
+            def file_exists(self, path):
+                return path in uploaded
+
+            def upload_file(self, path, data):
+                uploaded[path] = data
+
+            def get_image(self, path_to_file):
+                return uploaded[path_to_file]
+
+        monkeypatch.setattr(api_module, "MyDiaryNextcloud", UploadingNextcloud)
+        joplin = InMemoryJoplin()
+        note_id = joplin.add_note("2024-05-18", "## Words\n\nhi\n\n## Images\n")
+        app.dependency_overrides[get_joplin_port] = lambda: joplin
+        jpeg = small_jpeg("upload")
+        try:
+            r = client.post(
+                f"/images/upload/{note_id}",
+                params={"dt": "2024-05-18"},
+                files=[("files", ("beach day.jpg", jpeg, "image/jpeg"))],
+            )
+            assert r.status_code == 200
+            path = "mydiary_uploads/2024/05/beach%20day-1.jpg"
+            assert uploaded == {taken: b"an earlier upload", path: jpeg}
+            assert [img["nextcloud_path"] for img in r.json()] == [path]
+            assert session.get(JoplinNote, note_id).has_images is True
+            not_diary = joplin.create_note("Shopping list", "## Images\n", joplin.get_or_create_year_folder(2024))
+            r = client.post(
+                f"/images/upload/{not_diary}",
+                params={"dt": "2024-05-18"},
+                files=[("files", ("x.jpg", jpeg, "image/jpeg"))],
+            )
             assert r.status_code == 404
         finally:
             app.dependency_overrides.pop(get_joplin_port, None)

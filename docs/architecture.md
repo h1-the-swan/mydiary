@@ -50,7 +50,7 @@ The verifying re-read only sees a clobber that lands before it. When the app's a
 
 Things to know when calling it:
 
-- One edit per note at a time, through an in-process lock. Routes that edit or create a note are plain `def`s, so a wait on the lock happens in the threadpool. The exception is `POST /images/upload/{note_id}`, which is still `async def` because it awaits the file reads.
+- One edit per note at a time, through an in-process lock. Routes that edit or create a note are plain `def`s, so a wait on the lock happens in the threadpool. That includes `POST /images/upload/{note_id}`, so it reads its uploads with `UploadFile.file.read()`.
 - Autoflush is off inside the block, so rows added there reach SQLite only after Joplin has been written, and SQLite's write lock isn't held through the Joplin requests (which have no timeout). Commit your own pending writes before entering; a failed edit rolls back the whole session.
 - The Words check protects the words when the database holds the only copy. A refresh raises `WordsConflict` when the stored words don't match the Words of the note last mirrored, or when the note's Words section has gone empty while the database still has words. `edit()` runs the check on entering and again before writing. The hourly sync logs a conflict and skips that note.
 - A refresh (`MyDiaryDay._refresh`, behind `update_joplin_note` and `init_or_update_joplin_note`) skips Spotify tracks when the new content would drop a play or an embedded resource the note has, and logs a warning. See ADR 0002. `POST /joplin/init_note/{dt}` and `POST /joplin/update_note/{dt}` default to `tz=infer`, which resolves the day in the diary's timezone from `TimeZoneChange`. The container itself runs on UTC.

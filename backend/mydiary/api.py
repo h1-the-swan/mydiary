@@ -1647,7 +1647,7 @@ def owntracks_map_to_note(
     operation_id="uploadImagesToNote",
     response_model=List[MyDiaryImageRead],
 )
-async def upload_images_to_note(
+def upload_images_to_note(
     *,
     session: Session = Depends(get_session),
     note_id: str,
@@ -1678,7 +1678,7 @@ async def upload_images_to_note(
             suffix += 1
             candidate = f"{stem}-{suffix}{ext}"
         nextcloud_path = f"{target_dir}/{requests.utils.quote(candidate)}"
-        mydiary_nextcloud.upload_file(nextcloud_path, await f.read())
+        mydiary_nextcloud.upload_file(nextcloud_path, f.file.read())
         upload_paths.append(nextcloud_path)
 
     # add the new uploads to the note alongside whatever is already there
