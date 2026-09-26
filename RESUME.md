@@ -20,12 +20,12 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 5. Regenerate `api.ts` in the container
 - [x] 6. Form: fill from a pasted ID (fill-empty-only, spinner, error, used-by warning)
 - [x] 7. Form: "Find on Spotify" autocomplete
-- [ ] 8. Docs
-- [ ] Verification: pytest, build, lint vs baseline, Firefox checks listed in the plan
+- [x] 8. Docs: `docs/performsong-spotify.md`, linked from `docs/architecture.md`
+- [x] Verification: pytest, build, lint vs baseline, Firefox checks listed in the plan
 
 ## Next action
 
-Paused before step 8 at the user's request. Before or alongside step 8, run the plan's Firefox checks (Playwright MCP wasn't available for steps 6 and 7). Then step 8: docs.
+All steps done. Merge is the user's call: delete this file in a final commit, then set the spec's status to done, merge, delete the memory pointer, and remove the worktree (ask first). No migration and no `package.json` change, so the primary stack only needs the pull.
 
 ## Notes
 
@@ -41,3 +41,7 @@ Paused before step 8 at the user's request. Before or alongside step 8, run the 
 - Step 6: a paste replaces the whole Spotify ID field (`preventDefault`, then look up the clipboard text), because on `paste` the v-model hasn't updated yet. `lookedUp` stops a blur right after a paste from looking up again, and a sequence number drops stale responses. A 404 is a red field error; any other failure is a neutral message, since the save still works. The "used by" warning ignores the song being edited. If two songs share a recording and the one being edited has the lower id, the backend reports that one, so no warning shows (rare, accepted).
 - Playwright MCP wasn't available in the 2026-09-26 session, so step 6 was checked by build, lint and curl only. The Firefox checks in the plan still need doing.
 - Step 7: a picked search result goes through `applyTrack`, the same function a looked-up ID uses, so there's no second lookup. Picking puts the result's title in the search box, and the search `watch` skips a query equal to the picked title. `v-model:search` is written as `:search` + `@update:search`, because the editor's Vue 2 lint rule flags the argument form.
+- Verification (2026-09-26): pytest 614 passed, 28 deselected; build ok; lint 24 errors (baseline 24). Firefox checks all pass: a pasted URL is normalized and fills Name/Artist; a typed Name is kept; an unknown ID shows the field error and the save is rejected (422 on the field, nothing created); search shows the badge, picking fills without a second lookup, and the warning links to the owning song; a save with no ID works (was a 500); editing a song and pasting a new ID changes only the ID; the search list fits at 390px. The invented test song was deleted afterwards.
+- Firefox gives a synthetic `ClipboardEvent` empty clipboard data, so paste checks need a real copy and paste: a page-side textarea, then Ctrl+C and Ctrl+V.
+- The used-by warning says "another song" when the song list isn't loaded in the store (e.g. opening /performsongs/new directly). The link is still right.
+- Seen, not from this branch: `GET /spotify/album_image_url/{id}` returns a bare URL with no Content-Type, and Firefox logs an XML parse error for it.
