@@ -8,9 +8,9 @@ Ideas and todos that nobody is working on yet live in `.scratch/backlog/`, one f
 
 - The file is `.scratch/backlog/<slug>.md`. The slug is the item's permanent name. Once assigned it is never reused or changed, even if the item is renamed, finished or dropped, so `[slug]` references anywhere keep resolving.
 - The body is free-form: the problem, what's known, rough shape, open questions. It doesn't need to be a spec.
-- There's no `Status:` line. An item that is waiting on something gets a `Revisit when: <trigger>` line under its title instead, e.g. `Revisit when: diary-note-module merges`. An item without one is live.
+- There's no `Status:` line. An item that is waiting on something gets a `Revisit when: <trigger>` line under its title instead. An item without one is live. When the trigger is another feature or backlog item, link it, e.g. `Revisit when: [diary-note-module](../diary-note-module/spec.md) is done`, so the staleness check (see [Keeping it current](#keeping-it-current)) can tell when it has fired. Free-text triggers (`Revisit when: CARTO announces a retirement date`) are fine for anything else.
 - Link to other items with relative paths: `[other-slug](other-slug.md)` for backlog items, `[slug](../slug/spec.md)` for features, `../../` for repo files.
-- To start work, move the file to `.scratch/<slug>/spec.md` and turn it into a real spec, with `Status: in-progress` under its title. Keep the same slug for the feature directory. Issue files come after that, as below.
+- To start work, move the file to `.scratch/<slug>/spec.md` and turn it into a real spec, with `Status: in-progress` under its title. Keep the same slug for the feature directory. Check every claim the item makes about the code against the current code while writing the spec, since a backlog item may have been written weeks earlier, or wrong from the start. Issue files come after that, as below.
 - To drop an item, delete the file. Record why in the commit or conversation that decided it, if anywhere.
 - A new idea from a skill or conversation that isn't being worked on now goes here, not into a feature directory.
 
@@ -25,6 +25,10 @@ Ideas and todos that nobody is working on yet live in `.scratch/backlog/`, one f
   - `Blocked by: none` or `Blocked by: NN, NN`, optionally followed by a note in parentheses
 - A finished feature keeps its directory, with its spec set to `Status: done`. The spec plus its resolved issues are the record of what was built and why; don't move it anywhere.
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
+
+## Keeping it current
+
+Upkeep (closing a feature out after it merges, auditing for stale entries, and the staleness check) is the `tracker-upkeep` skill. Its settings for this repo are in `.scratch/.tracker-check`.
 
 ## Archive
 

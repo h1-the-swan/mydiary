@@ -118,6 +118,9 @@ doesn't set it.
 git diff --stat 'HEAD@{1}..HEAD' -- backend/alembic/versions mydiary-vuetify/package.json
 ```
 
+Then close the feature out in the issue tracker (see
+[issue-tracker.md](agents/issue-tracker.md#keeping-it-current)).
+
 ## Tearing one down
 
 ```sh

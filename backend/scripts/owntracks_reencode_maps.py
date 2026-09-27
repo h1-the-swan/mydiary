@@ -48,8 +48,8 @@ def format_bytes(num: int) -> str:
 def start_of_day(diary_date, session: Session) -> pendulum.DateTime:
     """Start of the day in the day's own timezone, as the API routes do it.
 
-    get_last_timezone raises when TimeZoneChange is empty (todo item 4.3); a
-    backfill must not die on that, so it falls back the same way the routes do.
+    get_last_timezone raises when TimeZoneChange is empty; a backfill must not
+    die on that, so it falls back the same way the routes do.
     """
     dt_str = diary_date.isoformat()
     try:
