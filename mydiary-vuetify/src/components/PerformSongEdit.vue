@@ -110,10 +110,12 @@
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
-                            <v-text-field
-                                v-model="submitPerformSong.created_at"
+                            <v-date-input
+                                v-model="createdAtDate"
                                 label="Added"
-                            ></v-text-field>
+                                prepend-icon=""
+                                prepend-inner-icon="$calendar"
+                            ></v-date-input>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-text-field
@@ -134,10 +136,12 @@
                             ></v-text-field>
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
-                            <v-text-field
-                                v-model="submitPerformSong.learned_dt"
+                            <v-date-input
+                                v-model="learnedDtDate"
                                 label="Learned on"
-                            ></v-text-field>
+                                prepend-icon=""
+                                prepend-inner-icon="$calendar"
+                            ></v-date-input>
                         </v-col>
                         <v-col v-if="props.performSong" cols="12">
                             <!-- saved as you go, separately from the form -->
@@ -182,7 +186,6 @@ import { computed } from 'vue'
 import { watch, watchEffect } from 'vue'
 import { PerformSongUpdate } from '@/api'
 import { ref } from 'vue'
-import { useDate } from 'vuetify'
 import {
     PerformSongRead,
     updatePerformSong,
@@ -197,7 +200,6 @@ import { isAxiosError } from 'axios'
 import { useAppStore } from '@/store/app'
 import TagChips from '@/components/TagChips.vue'
 import { useRouter } from 'vue-router'
-const date = useDate()
 const props = defineProps<{
     performSong?: PerformSongRead
 }>()
@@ -205,6 +207,9 @@ const router = useRouter()
 const app = useAppStore()
 // a new song is usually one about to be learned, so it starts in the queue
 const submitPerformSong = ref<PerformSongUpdate>(props.performSong ? {} : { learned: false })
+// a song being added now was, by definition, added today
+const createdAtDate = ref<Date | null>(props.performSong ? null : new Date())
+const learnedDtDate = ref<Date | null>(null)
 const submitted = ref<PerformSongRead>()
 const snackbar = ref(false)
 const formTitle = computed(() => {
@@ -214,24 +219,14 @@ const formTitle = computed(() => {
         return 'Add a song'
     }
 })
-function dateFmt(dateStr: string | null | undefined) {
-    if (!dateStr) return
-    return new Date(dateStr).toISOString().substring(0, 10)
-}
 async function onSave() {
     if (!submitPerformSong.value.name) throw Error
-    if (submitPerformSong.value.created_at) {
-        submitPerformSong.value.created_at = new Date(
-            submitPerformSong.value.created_at
-        ).toISOString()
-    } else {
-        submitPerformSong.value.created_at = new Date().toISOString()
-    }
-    if (submitPerformSong.value.learned_dt) {
-        submitPerformSong.value.learned_dt = new Date(
-            submitPerformSong.value.learned_dt
-        ).toISOString()
-    }
+    submitPerformSong.value.created_at = (
+        createdAtDate.value ?? new Date()
+    ).toISOString()
+    submitPerformSong.value.learned_dt = learnedDtDate.value
+        ? learnedDtDate.value.toISOString()
+        : null
     // the backend normalizes the Spotify ID and rejects one Spotify doesn't know
     try {
         if (!props.performSong) {
@@ -439,15 +434,15 @@ watchEffect(() => {
         resetSearch()
         submitPerformSong.value.notes = props.performSong.notes
         submitPerformSong.value.perform_url = props.performSong.perform_url
-        submitPerformSong.value.created_at = dateFmt(
-            props.performSong.created_at
-        )
+        createdAtDate.value = props.performSong.created_at
+            ? new Date(props.performSong.created_at)
+            : null
         submitPerformSong.value.key = props.performSong.key
         submitPerformSong.value.capo = props.performSong.capo
         submitPerformSong.value.lyrics = props.performSong.lyrics
-        submitPerformSong.value.learned_dt = dateFmt(
-            props.performSong.learned_dt
-        )
+        learnedDtDate.value = props.performSong.learned_dt
+            ? new Date(props.performSong.learned_dt)
+            : null
     }
 })
 </script>
