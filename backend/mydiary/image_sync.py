@@ -33,6 +33,50 @@ def is_upload_path(nextcloud_path: str) -> bool:
     return nextcloud_path.startswith(f"{UPLOADS_BASEDIR}/")
 
 
+def capture_time(
+    mydiary_nextcloud: MyDiaryNextcloud, nextcloud_path: Optional[str]
+) -> Optional[datetime]:
+    """When an iPhone photo was taken, from its filename; None for uploads and
+    anything else whose name doesn't carry one."""
+    if not nextcloud_path or is_upload_path(nextcloud_path):
+        return None
+    try:
+        return mydiary_nextcloud.parse_datetime_from_filepath(nextcloud_path)
+    except Exception:
+        return None
+
+
+def place_by_capture_time(
+    current: List[Tuple[str, Optional[datetime]]],
+    new: List[Tuple[str, Optional[datetime]]],
+) -> List[str]:
+    """Merge new refs into the section's current refs, both as (ref, capture time).
+
+    Each new photo with a capture time goes directly after the photo in the
+    section with the latest capture time before its own, or, if there is none,
+    before the first photo that has a capture time. Refs without one (uploads,
+    unknown ids) are never used as neighbours and stay where they are; new ones
+    go at the end. The current refs keep their relative order, even if it isn't
+    chronological.
+    """
+    placed = list(current)
+    for ref, taken in sorted(
+        (item for item in new if item[1] is not None), key=lambda item: item[1]
+    ):
+        earlier = [
+            i for i, (_, t) in enumerate(placed) if t is not None and t <= taken
+        ]
+        if earlier:
+            latest = max(earlier, key=lambda i: (placed[i][1], i))
+            index = latest + 1
+        else:
+            timed = [i for i, (_, t) in enumerate(placed) if t is not None]
+            index = timed[0] if timed else len(placed)
+        placed.insert(index, (ref, taken))
+    timeless = [item for item in new if item[1] is None]
+    return [ref for ref, _ in placed + timeless]
+
+
 @dataclass(frozen=True)
 class ShrunkPhoto:
     """A photo made small enough to put in a note."""
@@ -89,10 +133,12 @@ def sync_note_images(
     diary_date: Optional[date] = None,
     keep_existing: bool = False,
 ) -> dict:
-    """Make the note's images section match desired_paths (percent-encoded, display order).
+    """Make the note's images section show exactly desired_paths (percent-encoded).
 
     - Paths in desired_paths but not in the note are downloaded, shrunk, uploaded to
-      Joplin, recorded in the database, and appended to the images section.
+      Joplin, and recorded in the database. New iPhone photos are placed among the
+      section's photos by capture time, and new uploads go at the end (see
+      `place_by_capture_time`). Photos already in the note keep their order.
     - Images in the note but not in desired_paths are removed from the section and
       their Joplin resources deleted. iPhone-sync rows are deleted from the database;
       upload rows are kept (with joplin_resource_id nulled) so they remain available
@@ -100,7 +146,7 @@ def sync_note_images(
     - Resource ids in the note with no MyDiaryImage row (e.g. from the removed Google
       Photos integration) are preserved in place and never touched.
 
-    With `keep_existing`, desired_paths are added after the photos the note
+    With `keep_existing`, desired_paths are added to the photos the note
     already shows, and nothing is removed.
 
     The write goes through `DiaryNote.edit()`, whose mirror refresh rebuilds
@@ -178,12 +224,23 @@ def sync_note_images(
             new_resource_ids.append(resource_id)
             logger.debug(f"new resource id: {resource_id}")
 
-        # rebuild the section: kept refs in original order (unknown ids stay in
-        # place), then newly added refs
-        final_refs = [
-            rid for rid in current_ids if id_to_image[rid] is None or rid not in to_remove
+        # rebuild the section: kept refs in their original order (unknown ids
+        # stay in place), with new photos placed among them by capture time
+        kept = [
+            (
+                rid,
+                None
+                if id_to_image[rid] is None
+                else capture_time(mydiary_nextcloud, id_to_image[rid].nextcloud_path),
+            )
+            for rid in current_ids
+            if id_to_image[rid] is None or rid not in to_remove
         ]
-        final_refs.extend(new_resource_ids)
+        new = [
+            (rid, capture_time(mydiary_nextcloud, path))
+            for rid, path in zip(new_resource_ids, to_add)
+        ]
+        final_refs = place_by_capture_time(kept, new)
         # identical image content shares one Joplin resource id, so the same ref
         # can appear twice; keep the first occurrence only
         final_refs = list(dict.fromkeys(final_refs))

@@ -84,6 +84,24 @@ def test_get_filepaths_for_day_skips_unparseable_names(monkeypatch, caplog):
     assert "IMG_4230.jpg" in caplog.text
 
 
+def test_get_filepaths_for_day_is_oldest_first(monkeypatch):
+    names = [
+        "26-09-08%2018-30-00%204303.jpg",
+        "26-09-08%2009-00-00%204301.jpg",
+        "26-09-08%2009-00-00%2045.jpg",
+    ]
+    monkeypatch.setattr(
+        "mydiary.nextcloud_connector.requests.request",
+        lambda **kwargs: FakePropfind(names),
+    )
+    mydiary_nextcloud = MyDiaryNextcloud(url="https://nextcloud.invalid")
+    assert mydiary_nextcloud.get_filepaths_for_day(pendulum.datetime(2026, 9, 8)) == [
+        "H1phone_sync/2026/09/26-09-08%2009-00-00%2045.jpg",
+        "H1phone_sync/2026/09/26-09-08%2009-00-00%204301.jpg",
+        "H1phone_sync/2026/09/26-09-08%2018-30-00%204303.jpg",
+    ]
+
+
 @pytest.mark.external_api
 def test_image_preview():
     path_to_file = "H1phone_sync/2022/06/22-06-24 19-07-01 4885.jpg"
