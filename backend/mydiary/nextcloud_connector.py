@@ -179,8 +179,10 @@ class MyDiaryNextcloud:
     def get_filepaths_for_day(
         self, dt: datetime, basedir="H1phone_sync", mimetype_type="image"
     ) -> List[str]:
-        return list(
+        """The day's photo paths, oldest first (the PROPFIND order is arbitrary)."""
+        return sorted(
             self.yield_filepaths_for_day(
                 dt=dt, basedir=basedir, mimetype_type=mimetype_type
-            )
+            ),
+            key=self.parse_datetime_from_filepath,
         )

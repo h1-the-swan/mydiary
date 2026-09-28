@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from mydiary.core import get_hash_from_txt
 from mydiary.diary_note import NoteClobbered
-from mydiary.image_sync import shrink_photo, sync_note_images
+from mydiary.image_sync import place_by_capture_time, shrink_photo, sync_note_images
 from mydiary.joplin_port import JoplinError
 from mydiary.models import JoplinNote, JoplinNoteImageLink, MyDiaryImage, MyDiaryWords
 from mydiary.tags import tags_for_target
@@ -22,6 +22,7 @@ DAY = "2024-05-18"
 
 IPHONE_PATH_1 = "H1phone_sync/2024/05/24-05-18%2013-50-28%209143.jpg"
 IPHONE_PATH_2 = "H1phone_sync/2024/05/24-05-18%2014-00-00%209144.jpg"
+IPHONE_PATH_3 = "H1phone_sync/2024/05/24-05-18%2015-10-00%209145.jpg"
 UPLOAD_PATH = "mydiary_uploads/2024/05/some%20upload.jpg"
 
 
@@ -242,6 +243,60 @@ def test_add_and_remove_with_unknown_ids_preserved(
     links = get_links(db_session, note_id)
     assert len(links) == 1
     assert links[0].sequence_num == 1
+
+
+def test_a_new_photo_goes_between_the_photos_taken_either_side(
+    db_session: Session, joplin, note_id, db_note
+):
+    res1 = joplin.create_resource(b"one")
+    add_image_row(db_session, IPHONE_PATH_1, res1, link_to=db_note)
+    res3 = joplin.create_resource(b"three")
+    add_image_row(db_session, IPHONE_PATH_3, res3, link_to=db_note, sequence_num=2)
+    joplin.edit_note(note_id, make_note_body(res1, res3))
+
+    # the page's order doesn't matter; capture time does
+    result = sync(
+        db_session, joplin, note_id, [IPHONE_PATH_3, IPHONE_PATH_2, IPHONE_PATH_1]
+    )
+    assert result["added"] == [IPHONE_PATH_2]
+    res2 = result["resource_ids"][1]
+    assert result["resource_ids"] == [res1, res2, res3]
+    assert make_note_body(res1, res2, res3) == joplin.notes[note_id].body
+
+
+def at(hour: int) -> pendulum.DateTime:
+    return pendulum.datetime(2024, 5, 18, hour)
+
+
+def test_placing_keeps_the_current_order_and_follows_the_latest_earlier_photo():
+    # hand-arranged 6pm before 9am: noon follows 9am, 7am goes before 6pm
+    current = [("six_pm", at(18)), ("nine_am", at(9))]
+    assert place_by_capture_time(current, [("noon", at(12)), ("seven_am", at(7))]) == [
+        "seven_am",
+        "six_pm",
+        "nine_am",
+        "noon",
+    ]
+
+
+def test_placing_ignores_photos_without_a_capture_time():
+    current = [("upload", None), ("nine_am", at(9)), ("legacy", None), ("six_pm", at(18))]
+    new = [("new_upload", None), ("noon", at(12)), ("eight_am", at(8))]
+    assert place_by_capture_time(current, new) == [
+        "upload",
+        "eight_am",
+        "nine_am",
+        "noon",
+        "legacy",
+        "six_pm",
+        "new_upload",
+    ]
+
+
+def test_placing_into_a_section_without_timed_photos_appends():
+    current = [("upload", None)]
+    new = [("noon", at(12)), ("nine_am", at(9))]
+    assert place_by_capture_time(current, new) == ["upload", "nine_am", "noon"]
 
 
 def test_readd_upload_reuses_row(db_session: Session, joplin, note_id, db_note):

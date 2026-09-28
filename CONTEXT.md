@@ -40,6 +40,18 @@ An App-owned Section whose source is gone, so it is never written again (Pocket 
 An image the diarist chose for a Diary Day, kept in Nextcloud and shown in the Images section.
 _Avoid_: image (when a Map could be meant), thumbnail
 
+**iPhone Photo**:
+A Photo taken on the diarist's phone and synced to Nextcloud automatically. It has a Capture Time, which places it on its Diary Day.
+_Avoid_: synced photo, Nextcloud photo, camera roll photo
+
+**Upload**:
+A Photo added from the browser for a particular Diary Day. It has no Capture Time; the Diary Day it was added to is all that ties it to a date.
+_Avoid_: manual photo, uploaded image
+
+**Capture Time**:
+When an iPhone Photo was taken, in the phone's local wall-clock time as its synced filename records it. Photos taken in the same second are told apart by the camera's counter. An Upload has no Capture Time.
+_Avoid_: timestamp, created time, date taken
+
 **Map**:
 A rendered picture of a Diary Day's location track, shown in the Location section. A Map is generated and is never a Photo.
 _Avoid_: location image, map photo

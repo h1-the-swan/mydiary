@@ -37,7 +37,7 @@ Performance design (added in the 2026-07 overhaul):
 
 ## Adding / syncing photos to the Joplin note
 
-Route: `POST /images/sync_note/{note_id}` (`syncNoteImages`), body = the **full desired list** of `nextcloud_path`s in display order. This performs a two-way sync of the note's `## Images` section (service: `sync_note_images` in `backend/mydiary/image_sync.py`). The write is one `DiaryNote.edit()` (see [architecture.md](architecture.md#diary-notes-and-joplin)), so the note is read, written and verified under that note's lock.
+Route: `POST /images/sync_note/{note_id}` (`syncNoteImages`), body = the **full desired list** of `nextcloud_path`s. This performs a two-way sync of the note's `## Images` section (service: `sync_note_images` in `backend/mydiary/image_sync.py`). The write is one `DiaryNote.edit()` (see [architecture.md](architecture.md#diary-notes-and-joplin)), so the note is read, written and verified under that note's lock.
 
 For each photo being **added**:
 
@@ -45,7 +45,7 @@ For each photo being **added**:
 2. Shrink: `shrink_photo` → `reduce_size_recurse` (`core.py`) repeatedly thumbnails (EXIF-rotation-corrected) until ≤ 60000 bytes. It is a pure function returning the bytes and both hashes.
 3. Upload to Joplin as a resource (`edit.add_resource`); the resource id is the md5 of the shrunk bytes. Because the id is content-derived, byte-identical images map to a single Joplin resource. An existing resource is reused instead of re-uploaded (Joplin rejects a duplicate id), and the images section dedupes repeated refs.
 4. `MyDiaryImage` row: `hash` (md5 of shrunk bytes), `orig_image_hash` (md5 of original), `nextcloud_path`, `thumbnail_size`, `joplin_resource_id`, `created_at` (parsed from the filename when possible), `diary_date` (uploads only).
-5. `![](:/{resource_id})` appended to the `## Images` section.
+5. `![](:/{resource_id})` placed in the `## Images` section by Capture Time (`place_by_capture_time`): directly after the photo with the latest Capture Time before its own, or before the first iPhone Photo if none is earlier. Uploads and unknown refs aren't used as neighbours, and a new Upload goes at the end. Photos already in the section keep their order, so an order set by hand in Joplin survives. The order of the desired list doesn't matter; the iPhone photos tab lists the day's photos oldest first.
 
 For each photo being **removed** (present in the note but not in the desired list):
 
