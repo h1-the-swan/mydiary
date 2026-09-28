@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from sqlmodel import create_engine, SQLModel, Session, select, func, Field
+from sqlmodel import create_engine, DateTime, SQLModel, Session, select, func, Field
 from sqlalchemy import text, inspect
 from . import models
 
@@ -43,7 +43,7 @@ def get_db_status(more=False, engine=engine):
 
 class MydiaryDatabaseBackup(SQLModel, table=True):
     filename: str = Field(primary_key=True)
-    created_at: datetime = Field(index=True)
+    created_at: datetime = Field(index=True, sa_type=DateTime)
     alembic_rev: str = Field(index=True)
     hostname: str
     size: int

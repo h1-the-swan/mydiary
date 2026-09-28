@@ -5,7 +5,7 @@ from requests import Response
 import json
 import hashlib
 import pendulum
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import DateTime, Field, Relationship, SQLModel
 from pydantic import validator, PrivateAttr
 from datetime import datetime, date
 from pendulum import now
@@ -85,7 +85,9 @@ class SpotifyContextTypeEnum(IntEnum):
 
 class SpotifyTrackHistoryBase(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
-    played_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    played_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
     context_uri: Optional[str] = Field(default=None, index=True)
     context_name: Optional[str] = Field(default=None, index=True)
     # context_type: Optional[SpotifyContextTypeEnum]
@@ -172,7 +174,9 @@ class SpotifyTrackAudioFeaturesBase(SQLModel):
         index=True
     )  # The time signature ranges from 3 to 7 indicating time signatures of "3/4", to "7/4".
     valence: float = Field(index=True)  # higher values mean happy, cheerful, euphoric
-    updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    updated_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
     @classmethod
     def from_api_response(cls, resp: Dict | List) -> "SpotifyTrackAudioFeatures":
@@ -198,11 +202,11 @@ class PerformSongBase(SQLModel):
     )
     notes: Optional[str] = Field(default=None)
     perform_url: Optional[str] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None, index=True)
+    created_at: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
     key: Optional[str] = Field(default=None, index=True)  # musical key of the song
     capo: Optional[int] = Field(default=None, index=True)  # fret of capo (0 if no capo)
     lyrics: Optional[str] = Field(default=None)
-    learned_dt: Optional[datetime] = Field(default=None, index=True)
+    learned_dt: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
 
 
 class PerformSong(PerformSongBase, table=True):
@@ -229,8 +233,12 @@ class SongArrangement(SongArrangementBase, table=True):
         ),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
-    created_at: datetime  # stored in the database in UTC timezone
-    updated_at: datetime  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        sa_type=DateTime
+    )  # stored in the database in UTC timezone
+    updated_at: datetime = Field(
+        sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
 
 class PracticeRunBase(SQLModel):
@@ -242,7 +250,9 @@ class PracticeRunBase(SQLModel):
         default=None, foreign_key="songarrangement.id", index=True
     )
     instrument: Optional[str] = Field(default=None)
-    practiced_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    practiced_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
     note: Optional[str] = Field(default=None)
 
 
@@ -266,7 +276,7 @@ class SectionLevelOverride(SQLModel, table=True):
     perform_song_id: int = Field(foreign_key="performsong.id", primary_key=True)
     section_key: str = Field(primary_key=True)
     level: str
-    set_at: datetime  # stored in the database in UTC timezone
+    set_at: datetime = Field(sa_type=DateTime)  # stored in the database in UTC timezone
 
 
 class PocketStatusEnum(IntEnum):
@@ -281,16 +291,22 @@ class PocketArticleBase(SQLModel):
     url: str
     favorite: bool = Field(index=True)
     status: PocketStatusEnum = Field(index=True)
-    time_added: Optional[datetime] = Field(default=None, index=True)
-    time_updated: Optional[datetime] = Field(default=None, index=True)
-    time_read: Optional[datetime] = Field(default=None, index=True)
-    time_favorited: Optional[datetime] = Field(default=None, index=True)
+    time_added: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
+    time_updated: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
+    time_read: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
+    time_favorited: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
     listen_duration_estimate: Optional[int] = Field(default=None, index=True)
     word_count: Optional[int] = Field(default=None, index=True)
     top_image_url: Optional[str] = Field(default=None)
     raindrop_id: Optional[int] = Field(default=None, index=True)
-    time_pocket_raindrop_sync: Optional[datetime] = Field(default=None, index=True)
-    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
+    time_pocket_raindrop_sync: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
+    time_last_api_sync: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
 
     # private attributes -- not included in the database table
     _pocket_item: Optional[Dict] = PrivateAttr()
@@ -405,11 +421,13 @@ class GoogleCalendarEvent(SQLModel, table=True):
     summary: str = Field(index=True)
     location: Optional[str] = Field(default=None, index=True)
     description: Optional[str] = Field(default=None)
-    start: datetime = Field(index=True)
-    end: datetime = Field(index=True)
+    start: datetime = Field(index=True, sa_type=DateTime)
+    end: datetime = Field(index=True, sa_type=DateTime)
     start_timezone: str
     end_timezone: str
-    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
+    time_last_api_sync: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
     # what else? canceled/deleted?
 
     @reconstructor
@@ -511,8 +529,8 @@ class JoplinNoteBase(SQLModel):
     parent_id: str  # notebook id
     title: str = Field(unique=True)
     body: Optional[str] = None  # in markdown
-    created_time: datetime
-    updated_time: datetime
+    created_time: datetime = Field(sa_type=DateTime)
+    updated_time: datetime = Field(sa_type=DateTime)
     body_hash: Optional[str] = Field(default=None, index=True)
     has_words: bool = Field(default=False, index=True)
     has_images: bool = Field(default=False, index=True)
@@ -539,7 +557,9 @@ class JoplinNoteBase(SQLModel):
 
 
 class JoplinNote(JoplinNoteBase, table=True):
-    time_last_api_sync: Optional[datetime] = Field(default=None, index=True)
+    time_last_api_sync: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
 
     words: Optional["MyDiaryWords"] = Relationship(back_populates="joplin_note")
     mydiary_image_links: List[JoplinNoteImageLink] = Relationship(back_populates="note")
@@ -561,7 +581,7 @@ class Tag(TagBase, table=True):
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     created_at: datetime = Field(
-        default_factory=lambda: pendulum.now("UTC"), index=True
+        default_factory=lambda: pendulum.now("UTC"), index=True, sa_type=DateTime
     )
 
     @property
@@ -588,12 +608,12 @@ class TagLink(SQLModel, table=True):
     # "pocket": imported with the article
     source: str = Field(default="manual", index=True)
     created_at: datetime = Field(
-        default_factory=lambda: pendulum.now("UTC"), index=True
+        default_factory=lambda: pendulum.now("UTC"), index=True, sa_type=DateTime
     )
 
 
 class TimeZoneChange(SQLModel, table=True):
-    changed_at: datetime = Field(primary_key=True)  # in UTC
+    changed_at: datetime = Field(primary_key=True, sa_type=DateTime)  # in UTC
     tz_before: str
     tz_after: str
 
@@ -606,7 +626,9 @@ class MyDiaryImageBase(SQLModel):
     description: Optional[str] = None
     thumbnail_size: int
     joplin_resource_id: Optional[str] = Field(index=True, default=None)
-    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
     orig_image_hash: Optional[str] = Field(default=None, index=True)
     # diary date this image is associated with; only set for manually uploaded
     # images (iPhone-sync photos derive their day from the filename)
@@ -626,8 +648,12 @@ class MyDiaryWordsBase(SQLModel):
     )
     note_title: Optional[str] = Field(default=None, index=True)
     txt: str = ""  # in markdown
-    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
-    updated_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
+    updated_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
     hash: str = Field(index=True)
 
 
@@ -672,10 +698,12 @@ class MyDiaryWords(MyDiaryWordsBase, table=True):
 class DogBase(SQLModel):
     name: str = Field(index=True)
     how_met: Optional[str] = Field(default=None, index=True)
-    when_met: Optional[datetime] = Field(default=None, index=True)
+    when_met: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
     owners: Optional[str] = Field(default=None)
     # images: List[MyDiaryImage] = []
-    estimated_bday: Optional[datetime] = Field(default=None, index=True)
+    estimated_bday: Optional[datetime] = Field(
+        default=None, index=True, sa_type=DateTime
+    )
     notes: Optional[str] = Field(default=None)
 
 
@@ -713,7 +741,9 @@ class RecipeEvent(RecipeEventBase, table=True):
 class OwnTracksLocationBase(SQLModel):
     # a single location fix reported by the OwnTracks app, mirrored from the
     # OwnTracks recorder. see owntracks_connector.py
-    tst: datetime = Field(index=True)  # stored in the database in UTC timezone
+    tst: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
     lat: float
     lon: float
     acc: Optional[int] = None  # horizontal accuracy, in meters
@@ -771,7 +801,9 @@ class OwnTracksDayMap(SQLModel, table=True):
     num_points: int
     num_stays: int
     distance_m: int
-    created_at: datetime  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
 
 class SpellingBeeMissBase(SQLModel):
@@ -779,7 +811,9 @@ class SpellingBeeMissBase(SQLModel):
     # entered by hand -- there's no API for the puzzle.
     puzzle_date: date = Field(index=True)
     word: str = Field(index=True)  # normalized to uppercase on write
-    created_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
 
 class SpellingBeeMiss(SpellingBeeMissBase, table=True):
@@ -797,7 +831,9 @@ class SpellingBeePuzzleBase(SQLModel):
     # word in a puzzle is built from the same seven (see spelling_bee.py).
     center_letter: str  # the mandatory one
     outer_letters: str  # the other six, as one string
-    created_at: datetime  # stored in the database in UTC timezone
+    created_at: datetime = Field(
+        sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
 
 class SpellingBeePuzzle(SpellingBeePuzzleBase, table=True):
@@ -811,7 +847,9 @@ class SpellingBeeDefinitionBase(SQLModel):
     # found", which is common for Bee words and shouldn't be retried.
     definition: Optional[str] = Field(default=None)
     part_of_speech: Optional[str] = Field(default=None)
-    fetched_at: datetime = Field(index=True)  # stored in the database in UTC timezone
+    fetched_at: datetime = Field(
+        index=True, sa_type=DateTime
+    )  # stored in the database in UTC timezone
 
 
 class SpellingBeeDefinition(SpellingBeeDefinitionBase, table=True):
