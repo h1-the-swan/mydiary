@@ -261,3 +261,21 @@ def test_loaded_db(loaded_db: Session):
 
     db_spotify_tracks = loaded_db.exec(select(SpotifyTrackHistory)).all()
     assert len(db_spotify_tracks) == 13
+
+
+def test_no_table_column_uses_sqlmodel_utcdatetime():
+    # sqlmodel >= 0.0.47 maps a bare `datetime` field to UTCDateTime, which
+    # rejects naive values on write and hands back aware UTC on read. The
+    # diary deliberately stores naive wall-clock times (local for Joplin
+    # notes, words and images; UTC by convention elsewhere), so every table
+    # datetime field declares `sa_type=DateTime` to keep plain DATETIME.
+    import mydiary.db  # noqa: F401  registers MydiaryDatabaseBackup
+    from sqlmodel.sql.sqltypes import UTCDateTime
+
+    offenders = [
+        f"{table.name}.{column.name}"
+        for table in SQLModel.metadata.tables.values()
+        for column in table.columns
+        if isinstance(column.type, UTCDateTime)
+    ]
+    assert offenders == []

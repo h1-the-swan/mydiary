@@ -25,6 +25,7 @@ Four gotchas worth keeping in view every time they apply:
 
 - Every route `operation_id` must be unique — Orval uses it as the function name it generates in `api.ts`.
 - Use `pendulum` for date/time logic in new code. Stdlib `datetime` still appears in many files, mostly as SQLModel field types and `fromtimestamp` conversions.
+- Give every `datetime` field on a `table=True` model `sa_type=DateTime` (from `sqlmodel`). Without it, sqlmodel ≥ 0.0.47 uses `UTCDateTime`, which rejects the naive wall-clock times the diary stores and reads everything back as aware UTC. Don't use the `NaiveDatetime` annotation instead: it makes the API's Create/Update models reject aware input. `test_no_table_column_uses_sqlmodel_utcdatetime` in `tests/test_database.py` enforces this.
 
 ## This is a personal diary in a public repo
 
