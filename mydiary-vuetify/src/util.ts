@@ -23,3 +23,10 @@ export function toDateStr(dt: Date): string {
     const day = String(dt.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
 }
+
+// Inverse of toDateStr: 'YYYY-MM-DD' to local midnight. new Date('YYYY-MM-DD')
+// parses as UTC midnight, which is the previous day west of UTC.
+export function fromDateStr(s: string): Date {
+    const [year, month, day] = s.split('-').map(Number)
+    return new Date(year, month - 1, day)
+}
