@@ -62,6 +62,14 @@ _Avoid_: location image, map photo
 A piece of music the diarist learns and performs. Either still being learned (in the learning queue) or learned.
 _Avoid_: song (unqualified), track, tune
 
+**Added date**:
+The calendar day a PerformSong joined the diarist's songs, whether into the learning queue or already learned. The diarist sets it and may backdate it. It has no time of day.
+_Avoid_: created at, date created
+
+**Learned date**:
+The calendar day the diarist learned a PerformSong. It has no time of day, and it is kept apart from whether the PerformSong currently counts as learned.
+_Avoid_: learned at
+
 **Reference Recording**:
 The Spotify track a PerformSong is learned from. It may be a cover or a live version and need not be the original. A PerformSong has at most one, and its name and artist can seed the PerformSong's own.
 _Avoid_: Spotify ID (when the recording is meant), original, source track

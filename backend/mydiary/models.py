@@ -202,11 +202,11 @@ class PerformSongBase(SQLModel):
     )
     notes: Optional[str] = Field(default=None)
     perform_url: Optional[str] = Field(default=None)
-    created_at: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
+    added_date: Optional[date] = Field(default=None, index=True)
     key: Optional[str] = Field(default=None, index=True)  # musical key of the song
     capo: Optional[int] = Field(default=None, index=True)  # fret of capo (0 if no capo)
     lyrics: Optional[str] = Field(default=None)
-    learned_dt: Optional[datetime] = Field(default=None, index=True, sa_type=DateTime)
+    learned_date: Optional[date] = Field(default=None, index=True)
 
 
 class PerformSong(PerformSongBase, table=True):

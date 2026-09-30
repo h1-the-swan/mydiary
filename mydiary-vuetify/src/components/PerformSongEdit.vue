@@ -111,7 +111,7 @@
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-date-input
-                                v-model="createdAtDate"
+                                v-model="addedDate"
                                 label="Added"
                                 prepend-icon=""
                                 prepend-inner-icon="$calendar"
@@ -137,7 +137,7 @@
                         </v-col>
                         <v-col cols="12" sm="6" md="4">
                             <v-date-input
-                                v-model="learnedDtDate"
+                                v-model="learnedDate"
                                 label="Learned on"
                                 prepend-icon=""
                                 prepend-inner-icon="$calendar"
@@ -199,6 +199,7 @@ import {
 import { isAxiosError } from 'axios'
 import { useAppStore } from '@/store/app'
 import TagChips from '@/components/TagChips.vue'
+import { fromDateStr, toDateStr } from '@/util'
 import { useRouter } from 'vue-router'
 const props = defineProps<{
     performSong?: PerformSongRead
@@ -208,8 +209,8 @@ const app = useAppStore()
 // a new song is usually one about to be learned, so it starts in the queue
 const submitPerformSong = ref<PerformSongUpdate>(props.performSong ? {} : { learned: false })
 // a song being added now was, by definition, added today
-const createdAtDate = ref<Date | null>(props.performSong ? null : new Date())
-const learnedDtDate = ref<Date | null>(null)
+const addedDate = ref<Date | null>(props.performSong ? null : new Date())
+const learnedDate = ref<Date | null>(null)
 const submitted = ref<PerformSongRead>()
 const snackbar = ref(false)
 const formTitle = computed(() => {
@@ -221,11 +222,12 @@ const formTitle = computed(() => {
 })
 async function onSave() {
     if (!submitPerformSong.value.name) throw Error
-    submitPerformSong.value.created_at = (
-        createdAtDate.value ?? new Date()
-    ).toISOString()
-    submitPerformSong.value.learned_dt = learnedDtDate.value
-        ? learnedDtDate.value.toISOString()
+    // calendar dates, in local parts: toISOString() would shift them to UTC
+    // only a new song defaults to today; an existing undated one stays undated
+    const added = addedDate.value ?? (props.performSong ? null : new Date())
+    submitPerformSong.value.added_date = added ? toDateStr(added) : null
+    submitPerformSong.value.learned_date = learnedDate.value
+        ? toDateStr(learnedDate.value)
         : null
     // the backend normalizes the Spotify ID and rejects one Spotify doesn't know
     try {
@@ -434,14 +436,14 @@ watchEffect(() => {
         resetSearch()
         submitPerformSong.value.notes = props.performSong.notes
         submitPerformSong.value.perform_url = props.performSong.perform_url
-        createdAtDate.value = props.performSong.created_at
-            ? new Date(props.performSong.created_at)
+        addedDate.value = props.performSong.added_date
+            ? fromDateStr(props.performSong.added_date)
             : null
         submitPerformSong.value.key = props.performSong.key
         submitPerformSong.value.capo = props.performSong.capo
         submitPerformSong.value.lyrics = props.performSong.lyrics
-        learnedDtDate.value = props.performSong.learned_dt
-            ? new Date(props.performSong.learned_dt)
+        learnedDate.value = props.performSong.learned_date
+            ? fromDateStr(props.performSong.learned_date)
             : null
     }
 })

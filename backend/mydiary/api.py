@@ -235,11 +235,11 @@ class PerformSongUpdate(SQLModel):
     spotify_id: Optional[str] = None
     notes: Optional[str] = None
     perform_url: Optional[str] = None
-    created_at: Optional[datetime] = None
+    added_date: Optional[date] = None
     key: Optional[str] = None
     capo: Optional[int] = None
     lyrics: Optional[str] = None
-    learned_dt: Optional[datetime] = None
+    learned_date: Optional[date] = None
 
 
 class SongArrangementRead(SongArrangementBase):

@@ -78,7 +78,7 @@
                                     </router-link>
                                 </td>
                                 <td>{{ item.artist_name }}</td>
-                                <td>{{ dateFmt(item.created_at) }}</td>
+                                <td>{{ dateFmt(item.added_date) }}</td>
                                 <td>
                                     <v-icon
                                         v-if="item.learned"
@@ -89,7 +89,7 @@
                                     />
                                     <span v-else class="text-disabled">—</span>
                                 </td>
-                                <td>{{ dateFmt(item.learned_dt) }}</td>
+                                <td>{{ dateFmt(item.learned_date) }}</td>
                             </tr>
                         </template>
                     </v-data-table>
@@ -112,6 +112,7 @@ import { computed, ref, watchEffect } from 'vue'
 import Axios from 'axios'
 Axios.defaults.baseURL = '/api'
 import { PerformSongRead, getSpotifyImageUrl } from '@/api'
+import { fromDateStr } from '@/util'
 import { onMounted } from 'vue'
 import { useAppStore } from '@/store/app'
 const app = useAppStore()
@@ -125,9 +126,9 @@ const displayCols = ref(
     [
         { key: 'name', title: 'Song' },
         { key: 'artist_name', title: 'Artist' },
-        { key: 'created_at', title: 'Added' },
+        { key: 'added_date', title: 'Added' },
         { key: 'learned', title: 'Learned' },
-        { key: 'learned_dt', title: 'Learned on' },
+        { key: 'learned_date', title: 'Learned on' },
     ]
 )
 const search = ref<string>('')
@@ -138,7 +139,7 @@ const songCountLabel = computed<string>(() =>
 )
 function dateFmt(dateStr: string | null | undefined) {
     if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString(undefined, {
+    return fromDateStr(dateStr).toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
