@@ -17,6 +17,9 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 BEFORE_TAGS_REVISION = "40e2fef86acd"
+# upgrade to the tags migration itself, not head: later migrations alter
+# tables this test never creates
+TAGS_REVISION = "0652a2a11ff2"
 
 OLD_SCHEMA = """
 CREATE TABLE tag (
@@ -111,7 +114,7 @@ def old_db(tmp_path: Path) -> Path:
 
 class TestUpgrade:
     def test_tags_are_normalised_and_links_carried_over(self, old_db: Path):
-        run_or_fail(old_db, "upgrade", "head")
+        run_or_fail(old_db, "upgrade", TAGS_REVISION)
 
         assert query(old_db, "SELECT version_num FROM alembic_version") != [(BEFORE_TAGS_REVISION,)]
         assert set(columns(old_db, "tag")) == {"id", "namespace", "slug", "name", "created_at"}
@@ -154,13 +157,13 @@ class TestUpgrade:
         with con:
             con.execute("CREATE TABLE tag_new (id INTEGER PRIMARY KEY, junk TEXT)")
         con.close()
-        run_or_fail(old_db, "upgrade", "head")
+        run_or_fail(old_db, "upgrade", TAGS_REVISION)
         assert "junk" not in columns(old_db, "tag")
 
 
 class TestDowngrade:
     def test_round_trip_restores_the_old_shape(self, old_db: Path):
-        run_or_fail(old_db, "upgrade", "head")
+        run_or_fail(old_db, "upgrade", TAGS_REVISION)
         run_or_fail(old_db, "downgrade", BEFORE_TAGS_REVISION)
 
         assert query(old_db, "SELECT version_num FROM alembic_version") == [(BEFORE_TAGS_REVISION,)]
@@ -179,5 +182,5 @@ class TestDowngrade:
         assert pocket_flags["2024"] == 0
 
         # and up again, cleanly
-        run_or_fail(old_db, "upgrade", "head")
+        run_or_fail(old_db, "upgrade", TAGS_REVISION)
         assert query(old_db, "SELECT count(*) FROM taglink") == [(7,)]

@@ -100,11 +100,11 @@ export interface PerformSongRead {
   spotify_id?: string | null;
   notes?: string | null;
   perform_url?: string | null;
-  created_at?: string | null;
+  added_date?: string | null;
   key?: string | null;
   capo?: number | null;
   lyrics?: string | null;
-  learned_dt?: string | null;
+  learned_date?: string | null;
   id: number;
 }
 
@@ -153,11 +153,11 @@ export interface PerformSongCreate {
   spotify_id?: string | null;
   notes?: string | null;
   perform_url?: string | null;
-  created_at?: string | null;
+  added_date?: string | null;
   key?: string | null;
   capo?: number | null;
   lyrics?: string | null;
-  learned_dt?: string | null;
+  learned_date?: string | null;
 }
 
 export interface PerformSongUpdate {
@@ -167,11 +167,11 @@ export interface PerformSongUpdate {
   spotify_id?: string | null;
   notes?: string | null;
   perform_url?: string | null;
-  created_at?: string | null;
+  added_date?: string | null;
   key?: string | null;
   capo?: number | null;
   lyrics?: string | null;
-  learned_dt?: string | null;
+  learned_date?: string | null;
 }
 
 export type PocketStatusEnum = typeof PocketStatusEnum[keyof typeof PocketStatusEnum];

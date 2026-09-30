@@ -1,6 +1,6 @@
 import inspect
 import json
-from datetime import datetime
+from datetime import date, datetime
 import pendulum
 import pytest
 from pathlib import Path
@@ -368,6 +368,42 @@ class TestPerformSong:
             f"/performsongs/{perform_song_id}", json={"notes": "capo 3rd fret"}
         )
         assert response.status_code == 404
+
+    def test_perform_song_dates_are_calendar_dates(self, client: TestClient):
+        response = client.post(
+            "/performsongs/",
+            json={"name": "Dated Song", "learned": True,
+                  "added_date": "2026-05-01", "learned_date": "2026-05-03"},
+        )
+        assert response.status_code == 200
+        d = response.json()
+        assert d["added_date"] == "2026-05-01"
+        assert d["learned_date"] == "2026-05-03"
+
+        # a save that leaves the dates out doesn't move them
+        response = client.patch(f"/performsongs/{d['id']}", json={"name": "Renamed Song"})
+        assert response.status_code == 200
+        response = client.get(f"/performsongs/{d['id']}")
+        assert response.json()["added_date"] == "2026-05-01"
+        assert response.json()["learned_date"] == "2026-05-03"
+
+        response = client.patch(f"/performsongs/{d['id']}", json={"learned_date": None})
+        assert response.json()["learned_date"] is None
+        assert response.json()["added_date"] == "2026-05-01"
+
+    def test_perform_song_date_rejects_a_time_of_day(self, session: Session, client: TestClient):
+        perform_song_1 = PerformSong(name="Dated Song", added_date=date(2026, 5, 1))
+        session.add(perform_song_1)
+        session.commit()
+
+        # what the old form sent: toISOString() of a local midnight west of UTC
+        response = client.patch(
+            f"/performsongs/{perform_song_1.id}",
+            json={"added_date": "2026-05-01T04:00:00.000Z"},
+        )
+        assert response.status_code == 422
+        session.refresh(perform_song_1)
+        assert perform_song_1.added_date == date(2026, 5, 1)
 
     def test_delete_perform_song(self, session: Session, client: TestClient):
         perform_song_1 = PerformSong(**self.perform_song_data[0])

@@ -38,10 +38,10 @@
           {{ performSong.notes }}
         </p>
         <p
-          v-if="performSong.learned_dt"
+          v-if="performSong.learned_date"
           class="text-body-2 text-medium-emphasis mb-0"
         >
-          Learned {{ new Date(performSong.learned_dt).toLocaleDateString() }}
+          Learned {{ fromDateStr(performSong.learned_date).toLocaleDateString() }}
         </p>
       </div>
     </div>
@@ -58,6 +58,7 @@
 import { PerformSongRead } from '@/api';
 import { md } from '@/markdown';
 import TagChips from '@/components/TagChips.vue';
+import { fromDateStr } from '@/util';
 const props = defineProps<{
   performSong?: PerformSongRead;
   imageUrl?: string;

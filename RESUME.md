@@ -26,7 +26,7 @@ commit in separate calls.
 
 - [x] 1. Glossary and date helpers (`CONTEXT.md`, `fromDateStr` in `util.ts`,
       `util.test.ts`, this file)
-- [ ] 2. Calendar dates end to end (model, `PerformSongUpdate`, hand-written
+- [x] 2. Calendar dates end to end (model, `PerformSongUpdate`, hand-written
       migration, backend tests, regenerated client, three frontend files)
 - [ ] 3. Docs, and delete this file
 - [ ] Verification: tests, lint and build in the containers; migration
@@ -35,8 +35,14 @@ commit in separate calls.
 
 ## Next action
 
-Start step 2. Follow the plan's add–copy–drop migration (not a typed
-`alter_column` rename), and reuse `probe_migration.py` for the snapshot check.
+Step 3: docs (`docs/architecture.md` uses `created_at`/`learned_dt` as its
+example of raw field names in the UI conventions; also check
+`docs/performsong-spotify.md` and `docs/song-practice.md`), then delete this
+file. Then the browser checks with the
+Playwright MCP tools. The worktree now has its own gitignored `.mcp.json` and
+`.claude/settings.local.json` with only the `playwright` server; the primary's
+`mydiary` MCP entry was left out because it runs the primary's
+`mcp_server.py` against the real, unmigrated database.
 
 ## Notes
 
@@ -54,3 +60,21 @@ Start step 2. Follow the plan's add–copy–drop migration (not a typed
   planned `alter_column(type_=sa.Date())` rename CASTs dates to integer years
   on SQLite. The plan now uses add–copy–drop; `probe_migration.py` and
   `probe_types.py` next to the plan hold the throwaway probes.
+- Step 2 done 2026-09-30. The worktree snapshot is migrated to `9ecbdf140eb4`:
+  152 rows, 0 mismatches against the first 10 characters of the old values
+  (dumps in `dump_before.txt` / `dump_after.txt` next to the plan), all
+  non-null values `text`, `alembic check` clean. Downgrade + upgrade on a copy
+  round-trips identically.
+- `test_migration_tags.py` upgraded to `head`, which broke once a later
+  migration altered an existing table it never creates. Both migration tests
+  now upgrade to their own revision.
+- `mydiary-vuetify/api.json` is gitignored; only `src/api.ts` is committed.
+- ESLint's `'props' is assigned a value but never used` in
+  `PerformSongCard.vue` is on main too.
+- After migrating the primary, restart the `mydiary` MCP server
+  (`mcp_server.py` reads `openapi.json` once at startup), and reload any open
+  app tab. An old client's `created_at`/`learned_dt` are silently ignored by
+  `PerformSongUpdate`, so stale saves drop the date edits without an error.
+- Decided 2026-09-30: only a new song's Added defaults to today. Saving an
+  existing undated song, or clearing its Added picker, saves it blank (before,
+  every save stamped today into an empty Added).
