@@ -50,6 +50,8 @@ def test_parse_datetime_from_filepath_rejects_other_names():
 
 
 class FakePropfind:
+    status_code = 207
+
     def __init__(self, names):
         responses = "".join(
             f"<d:response><d:href>/remote.php/dav/files/admin/H1phone_sync/2026/09/{n}</d:href>"
@@ -82,6 +84,23 @@ def test_get_filepaths_for_day_skips_unparseable_names(monkeypatch, caplog):
         "H1phone_sync/2026/09/26-09-06%2015-01-25%2045.jpg"
     ]
     assert "IMG_4230.jpg" in caplog.text
+
+
+def test_get_filepaths_for_day_missing_month_folder(monkeypatch):
+    """The month's folder doesn't exist until its first photo syncs."""
+
+    class FakeNotFound:
+        status_code = 404
+
+        def raise_for_status(self):
+            raise AssertionError("a 404 should not be raised")
+
+    monkeypatch.setattr(
+        "mydiary.nextcloud_connector.requests.request",
+        lambda **kwargs: FakeNotFound(),
+    )
+    mydiary_nextcloud = MyDiaryNextcloud(url="https://nextcloud.invalid")
+    assert mydiary_nextcloud.get_filepaths_for_day(pendulum.datetime(2026, 10, 1)) == []
 
 
 def test_get_filepaths_for_day_is_oldest_first(monkeypatch):

@@ -157,6 +157,9 @@ class MyDiaryNextcloud:
     ):
         url = f"{self.url}/remote.php/dav/files/{NEXTCLOUD_USERNAME}/{basedir}/{dt.year}/{dt.month:02d}/"
         r = requests.request(method="PROPFIND", url=url, auth=self.auth)
+        if r.status_code == 404:
+            # the month's folder only appears once its first photo syncs
+            return
         r.raise_for_status()
         root = etree.fromstring(r.text)
         items = root.findall(".//{DAV:}response")
