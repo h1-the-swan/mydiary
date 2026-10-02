@@ -57,6 +57,18 @@ def make_markdown_table_header(columns: List[str]) -> str:
     return "\n".join([header, header_sep])
 
 
+def google_calendar_events_markdown(events: List[GoogleCalendarEvent]) -> str:
+    """The Google Calendar events section's content for these events."""
+    if not events:
+        return "None"
+    columns = ["Start", "End", "Summary"]
+    header = make_markdown_table_header(columns)
+    lines = [header]
+    for e in events:
+        lines.append(e.to_markdown())
+    return "\n".join(lines)
+
+
 class MyDiaryDay:
     def __init__(
         self,
@@ -322,14 +334,7 @@ class MyDiaryDay:
         return practice_markdown(self.practice_runs)
 
     def google_calendar_events_markdown(self) -> str:
-        if not self.google_calendar_events:
-            return "None"
-        columns = ["Start", "End", "Summary"]
-        header = make_markdown_table_header(columns)
-        lines = [header]
-        for e in self.google_calendar_events:
-            lines.append(e.to_markdown())
-        return "\n".join(lines)
+        return google_calendar_events_markdown(self.google_calendar_events)
 
     def pocket_articles_markdown(self) -> str:
         if not self.pocket_articles or not any(self.pocket_articles.values()):
