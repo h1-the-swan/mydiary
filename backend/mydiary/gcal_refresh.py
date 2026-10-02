@@ -40,6 +40,20 @@ class NoDiaryNote(LookupError):
     """The day has no Diary Note to refresh."""
 
 
+class CalendarUnavailable(Exception):
+    """Google Calendar couldn't be read (an expired token, say)."""
+
+
+def _fetch(gcal: CalendarSource, dt: datetime) -> List[GoogleCalendarEvent]:
+    try:
+        return gcal.get_events_for_day(dt)
+    except Exception as e:
+        # logged in full: this also catches a bug in parsing an event, which
+        # the message alone would blame on Google
+        logger.exception("fetching Google Calendar events failed")
+        raise CalendarUnavailable(f"Google Calendar is unavailable: {e}") from e
+
+
 class SectionUnreadable(Exception):
     """The note's Google Calendar events section can't be told apart (the
     heading twice, or an unclosed ``` fence), so a Refresh can't write it."""
@@ -120,7 +134,7 @@ def preview_gcal_refresh(
     """What a Refresh of the day's Google Calendar events section would
     write. Writes nothing anywhere."""
     diary_note = _find(joplin, dt)
-    after = _render(gcal.get_events_for_day(dt))
+    after = _render(_fetch(gcal, dt))
     before = _section(diary_note.read().body)
     return GcalRefreshPreview(before=before, after=after, diff=line_diff(before, after))
 
@@ -138,10 +152,10 @@ def apply_gcal_refresh(
     `before`; otherwise raise `GcalSectionChanged` and write nothing. The
     day's events are saved to the database only once the note is written.
     Returns whether the note was written (False when it already held
-    `after`). If saving the events fails, the note has already been
-    written."""
+    `after`). A failure to save the events is logged, not raised: the note
+    has been written by then, and the next Refresh saves them again."""
     diary_note = _find(joplin, dt)
-    events = gcal.get_events_for_day(dt)
+    events = _fetch(gcal, dt)
     if _render(events) != after:
         raise GcalSectionChanged("calendar")
     with diary_note.edit(session) as edit:
@@ -150,6 +164,10 @@ def apply_gcal_refresh(
         edit.set_section(SECTION, after)
     # after the edit: it commits the session itself, and asks callers not to
     # hold pending writes across it
-    gcal.save_events_to_database(events, session=session)
+    try:
+        gcal.save_events_to_database(events, session=session)
+    except Exception:
+        session.rollback()
+        logger.exception(f"saving Google Calendar events for {dt.date()} failed")
     logger.info(f"refreshed Google Calendar events for {dt.date()}: wrote={edit.wrote}")
     return edit.wrote

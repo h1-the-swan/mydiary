@@ -317,3 +317,21 @@ class TestAwkwardNotes:
             )
         assert joplin.notes[note_id].body == body
         assert gcal.saved == []
+
+
+def test_a_failed_save_still_reports_the_write(joplin, stale_note, db_session):
+    gcal = FakeCalendar(made_up_events())
+    preview = preview_gcal_refresh(joplin, DT, gcal)
+
+    def broken_save(events, session=None):
+        raise RuntimeError("database is locked")
+
+    gcal.save_events_to_database = broken_save
+
+    assert apply_gcal_refresh(
+        db_session, joplin, DT, preview.before, preview.after, gcal
+    )
+    assert (
+        section_content(joplin.notes[stale_note].body, "Google Calendar events")
+        == preview.after
+    )

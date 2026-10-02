@@ -42,6 +42,36 @@ export interface DogUpdate {
   notes?: string | null;
 }
 
+export interface GcalRefreshApply {
+  before: string;
+  after: string;
+}
+
+export type GcalRefreshDiffLineOp = typeof GcalRefreshDiffLineOp[keyof typeof GcalRefreshDiffLineOp];
+
+
+export const GcalRefreshDiffLineOp = {
+  same: 'same',
+  add: 'add',
+  remove: 'remove',
+} as const;
+
+export interface GcalRefreshDiffLine {
+  op: GcalRefreshDiffLineOp;
+  text: string;
+}
+
+export interface GcalRefreshPreviewRead {
+  before: string;
+  after: string;
+  changed: boolean;
+  diff: GcalRefreshDiffLine[];
+}
+
+export interface GcalRefreshResult {
+  wrote: boolean;
+}
+
 export interface GoogleCalendarEventRead {
   id?: string;
   summary?: string;
@@ -603,6 +633,14 @@ remove_image_refs?: boolean;
 };
 
 export type JoplinUpdateNoteParams = {
+tz?: string;
+};
+
+export type JoplinGcalRefreshPreviewParams = {
+tz?: string;
+};
+
+export type JoplinGcalRefreshParams = {
 tz?: string;
 };
 
@@ -1522,6 +1560,67 @@ export const getJoplinUpdateNoteUrl = (dt: string,
     params: null,
   }).getUri({
     url: `/joplin/update_note/${dt}`,
+    baseURL: '',
+    params,
+
+  });
+}
+
+/**
+ * What a Refresh of the day's Google Calendar events section would
+ * write. Writes nothing.
+ * @summary Joplin Gcal Refresh Preview
+ */
+export const joplinGcalRefreshPreview = (
+    dt: string,
+    params?: JoplinGcalRefreshPreviewParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<GcalRefreshPreviewRead>> => {
+    return axios.get(
+      `/joplin/gcal_refresh_preview/${dt}`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+export const getJoplinGcalRefreshPreviewUrl = (dt: string,
+    params?: JoplinGcalRefreshPreviewParams,) => {
+
+  return axios.create({
+    baseURL: '',
+    params: null,
+  }).getUri({
+    url: `/joplin/gcal_refresh_preview/${dt}`,
+    baseURL: '',
+    params,
+
+  });
+}
+
+/**
+ * Write a Refresh Preview's `after` as the day's Google Calendar events
+ * section. 409 and nothing written if the calendar or the section changed
+ * since the preview.
+ * @summary Joplin Gcal Refresh
+ */
+export const joplinGcalRefresh = (
+    dt: string,
+    gcalRefreshApply: GcalRefreshApply,
+    params?: JoplinGcalRefreshParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<GcalRefreshResult>> => {
+    return axios.post(
+      `/joplin/gcal_refresh/${dt}`,
+      gcalRefreshApply,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+export const getJoplinGcalRefreshUrl = (dt: string,
+    params?: JoplinGcalRefreshParams,) => {
+
+  return axios.create({
+    baseURL: '',
+    params: null,
+  }).getUri({
+    url: `/joplin/gcal_refresh/${dt}`,
     baseURL: '',
     params,
 
@@ -2983,6 +3082,8 @@ export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>
+export type JoplinGcalRefreshPreviewResult = AxiosResponse<GcalRefreshPreviewRead>
+export type JoplinGcalRefreshResult = AxiosResponse<GcalRefreshResult>
 export type JoplinGetInfoAllDaysResult = AxiosResponse<unknown[]>
 export type NextcloudPhotosThumbnailUrlsResult = AxiosResponse<string[]>
 export type NextcloudThumbnailImgResult = AxiosResponse<unknown | Blob>
