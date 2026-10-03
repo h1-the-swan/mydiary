@@ -16,7 +16,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 1. Commit `CONTEXT.md` terms and this file
 - [x] 2. Raw dump with the diarist (gate), then `status` column + migration + parser
 - [x] 3. Google Calendar Source Sync: `showDeleted`, by-id reconciliation in the shared save
-- [ ] 4. `source_sync.py`: `sync_sources`, `SourceSyncReport`, Protocols
+- [x] 4. `source_sync.py`: `sync_sources`, `SourceSyncReport`, Protocols
 - [ ] 5. Read-only `from_dt`; callers sync explicitly
 - [ ] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
 - [ ] 7. Create dialog in `MyDiaryDay.vue`
@@ -25,7 +25,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 ## Next action
 
-Step 4: `backend/mydiary/source_sync.py` with `sync_sources(session, dt) -> SourceSyncReport`. One Protocol per Source (Spotify, Google Calendar via `CalendarSource` + `save_calendar_day`, OwnTracks); each runs even if another failed, and building its client counts as part of it. Tests with fakes. Nothing calls it yet; step 5 wires it in.
+Step 5: make `MyDiaryDay.from_dt(dt, session)` read only the database: Google Calendar events via `events_for_day`, flags `spotify_sync` / `gcal_save` / `owntracks_sync` removed. Every caller that synced before calls `sync_sources(session, dt)` first: `joplin_update_note`, `joplin_init_note`, `day_init_markdown` (routes are reshaped in step 6), and the `joplin_*` scripts. The `day` fixture in `tests/test_mydiary_day.py` then needs no network; mark anything still hitting a real service `external_api`. Adjust `TestNoteRouteDays` in `tests/test_api.py`, which fakes `from_dt`.
 
 ## Notes
 
