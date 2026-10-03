@@ -126,7 +126,13 @@
                         :loading="creating"
                         @click="onSaveNote"
                     ></v-btn>
-                    <v-btn text="Cancel" @click="dialog = false"></v-btn>
+                    <!-- a create can't be called back, so the dialog stays
+                         open to show how it went -->
+                    <v-btn
+                        text="Cancel"
+                        :disabled="creating"
+                        @click="dialog = false"
+                    ></v-btn>
                 </v-card-actions>
             </v-card>
         </v-dialog>
