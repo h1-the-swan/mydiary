@@ -12,7 +12,7 @@ docker compose exec mydiary-vuetify npm run lint
 docker compose exec mydiary-vuetify npm test    # vitest: chordpro.ts, chords.ts, practice.ts
 ```
 
-`npm run lint` reports pre-existing `no-unused-vars` errors, mostly in `Test.vue` / `TestDay.vue`. Compare counts before and after a change rather than expecting a clean run.
+`npm run lint` reports pre-existing `no-unused-vars` errors. Compare counts before and after a change rather than expecting a clean run.
 
 ## Frontend dependencies
 

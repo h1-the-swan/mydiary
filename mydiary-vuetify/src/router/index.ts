@@ -9,117 +9,68 @@ const routes = [
             {
                 path: '',
                 name: 'Home',
-                // route level code-splitting
-                // this generates a separate chunk (about.[hash].js) for this route
-                // which is lazy-loaded when the route is visited.
-                component: () =>
-                    import(/* webpackChunkName: "home" */ '@/views/Home.vue'),
-            },
-            {
-                path: '/test',
-                name: 'Test',
-                component: () =>
-                    import(/* webpackChunkName: "test" */ '@/views/Test.vue'),
-            },
-            {
-                path: '/testday',
-                name: 'TestDay',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "test" */ '@/views/TestDay.vue'
-                    ),
+                component: () => import('@/views/Home.vue'),
             },
             {
                 path: '/day',
                 name: 'MyDiaryDay',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "test" */ '@/views/MyDiaryDay.vue'
-                    ),
+                component: () => import('@/views/MyDiaryDay.vue'),
             },
             {
                 path: '/performsongs',
                 name: 'performSongs',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'
-                    ),
+                component: () => import('@/views/PerformSongs.vue'),
             },
             {
                 path: '/performsongs/new',
                 name: 'new performSong',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "performsong" */ '@/views/PerformSongNew.vue'
-                    ),
+                component: () => import('@/views/PerformSongNew.vue'),
             },
             {
                 path: '/performsongs/:id',
                 name: 'performSong',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "performsong" */ '@/views/PerformSongs.vue'
-                    ),
+                component: () => import('@/views/PerformSongs.vue'),
                 props: true,
             },
             {
                 path: '/performsongs/:id/practice',
                 name: 'songPractice',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "performsong" */ '@/views/SongPractice.vue'
-                    ),
+                component: () => import('@/views/SongPractice.vue'),
                 props: true,
             },
             {
                 path: '/tags',
                 name: 'tags',
-                component: () =>
-                    import(/* webpackChunkName: "tags" */ '@/views/Tags.vue'),
+                component: () => import('@/views/Tags.vue'),
             },
             {
                 // not `:key`: Vue reserves that prop name, and <router-view>
                 // would swallow it instead of passing it to the page
                 path: '/tags/:tagKey',
                 name: 'tag',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "tags" */ '@/views/TagDetail.vue'
-                    ),
+                component: () => import('@/views/TagDetail.vue'),
                 props: true,
             },
             {
                 path: '/pocket',
                 name: 'pocket',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "pocket" */ '@/views/Pocket.vue'
-                    ),
+                component: () => import('@/views/Pocket.vue'),
                 props: true,
             },
             {
                 path: '/tz-change',
                 name: 'timeZoneChange',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "pocket" */ '@/views/TimeZoneChange.vue'
-                    ),
+                component: () => import('@/views/TimeZoneChange.vue'),
             },
             {
                 path: '/spellingbee',
                 name: 'spellingBee',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "spellingbee" */ '@/views/SpellingBee.vue'
-                    ),
+                component: () => import('@/views/SpellingBee.vue'),
             },
             {
                 path: '/spellingbee/practice',
                 name: 'spellingBeePractice',
-                component: () =>
-                    import(
-                        /* webpackChunkName: "spellingbee" */ '@/views/SpellingBeePractice.vue'
-                    ),
+                component: () => import('@/views/SpellingBeePractice.vue'),
             },
         ],
     },
