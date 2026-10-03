@@ -5,6 +5,7 @@
         @update:model-value="updateDate"
         :attributes="attributes"
         expanded
+        @did-move="calendarLoadJoplinInfo"
     />
     <v-btn
         class="mt-2"
@@ -23,6 +24,7 @@ import {
     onMounted,
     ref,
     useTemplateRef,
+    watch,
     watchEffect,
 } from 'vue'
 import { useRouter } from 'vue-router'
@@ -81,6 +83,10 @@ function updateDate(val: any) {
     const newQD = toDateStr(val)
     router.push({ query: { dt: newQD } })
 }
+// v-calendar only turns the page for clicks inside the picker, so a date
+// change from elsewhere (the day stepper, Today) would select a day on a month
+// that isn't showing. move() is a no-op when the month is already visible.
+watch(getDate, (dt) => calendar.value?.move(dt))
 watchEffect(() => {
     if (app.calendarShouldUpdate) {
         calendarLoadJoplinInfo()
