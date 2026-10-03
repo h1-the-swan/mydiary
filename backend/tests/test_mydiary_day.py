@@ -8,7 +8,12 @@ from mydiary.image_sync import shrink_photo
 from mydiary.mydiary_day import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.joplin_port import HttpJoplin
-from mydiary.models import JoplinNote, JoplinNoteImageLink, MyDiaryWords
+from mydiary.models import (
+    GoogleCalendarEvent,
+    JoplinNote,
+    JoplinNoteImageLink,
+    MyDiaryWords,
+)
 from sqlmodel import Session, SQLModel, create_engine, select
 
 SECTIONS = [
@@ -23,9 +28,7 @@ SECTIONS = [
 @pytest.fixture(name="day")
 def mydiary_day_from_loaded_db(loaded_db: Session):
     dt = pendulum.datetime(2024, 10, 19, tz="America/New_York")
-    day = MyDiaryDay.from_dt(
-        dt=dt, session=loaded_db, spotify_sync=False, gcal_save=False
-    )
+    day = MyDiaryDay.from_dt(dt=dt, session=loaded_db)
     yield day
 
 
@@ -59,23 +62,65 @@ def mydiary_day_joplin_initialized(
 def test_mydiary_day_from_dt():
     # this tests created a day from production database, not test temp db
     dt = pendulum.parse("2022-11-02")
-    day = MyDiaryDay.from_dt(
-        dt=dt, spotify_sync=False, gcal_save=False
-    )
+    day = MyDiaryDay.from_dt(dt=dt)
     assert dt.is_same_day(day.dt)
     assert len(day.google_calendar_events) > 0
     assert len(day.pocket_articles) > 0
     assert len(day.spotify_tracks) > 0
 
 
-def test_mydiary_day_from_loaded_db(day: MyDiaryDay):
-    assert len(day.google_calendar_events) > 0
+def test_mydiary_day_from_loaded_db(day: MyDiaryDay, loaded_db: Session):
+    # the day's events the fixture stored, read from the database
+    stored = [
+        e
+        for e in loaded_db.exec(select(GoogleCalendarEvent))
+        if e.status != "cancelled" and day.dt.is_same_day(e.start)
+    ]
+    assert stored
+    assert {e.id for e in day.google_calendar_events} == {e.id for e in stored}
     assert len(day.pocket_articles) > 0
     assert len(day.spotify_tracks) > 0
     assert day.words is not None
     md = day.init_markdown()
     assert md.startswith("# Oct 19, 2024")
     assert "Test words." in md
+
+
+def test_from_dt_reads_only_the_database(loaded_db: Session, monkeypatch):
+    import socket
+
+    from sqlalchemy import event
+
+    # recorded rather than only raised: a caller catching Exception (as
+    # syncs inside day assembly used to) would swallow the error
+    attempts = []
+
+    def no_network(*args, **kwargs):
+        attempts.append(args)
+        raise OSError("from_dt tried the network")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", no_network)
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    monkeypatch.setattr(socket, "getaddrinfo", no_network)
+    first = loaded_db.exec(select(GoogleCalendarEvent)).first()
+    first.status = "cancelled"
+    loaded_db.add(first)
+    loaded_db.commit()
+    flushes = []
+    event.listen(loaded_db, "after_flush", lambda session, ctx: flushes.append(1))
+    commits = []
+    monkeypatch.setattr(loaded_db, "commit", lambda: commits.append(1))
+
+    day = MyDiaryDay.from_dt(
+        pendulum.datetime(2024, 10, 19, tz="America/New_York"), session=loaded_db
+    )
+
+    assert [e.id for e in day.google_calendar_events] != []
+    assert first.id not in [e.id for e in day.google_calendar_events]
+    assert attempts == []
+    assert flushes == [] and commits == []
+    assert not (loaded_db.new or loaded_db.dirty or loaded_db.deleted)
 
 
 @pytest.mark.external_api

@@ -22,6 +22,7 @@ from tests.test_gcal_refresh import (
     event,
     made_up_events,
     note_body,
+    record_saves,  # noqa: F401 (an autouse fixture, registered by importing it)
 )
 
 PREVIEW = f"/joplin/gcal_refresh_preview/{TITLE}"
@@ -39,11 +40,11 @@ class RecordingCalendar(FakeCalendar):
         self.days = []
         self.error = error
 
-    def get_events_for_day(self, dt):
+    def get_day(self, dt):
         self.days.append(dt)
         if self.error:
             raise self.error
-        return super().get_events_for_day(dt)
+        return super().get_day(dt)
 
 
 @pytest.fixture(name="session")

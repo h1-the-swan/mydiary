@@ -120,16 +120,16 @@ class MyDiaryDay:
     def from_dt(
         cls,
         dt: datetime = now().start_of("day"),
-        spotify_sync: bool = True,
-        gcal_save: bool = True,
-        owntracks_sync: bool = True,
         session: Optional[Session] = None,
         note: Optional[Union[JoplinNote, str]] = None,  # can use note or note_id
         **kwargs,
     ) -> "MyDiaryDay":
+        """The Diary Day of `dt` (in `dt`'s zone), as the database has it.
+        Reads only the database: getting the Sources' latest data in first is
+        a Source Sync (`sync_sources` in `source_sync.py`)."""
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
-        from .googlecalendar_connector import MyDiaryGCal
+        from .googlecalendar_connector import events_for_day
         from .owntracks_connector import MyDiaryOwnTracks
 
         if session is None:
@@ -160,32 +160,9 @@ class MyDiaryDay:
         mydiary_pocket = MyDiaryPocket()
         pocket_articles = mydiary_pocket.get_articles_for_day(dt, session=session)
 
-        mydiary_spotify = MyDiarySpotify()
-        if spotify_sync is True:
-            # a Spotify outage / revoked token must not break day assembly
-            # (e.g. note init); fall back to whatever is already in the database
-            try:
-                mydiary_spotify.save_recent_tracks_to_database()
-            except Exception as e:
-                logger.warning(f"skipping Spotify sync during day assembly: {e}")
-        spotify_tracks = mydiary_spotify.get_tracks_for_day(dt, session=session)
-
-        mydiary_gcal = MyDiaryGCal()
-        google_calendar_events = mydiary_gcal.get_events_for_day(dt)
-        if gcal_save is True:
-            mydiary_gcal.save_events_to_database(
-                google_calendar_events, session=session
-            )
-
-        mydiary_owntracks = MyDiaryOwnTracks()
-        if owntracks_sync is True:
-            # the recorder being unreachable must not break day assembly; fall
-            # back to whatever has already been mirrored into the database
-            try:
-                mydiary_owntracks.save_locations_to_database(session=session)
-            except Exception as e:
-                logger.warning(f"skipping OwnTracks sync during day assembly: {e}")
-        owntracks_locations = mydiary_owntracks.get_locations_for_day(
+        spotify_tracks = MyDiarySpotify().get_tracks_for_day(dt, session=session)
+        google_calendar_events = events_for_day(session, dt)
+        owntracks_locations = MyDiaryOwnTracks().get_locations_for_day(
             dt, session=session
         )
         owntracks_day_maps = list(

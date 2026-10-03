@@ -1663,29 +1663,49 @@ class TestNoteRouteDays:
 
     @pytest.fixture
     def seen(self, monkeypatch):
+        """The days the route read with `from_dt` (`seen`) and synced
+        (`seen.synced`); `seen.failing` makes the sync report failures."""
         from types import SimpleNamespace
 
         import mydiary.api as api_module
         from mydiary.api import get_joplin_port
+        from mydiary.source_sync import SourceStatus, SourceSyncReport
         from tests.in_memory_joplin import InMemoryJoplin
 
-        seen = []
+        class Seen(list):
+            synced: list
+            failing: list
+            log: list  # ("sync" | "read", dt), in call order
+
+        seen = Seen()
+        seen.synced = []
+        seen.failing = []
+        seen.log = []
 
         def from_dt(dt, **kwargs):
             seen.append(dt)
+            seen.log.append(("read", dt))
             return SimpleNamespace(
                 update_joplin_note=lambda session: None,
-                init_joplin_note=lambda session, body: None,
+                init_joplin_note=lambda session: None,
                 joplin_note_id="n1",
             )
 
+        def sync_sources(session, dt):
+            seen.synced.append(dt)
+            seen.log.append(("sync", dt))
+            return SourceSyncReport(
+                [SourceStatus(name, ok=False, error="down") for name in seen.failing]
+            )
+
         monkeypatch.setattr(api_module.MyDiaryDay, "from_dt", from_dt)
+        monkeypatch.setattr(api_module, "sync_sources", sync_sources)
         app.dependency_overrides[get_joplin_port] = lambda: InMemoryJoplin()
         yield seen
         app.dependency_overrides.pop(get_joplin_port, None)
 
     @pytest.mark.parametrize(
-        "route, kwargs", [("update_note", {}), ("init_note", {"json": "body"})]
+        "route, kwargs", [("update_note", {}), ("init_note", {})]
     )
     def test_defaults_to_the_diary_timezone(
         self, client: TestClient, diary_tz, seen, route, kwargs
@@ -1695,6 +1715,37 @@ class TestNoteRouteDays:
         (dt,) = seen
         assert dt.timezone_name == "Pacific/Auckland"
         assert dt.to_date_string() == "2031-03-10"
+        # the sync, if any, is of the same day
+        assert all(d == dt for d in seen.synced)
+
+    def test_update_note_syncs_first(self, client: TestClient, diary_tz, seen):
+        r = client.post("/joplin/update_note/2031-03-10")
+        assert r.status_code == 200
+        (dt,) = seen
+        assert seen.log == [("sync", dt), ("read", dt)]
+
+    def test_init_note_does_not_sync(self, client: TestClient, diary_tz, seen):
+        r = client.post("/joplin/init_note/2031-03-10")
+        assert r.status_code == 200
+        assert len(seen) == 1
+        assert seen.synced == []
+
+    def test_google_calendar_failing_writes_no_note(
+        self, client: TestClient, diary_tz, seen
+    ):
+        seen.failing = ["Google Calendar"]
+        r = client.post("/joplin/update_note/2031-03-10")
+        assert r.status_code == 502
+        assert "Google Calendar" in r.json()["detail"]
+        assert seen == []
+
+    def test_other_sources_failing_still_write(
+        self, client: TestClient, diary_tz, seen
+    ):
+        seen.failing = ["Spotify", "OwnTracks"]
+        r = client.post("/joplin/update_note/2031-03-10")
+        assert r.status_code == 200
+        assert len(seen) == 1
 
     def test_an_explicit_timezone_wins(self, client: TestClient, diary_tz, seen):
         r = client.post("/joplin/update_note/2031-03-10", params={"tz": "UTC"})
@@ -1705,3 +1756,85 @@ class TestNoteRouteDays:
         r = client.post("/joplin/update_note/2031-03-10")
         assert r.status_code == 200
         assert seen[0].to_date_string() == "2031-03-10"
+
+
+class TestDayRoutes:
+    """`POST /day/{dt}/sync_sources` and `GET /day/{dt}/new_note_preview`."""
+
+    @pytest.fixture
+    def diary_tz(self, session: Session):
+        session.add(
+            TimeZoneChange(
+                changed_at=pendulum.datetime(2031, 3, 1, 12, tz="UTC"),
+                tz_before="America/New_York",
+                tz_after="Pacific/Auckland",
+            )
+        )
+        session.commit()
+
+    @pytest.fixture
+    def synced(self, monkeypatch):
+        import mydiary.api as api_module
+        from mydiary.source_sync import SourceStatus, SourceSyncReport
+
+        synced = []
+
+        def sync_sources(session, dt):
+            synced.append(dt)
+            return SourceSyncReport(
+                [
+                    SourceStatus("Spotify", ok=True),
+                    SourceStatus("Google Calendar", ok=False, error="KeyError: 'x'"),
+                ]
+            )
+
+        monkeypatch.setattr(api_module, "sync_sources", sync_sources)
+        return synced
+
+    def test_sync_reports_each_source(self, client: TestClient, diary_tz, synced):
+        r = client.post("/day/2031-03-10/sync_sources")
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "statuses": [
+                {"source": "Spotify", "ok": True, "error": None},
+                {"source": "Google Calendar", "ok": False, "error": "KeyError: 'x'"},
+            ]
+        }
+        (dt,) = synced
+        assert dt.timezone_name == "Pacific/Auckland"
+        assert dt.to_date_string() == "2031-03-10"
+
+    def test_the_old_preview_route_is_gone(self, client: TestClient):
+        assert client.get("/day_init_markdown/2031-03-10").status_code == 404
+
+    def test_sync_is_post_only(self, client: TestClient, synced):
+        assert client.get("/day/2031-03-10/sync_sources").status_code == 405
+        assert synced == []
+
+    def test_preview_reads_the_day_and_syncs_nothing(
+        self, client: TestClient, session: Session, diary_tz, synced
+    ):
+        from mydiary.models import GoogleCalendarEvent
+
+        start = pendulum.datetime(2031, 3, 10, 9, tz="Pacific/Auckland")
+        session.add(
+            GoogleCalendarEvent(
+                id="ev1",
+                summary="Water the ferns",
+                start=start,
+                end=start.add(hours=1),
+                start_timezone="Pacific/Auckland",
+                end_timezone="Pacific/Auckland",
+            )
+        )
+        session.commit()
+
+        r = client.get("/day/2031-03-10/new_note_preview")
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body.startswith("# Mar 10, 2031")
+        assert "timezone: Pacific/Auckland" in body
+        assert "Water the ferns" in body
+        assert synced == []

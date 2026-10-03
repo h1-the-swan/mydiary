@@ -20,7 +20,7 @@ def test_env_loaded():
 @pytest.mark.external_api
 def test_gcal_api_call():
     dt = pendulum.datetime(year=2018, month=8, day=30, tz="America/Los_Angeles")
-    events = MyDiaryGCal().get_events_for_day(dt)
+    events = MyDiaryGCal().get_day(dt).events
     event = events[0]
     assert dt.is_same_day(event.start)
     assert dt.is_same_day(event.end)
@@ -58,3 +58,45 @@ def test_gcal_event(rootdir, db_session: Session):
     assert pendulum.instance(db_event.start).in_tz("America/Los_Angeles") == event.start
     assert pendulum.instance(db_event.end).in_tz("America/Los_Angeles") == new_end
 
+
+def _api_event(**fields):
+    # made up, shaped like an events.list item
+    event = {
+        "id": "made-up-event-1",
+        "summary": "Made-up event",
+        "start": {"dateTime": "2031-03-10T09:00:00-04:00", "timeZone": "America/New_York"},
+        "end": {"dateTime": "2031-03-10T10:00:00-04:00", "timeZone": "America/New_York"},
+    }
+    event.update(fields)
+    return event
+
+
+def test_gcal_event_status_defaults_to_confirmed():
+    assert GoogleCalendarEvent.from_gcal_api_event(_api_event()).status == "confirmed"
+
+
+def test_untitled_event_gets_an_empty_summary(db_session: Session):
+    api_event = _api_event()
+    del api_event["summary"]
+    db_session.add(GoogleCalendarEvent.from_gcal_api_event(api_event))
+    db_session.commit()
+    assert db_session.get(GoogleCalendarEvent, "made-up-event-1").summary == ""
+
+
+def test_cancelled_recurring_instance_keeps_its_status(db_session: Session):
+    # what events.list(showDeleted=True, singleEvents=True) returns for a
+    # cancelled instance of a recurring event: full start and end
+    api_event = _api_event(
+        id="made-up-series_20310310T130000Z",
+        status="cancelled",
+        recurringEventId="made-up-series",
+        originalStartTime={
+            "dateTime": "2031-03-10T09:00:00-04:00",
+            "timeZone": "America/New_York",
+        },
+    )
+    db_session.add(GoogleCalendarEvent.from_gcal_api_event(api_event))
+    db_session.commit()
+    db_session.expire_all()
+    row = db_session.get(GoogleCalendarEvent, "made-up-series_20310310T130000Z")
+    assert row.status == "cancelled"

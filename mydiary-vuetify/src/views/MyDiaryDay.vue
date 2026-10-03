@@ -27,7 +27,7 @@
                 <v-btn v-if="diaryNoteExists" size="small" @click="gcalRefreshOpen = true">
                     Refresh calendar events
                 </v-btn>
-                <v-btn v-if="!diaryNoteExists" size="small" @click="fetchInitMarkdown">
+                <v-btn v-if="!diaryNoteExists" size="small" @click="openCreateDialog">
                     Create note for this day
                 </v-btn>
             </div>
@@ -71,30 +71,69 @@
         />
         <map-section :dt="getDateStr" :joplin-note-id="joplinNoteId" />
 
-        <v-dialog v-model="dialog" max-width="900">
-            <v-card title="Create note for this day">
-                <v-form>
-                    <v-card-text>
-                        <div
-                            v-if="initMarkdown"
-                            class="prose"
-                            v-html="md.render(initMarkdown)"
-                        ></div>
-                        <div v-else>
-                            Loading…
-                            <v-progress-linear indeterminate />
-                        </div>
-                    </v-card-text>
-                    <v-card-actions>
-                        <v-btn
-                            color="primary"
-                            variant="elevated"
-                            text="Create note"
-                            @click="onSaveNote"
-                        ></v-btn>
-                        <v-btn text="Cancel" @click="dialog = false"></v-btn>
-                    </v-card-actions>
-                </v-form>
+        <v-dialog v-model="dialog" max-width="900" :persistent="creating">
+            <v-card :title="`Create note for ${createLabel}`">
+                <v-card-text>
+                    <v-alert
+                        v-for="failure in syncFailures"
+                        :key="failure.source"
+                        class="mb-3"
+                        type="warning"
+                        variant="tonal"
+                        density="compact"
+                    >
+                        Couldn't sync {{ failure.source }} ({{ failure.error }}).
+                        The preview shows what was already saved.
+                    </v-alert>
+                    <v-alert
+                        v-if="previewError"
+                        class="mb-3"
+                        type="error"
+                        variant="tonal"
+                        density="compact"
+                    >
+                        {{ previewError }}
+                    </v-alert>
+                    <v-alert
+                        v-if="createError"
+                        class="mb-3"
+                        type="error"
+                        variant="tonal"
+                        density="compact"
+                    >
+                        Creating the note failed ({{ createError }}).
+                    </v-alert>
+                    <div v-if="syncing">
+                        Syncing the day's sources…
+                        <v-progress-linear indeterminate />
+                    </div>
+                    <div
+                        v-else-if="initMarkdown"
+                        class="prose"
+                        v-html="md.render(initMarkdown)"
+                    ></div>
+                    <div v-else-if="!previewError">
+                        Loading the preview…
+                        <v-progress-linear indeterminate />
+                    </div>
+                </v-card-text>
+                <v-card-actions>
+                    <v-btn
+                        color="primary"
+                        variant="elevated"
+                        text="Create note"
+                        :disabled="!initMarkdown"
+                        :loading="creating"
+                        @click="onSaveNote"
+                    ></v-btn>
+                    <!-- a create can't be called back, so the dialog stays
+                         open to show how it went -->
+                    <v-btn
+                        text="Cancel"
+                        :disabled="creating"
+                        @click="dialog = false"
+                    ></v-btn>
+                </v-card-actions>
             </v-card>
         </v-dialog>
 
@@ -113,7 +152,7 @@
         </v-snackbar>
 
         <v-snackbar v-model="snackbarInit">
-            Note created for {{ dateLabel }}.
+            Note created for {{ createLabel }}.
             <template v-slot:actions>
                 <v-btn variant="text" @click="snackbarInit = false">Close</v-btn>
             </template>
@@ -127,12 +166,15 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { md } from '@/markdown'
 import {
+    dayNewNotePreview,
+    daySyncSources,
     joplinGetNote,
     joplinGetNoteId,
     JoplinNote,
     joplinNoteImages,
     MyDiaryImageRead,
     joplinInitNote,
+    SourceStatusRead,
 } from '@/api'
 import GCalAuth from '@/components/GCalAuth.vue'
 import GcalRefreshDialog from '@/components/GcalRefreshDialog.vue'
@@ -144,11 +186,21 @@ import PhotosSection from '@/components/PhotosSection.vue'
 import MapSection from '@/components/MapSection.vue'
 import TagChips from '@/components/TagChips.vue'
 import { useAppStore } from '@/store/app'
-import { useDiaryDate, toDateStr } from '@/util'
+import { detailOf, useDiaryDate, toDateStr } from '@/util'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
 const app = useAppStore()
 const initMarkdown = ref('')
+// the day the create dialog opened on, so its preview and Create can't land
+// on different days; `openCount` drops responses from an earlier opening
+const createDt = ref('')
+const createLabel = ref('')
+let openCount = 0
+const syncing = ref(false)
+const syncFailures = ref<SourceStatusRead[]>([])
+const previewError = ref('')
+const creating = ref(false)
+const createError = ref('')
 const joplinNoteId = ref('')
 const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
@@ -188,17 +240,54 @@ function shiftDay(days: number) {
 function goToToday() {
     updateDate(new Date())
 }
-async function fetchInitMarkdown() {
+// Source Sync first, then the preview, which reads what the sync saved. A
+// Source that fails is a warning: the preview still shows the rest.
+async function openCreateDialog() {
+    const dt = getDateStr.value
+    const opening = ++openCount
+    createDt.value = dt
+    createLabel.value = dateLabel.value
     dialog.value = true
     initMarkdown.value = ''
-    initMarkdown.value = (
-        await axios.get(`/day_init_markdown/${getDateStr.value}?tz=infer`)
-    ).data
+    syncFailures.value = []
+    previewError.value = ''
+    createError.value = ''
+    syncing.value = true
+    try {
+        const report = (await daySyncSources(dt)).data
+        if (opening !== openCount) return
+        syncFailures.value = report.statuses.filter((s) => !s.ok)
+    } catch (e) {
+        if (opening !== openCount) return
+        syncFailures.value = [
+            { source: 'the sources', ok: false, error: detailOf(e) },
+        ]
+    }
+    syncing.value = false
+    try {
+        const preview = (await dayNewNotePreview(dt)).data
+        if (opening !== openCount) return
+        initMarkdown.value = preview
+    } catch (e) {
+        if (opening !== openCount) return
+        previewError.value = `Couldn't load the preview (${detailOf(e)}).`
+    }
 }
+// the server builds the note from the database, as the preview did
 async function onSaveNote() {
-    joplinNoteId.value = (
-        await joplinInitNote(getDateStr.value, initMarkdown.value)
-    ).data
+    creating.value = true
+    createError.value = ''
+    const dt = createDt.value
+    try {
+        const noteId = (await joplinInitNote(dt)).data
+        // the page may have moved to another day meanwhile
+        if (getDateStr.value === dt) joplinNoteId.value = noteId
+    } catch (e) {
+        createError.value = detailOf(e)
+        return
+    } finally {
+        creating.value = false
+    }
     dialog.value = false
     snackbarInit.value = true
     app.calendarShouldUpdate = true
@@ -230,6 +319,10 @@ async function fetchJoplinNoteImages() {
     }
 }
 watch(getDate, fetchJoplinNoteId, { immediate: true })
+// the dialog belongs to the day it opened on (back/forward can change the day)
+watch(getDateStr, () => {
+    if (!creating.value) dialog.value = false
+})
 watch(joplinNoteId, fetchJoplinNote, { immediate: true })
 watch(joplinNoteId, fetchJoplinNoteImages, { immediate: true })
 </script>

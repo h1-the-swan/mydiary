@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { fromDateStr, toDateStr } from './util'
+import { AxiosError, AxiosHeaders } from 'axios'
+import { detailOf, fromDateStr, toDateStr } from './util'
 
 const originalTZ = process.env.TZ
 
@@ -52,5 +53,34 @@ describe('calendar date helpers where midnight is skipped', () => {
         expect(d.getHours()).toBe(1) // midnight really was skipped
         expect(d.getDate()).toBe(6)
         expect(toDateStr(d)).toBe('2026-09-06')
+    })
+})
+
+describe('detailOf', () => {
+    function failed(status: number, data: unknown): AxiosError {
+        const config = { headers: new AxiosHeaders() }
+        return new AxiosError(`Request failed with status code ${status}`, 'ERR_BAD_RESPONSE', config, null, {
+            status,
+            statusText: '',
+            headers: {},
+            config,
+            data,
+        })
+    }
+
+    it("prefers the route's detail", () => {
+        expect(detailOf(failed(502, { detail: 'Google Calendar is unavailable' }))).toBe(
+            'Google Calendar is unavailable'
+        )
+    })
+
+    it('falls back to the request error', () => {
+        expect(detailOf(failed(500, 'Internal Server Error'))).toBe(
+            'Request failed with status code 500'
+        )
+    })
+
+    it('stringifies anything else', () => {
+        expect(detailOf(new Error('boom'))).toBe('Error: boom')
     })
 })

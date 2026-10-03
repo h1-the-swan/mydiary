@@ -25,6 +25,7 @@ from mydiary import MyDiaryDay
 from mydiary.joplin_connector import MyDiaryJoplin
 from mydiary.core import get_last_timezone
 from mydiary.db import Session, engine
+from mydiary.source_sync import GOOGLE_CALENDAR, sync_sources
 
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 # JOPLIN_NOTEBOOK_ID = "b2494842bba94ef3b429f682c4e3386f"
@@ -49,33 +50,28 @@ def main(args):
         dt = parse_date(args.start_date, tz=tz)
 
         with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-            i = 0
             while True:
-                if i == 0:
-                    spotify_sync = True
-                else:
-                    spotify_sync = False
-
                 if args.timezone == "infer":
                     new_tz = get_last_timezone(dt.to_date_string(), session=session)
                     if new_tz != tz:
                         tz = new_tz
                         logger.debug(f"inferred tz: {tz}")
                         dt = parse_date(dt.to_date_string(), tz=tz)
+                # every day, since Google Calendar syncs a day at a time
+                sync_sources(session, dt).require(GOOGLE_CALENDAR)
                 day = MyDiaryDay.from_dt(
-                    dt, spotify_sync=spotify_sync, joplin_connector=mydiary_joplin, session=session
+                    dt, joplin_connector=mydiary_joplin, session=session
                 )
 
                 logger.info(
                     f"initializing or updating Joplin note for day: {dt.to_date_string()}..."
                 )
-                day.init_or_update_joplin_note()
+                day.init_or_update_joplin_note(session=session)
 
                 if dt.is_same_day(parse_date(args.end_date, tz=tz)) or dt.is_future():
                     break
                 
                 dt = dt.add(days=1)
-                i += 1
 
 
 if __name__ == "__main__":

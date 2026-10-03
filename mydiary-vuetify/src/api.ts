@@ -82,6 +82,7 @@ export interface GoogleCalendarEventRead {
   start_timezone?: string;
   end_timezone?: string;
   time_last_api_sync?: string | null;
+  status?: string;
 }
 
 export type ValidationErrorCtx = { [key: string]: unknown };
@@ -348,6 +349,16 @@ export interface SongArrangementUpdate {
   capo?: number | null;
   sheet?: string | null;
   source?: string | null;
+}
+
+export interface SourceStatusRead {
+  source: string;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface SourceSyncReportRead {
+  statuses: SourceStatusRead[];
 }
 
 /**
@@ -624,7 +635,11 @@ export type JoplinInitNoteParams = {
 tz?: string;
 };
 
-export type DayInitMarkdownParams = {
+export type DaySyncSourcesParams = {
+tz?: string;
+};
+
+export type DayNewNotePreviewParams = {
 tz?: string;
 };
 
@@ -1433,16 +1448,18 @@ export const getJoplinGetNoteIdUrl = (dt: string,) => {
 }
 
 /**
+ * Create the day's Diary Note from the template, filled from the
+ * database as `GET /day/{dt}/new_note_preview` shows it. No Source Sync:
+ * the create dialog runs one before its preview.
  * @summary Joplin Init Note
  */
 export const joplinInitNote = (
     dt: string,
-    stringNull?: string | null,
     params?: JoplinInitNoteParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<string>> => {
     return axios.post(
       `/joplin/init_note/${dt}`,
-      stringNull,{
+      undefined,{
     ...options,
         params: {...params, ...options?.params},}
     );
@@ -1462,26 +1479,59 @@ export const getJoplinInitNoteUrl = (dt: string,
 }
 
 /**
- * @summary Day Init Markdown
+ * Source Sync of the day: each Source's latest data into the database.
+ * A Source that fails is reported, not raised, so this answers 200 even
+ * when every Source failed.
+ * @summary Day Sync Sources
  */
-export const dayInitMarkdown = (
+export const daySyncSources = (
     dt: string,
-    params?: DayInitMarkdownParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<unknown>> => {
-    return axios.get(
-      `/day_init_markdown/${dt}`,{
+    params?: DaySyncSourcesParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<SourceSyncReportRead>> => {
+    return axios.post(
+      `/day/${dt}/sync_sources`,
+      undefined,{
     ...options,
         params: {...params, ...options?.params},}
     );
   }
-export const getDayInitMarkdownUrl = (dt: string,
-    params?: DayInitMarkdownParams,) => {
+export const getDaySyncSourcesUrl = (dt: string,
+    params?: DaySyncSourcesParams,) => {
 
   return axios.create({
     baseURL: '',
     params: null,
   }).getUri({
-    url: `/day_init_markdown/${dt}`,
+    url: `/day/${dt}/sync_sources`,
+    baseURL: '',
+    params,
+
+  });
+}
+
+/**
+ * The body a new Diary Note for the day would get, from the database
+ * as it is. Writes nothing and calls no Source.
+ * @summary Day New Note Preview
+ */
+export const dayNewNotePreview = (
+    dt: string,
+    params?: DayNewNotePreviewParams, options?: AxiosRequestConfig
+ ): Promise<AxiosResponse<string>> => {
+    return axios.get(
+      `/day/${dt}/new_note_preview`,{
+    ...options,
+        params: {...params, ...options?.params},}
+    );
+  }
+export const getDayNewNotePreviewUrl = (dt: string,
+    params?: DayNewNotePreviewParams,) => {
+
+  return axios.create({
+    baseURL: '',
+    params: null,
+  }).getUri({
+    url: `/day/${dt}/new_note_preview`,
     baseURL: '',
     params,
 
@@ -3078,7 +3128,8 @@ export type GetSpotifyImageUrlResult = AxiosResponse<string>
 export type SpotifySaveRecentTracksToDatabaseResult = AxiosResponse<number>
 export type JoplinGetNoteIdResult = AxiosResponse<string>
 export type JoplinInitNoteResult = AxiosResponse<string>
-export type DayInitMarkdownResult = AxiosResponse<unknown>
+export type DaySyncSourcesResult = AxiosResponse<SourceSyncReportRead>
+export type DayNewNotePreviewResult = AxiosResponse<string>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>

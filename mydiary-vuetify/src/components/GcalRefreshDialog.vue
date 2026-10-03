@@ -68,6 +68,7 @@ import {
     joplinGcalRefresh,
     joplinGcalRefreshPreview,
 } from '@/api'
+import { detailOf } from '@/util'
 
 const props = defineProps<{ dt: string }>()
 const emit = defineEmits<{ close: []; refreshed: [] }>()
@@ -85,15 +86,6 @@ const previewError = ref('')
 const applyError = ref<{ message: string; conflict: boolean }>()
 
 const canConfirm = computed(() => !!preview.value?.changed && !applyError.value)
-
-function detailOf(e: unknown): string {
-    if (isAxiosError(e)) {
-        const detail = e.response?.data?.detail
-        if (typeof detail === 'string') return detail
-        return e.message
-    }
-    return String(e)
-}
 
 async function loadPreview() {
     loading.value = true

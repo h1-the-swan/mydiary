@@ -22,7 +22,9 @@ root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
 from mydiary import MyDiaryDay
+from mydiary.db import Session, engine
 from mydiary.joplin_connector import MyDiaryJoplin
+from mydiary.source_sync import GOOGLE_CALENDAR, sync_sources
 
 # JOPLIN_NOTEBOOK_ID = "84f655fb941440d78f993adc8bb731b3"
 
@@ -35,9 +37,10 @@ def main(args):
     else:
         dt = pendulum.parse(args.date, tz=args.timezone)
 
-    with MyDiaryJoplin(init_config=False) as mydiary_joplin:
-        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin)
-        day.update_joplin_note()
+    with Session(engine) as session, MyDiaryJoplin(init_config=False) as mydiary_joplin:
+        sync_sources(session, dt).require(GOOGLE_CALENDAR)
+        day = MyDiaryDay.from_dt(dt, joplin_connector=mydiary_joplin, session=session)
+        day.update_joplin_note(session=session)
 
 
 if __name__ == "__main__":

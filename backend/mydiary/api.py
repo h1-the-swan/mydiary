@@ -117,6 +117,7 @@ from .spotify_connector import (
 )
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
+from .source_sync import GOOGLE_CALENDAR, SourceSyncFailed, sync_sources
 from .gcal_refresh import (
     CalendarSource,
     CalendarUnavailable,
@@ -782,7 +783,7 @@ async def check_gcal_auth():
     try:
         from mydiary.googlecalendar_connector import MyDiaryGCal
 
-        events = MyDiaryGCal().get_events_for_day(pendulum.today())
+        MyDiaryGCal().get_day(pendulum.today())
         return Response(status_code=200)
     except Exception as e:
         raise HTTPException(
@@ -1296,6 +1297,16 @@ def joplin_get_note_id(
     return Response(diary_note.id if diary_note is not None else "does_not_exist")
 
 
+def _sync_for_note(session: Session, dt: pendulum.DateTime) -> None:
+    """Source Sync ahead of writing the day's note. 502 if Google Calendar
+    failed, since the note's calendar section is written from what it saves;
+    the other Sources' failures are only logged."""
+    try:
+        sync_sources(session, dt).require(GOOGLE_CALENDAR)
+    except SourceSyncFailed as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @app.post(
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
@@ -1305,25 +1316,17 @@ def joplin_init_note(
     tz: str = "infer",
     session: Session = Depends(get_session),
     joplin: JoplinPort = Depends(get_joplin_port),
-    body: Optional[str] = Body(None),
 ) -> str:
+    """Create the day's Diary Note from the template, filled from the
+    database as `GET /day/{dt}/new_note_preview` shows it. No Source Sync:
+    the create dialog runs one before its preview."""
     # a plain def: creating waits on a lock for the day, which would block the
     # event loop
     dt = _diary_day(dt, tz, session)
     try:
-        if body:
-            # body is supplied, so no need to sync with external APIs
-            day = MyDiaryDay.from_dt(
-                dt,
-                joplin_connector=joplin,
-                session=session,
-                spotify_sync=False,
-                gcal_save=False,
-            )
-        else:
-            day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
+        day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.init_joplin_note(session=session, body=body)
+        day.init_joplin_note(session=session)
         logger.debug("initialized note")
         return day.joplin_note_id
     except Exception as e:
@@ -1332,23 +1335,50 @@ def joplin_init_note(
         raise
 
 
-@app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
-async def day_init_markdown(
-    dt: str, tz: str = "local", session: Session = Depends(get_session)
-):
-    if tz == "infer":
-        tz = get_last_timezone(dt, session=session)
-        logger.info(f"inferred tz: {tz}")
+class SourceStatusRead(SQLModel):
+    source: str
+    ok: bool
+    error: Optional[str] = None
 
-    if dt == "today":
-        dt_obj = pendulum.today(tz=tz)
-    elif dt == "yesterday":
-        dt_obj = pendulum.yesterday(tz=tz)
-    else:
-        dt_obj = pendulum.parse(dt, tz=tz)
-    logger.info(f"dt_obj tz: {dt_obj.tz}")
-    day = MyDiaryDay.from_dt(dt_obj, session=session)
-    return day.init_markdown()
+
+class SourceSyncReportRead(SQLModel):
+    statuses: List[SourceStatusRead]
+
+
+@app.post(
+    "/day/{dt}/sync_sources",
+    operation_id="daySyncSources",
+    response_model=SourceSyncReportRead,
+)
+def day_sync_sources(
+    dt: str, tz: str = "infer", session: Session = Depends(get_session)
+):
+    """Source Sync of the day: each Source's latest data into the database.
+    A Source that fails is reported, not raised, so this answers 200 even
+    when every Source failed."""
+    # a plain def: the Sources are network calls, which would block the
+    # event loop
+    report = sync_sources(session, _diary_day(dt, tz, session))
+    return SourceSyncReportRead(
+        statuses=[
+            SourceStatusRead(source=s.source, ok=s.ok, error=s.error)
+            for s in report.statuses
+        ]
+    )
+
+
+@app.get(
+    "/day/{dt}/new_note_preview",
+    operation_id="dayNewNotePreview",
+    response_model=str,
+)
+def day_new_note_preview(
+    dt: str, tz: str = "infer", session: Session = Depends(get_session)
+):
+    """The body a new Diary Note for the day would get, from the database
+    as it is. Writes nothing and calls no Source."""
+    day = _diary_day(dt, tz, session)
+    return MyDiaryDay.from_dt(day, session=session).init_markdown()
 
 
 @app.get(
@@ -1413,6 +1443,7 @@ def joplin_update_note(
     # event loop
     dt = _diary_day(dt, tz, session)
     try:
+        _sync_for_note(session, dt)
         day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
         day.update_joplin_note(session=session)
