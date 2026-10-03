@@ -18,6 +18,16 @@ _Avoid_: Joplin note, day note, note (unqualified), page
 The database's cached copy of a Diary Note, together with what is derived from it (words, tags, which photos it shows). Joplin holds the authoritative note; the mirror is refreshed from it and never the other way round.
 _Avoid_: DB note, note row, local note
 
+### Sources
+
+**Source**:
+An outside service the app copies a Diary Day's data from: Spotify, Google Calendar, the OwnTracks recorder. A Diary Day is put together from the database's copies, never from a Source directly.
+_Avoid_: connector, API, integration (when the service itself is meant)
+
+**Source Sync**:
+Copying a Source's latest data into the database. It never touches a Diary Note; getting new data into a note is a Refresh, or creating the note.
+_Avoid_: refresh, import, fetch (when a Source Sync is meant)
+
 ### Sections
 
 **Section**:
