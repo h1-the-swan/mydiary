@@ -49,10 +49,8 @@ async function calendarLoadJoplinInfo() {
     const sortedDates = calendarVisibleDates.value.sort(
         (a: any, b: any) => a - b
     )
-    const minDt = sortedDates[0].toISOString().split('T')[0]
-    const maxDt = sortedDates[sortedDates.length - 1]
-        .toISOString()
-        .split('T')[0]
+    const minDt = toDateStr(sortedDates[0])
+    const maxDt = toDateStr(sortedDates[sortedDates.length - 1])
     app.loadJoplinInfoAllDays(minDt, maxDt)
     app.calendarShouldUpdate = false
 }
