@@ -428,7 +428,11 @@ class GoogleCalendarEvent(SQLModel, table=True):
     time_last_api_sync: Optional[datetime] = Field(
         default=None, index=True, sa_type=DateTime
     )
-    # what else? canceled/deleted?
+    # Google's own status: "confirmed", "tentative" or "cancelled". A
+    # cancelled event keeps its row, marked, and never appears in a note.
+    status: str = Field(
+        default="confirmed", sa_column_kwargs={"server_default": "confirmed"}
+    )
 
     @reconstructor
     def init_on_load(self):
@@ -442,7 +446,8 @@ class GoogleCalendarEvent(SQLModel, table=True):
     def from_gcal_api_event(cls, event: Dict) -> "GoogleCalendarEvent":
         # Parse a Google calendar event from the API
         id = event["id"]
-        summary = event.get("summary", None)
+        # Google leaves out the summary of an untitled event
+        summary = event.get("summary", "")
         location = event.get("location", None)
         description = event.get("description", None)
         start = cls.get_datetime_or_date(event["start"])
@@ -456,6 +461,7 @@ class GoogleCalendarEvent(SQLModel, table=True):
             end=end,
             start_timezone=start.timezone_name,
             end_timezone=end.timezone_name,
+            status=event.get("status", "confirmed"),
         )
 
     @classmethod
