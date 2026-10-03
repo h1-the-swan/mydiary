@@ -1,5 +1,6 @@
 import { computed, ref, watch, watchEffect } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { isAxiosError } from 'axios'
 
 export function useDiaryDate() {
     const route = useRoute()
@@ -29,4 +30,14 @@ export function toDateStr(dt: Date): string {
 export function fromDateStr(s: string): Date {
     const [year, month, day] = s.split('-').map(Number)
     return new Date(year, month - 1, day)
+}
+
+// What to show for a failed API call: the route's `detail` when it sent one
+export function detailOf(e: unknown): string {
+    if (isAxiosError(e)) {
+        const detail = e.response?.data?.detail
+        if (typeof detail === 'string') return detail
+        return e.message
+    }
+    return String(e)
 }

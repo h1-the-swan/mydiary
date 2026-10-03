@@ -19,13 +19,13 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 4. `source_sync.py`: `sync_sources`, `SourceSyncReport`, Protocols
 - [x] 5. Read-only `from_dt`; callers sync explicitly
 - [x] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
-- [ ] 7. Create dialog in `MyDiaryDay.vue`
+- [x] 7. Create dialog in `MyDiaryDay.vue`
 - [ ] 8. Docs
 - [ ] Verification: live check steps 2–4 with the diarist, browser check, full test run
 
 ## Next action
 
-Step 7: create dialog in `MyDiaryDay.vue`. On open: `daySyncSources`, then `dayNewNotePreview`; show a warning per failed Source and still load the preview. Create calls `joplinInitNote` with no body. In the same commit remove the `day_init_markdown` route and `init_note`'s ignored `body` parameter, then regenerate the client. Lint + build in the container (5 lint errors already exist in untouched files); Playwright on 8087, preview only; ask before clicking Create (real Joplin).
+Step 8: docs. `docs/architecture.md`: day assembly (`from_dt` reads only the database), Source Sync (`source_sync.py`, `save_calendar_day`, cancelled events marked), the new routes, the create dialog flow, and the Refresh paragraph that still says `update_note` syncs "through `MyDiaryDay.from_dt`". Move lasting lessons from Notes below into docs. Then the verification section: live check steps 2-4 with the diarist.
 
 ## Notes
 
@@ -44,3 +44,4 @@ Step 7: create dialog in `MyDiaryDay.vue`. On open: `daySyncSources`, then `dayN
 - Note writes that sync first (`update_note`, `init_note` without body, the `joplin_*` scripts) call `.require(GOOGLE_CALENDAR)` on the report: a Google Calendar failure stops them (502 in the routes), as it did when `from_dt` synced. Spotify/OwnTracks failures are only logged, as before. Step 6's `init_note` doesn't sync at all; the dialog's sync shows failures as warnings instead.
 - Step 6 kept `day_init_markdown` and `init_note`'s `body` parameter (now ignored) so the frontend keeps working until step 7 switches it over.
 - `npm run lint` in the container reports 5 errors in files this branch doesn't touch (GCalAuth.vue, PerformSongCard.vue, PerformSongsDataTable.vue, TimeZoneChange.vue).
+- Step 7 browser check (Firefox, 8087, on the day 2026-10-04, which has no note): dialog syncs then previews; a forced OwnTracks failure (temporary edit, reverted) shows a warning above the preview at 390 px. Create was not clicked.

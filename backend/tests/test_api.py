@@ -1705,7 +1705,7 @@ class TestNoteRouteDays:
         app.dependency_overrides.pop(get_joplin_port, None)
 
     @pytest.mark.parametrize(
-        "route, kwargs", [("update_note", {}), ("init_note", {"json": "body"})]
+        "route, kwargs", [("update_note", {}), ("init_note", {})]
     )
     def test_defaults_to_the_diary_timezone(
         self, client: TestClient, diary_tz, seen, route, kwargs
@@ -1804,6 +1804,9 @@ class TestDayRoutes:
         (dt,) = synced
         assert dt.timezone_name == "Pacific/Auckland"
         assert dt.to_date_string() == "2031-03-10"
+
+    def test_the_old_preview_route_is_gone(self, client: TestClient):
+        assert client.get("/day_init_markdown/2031-03-10").status_code == 404
 
     def test_sync_is_post_only(self, client: TestClient, synced):
         assert client.get("/day/2031-03-10/sync_sources").status_code == 405

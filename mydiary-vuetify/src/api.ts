@@ -643,10 +643,6 @@ export type DayNewNotePreviewParams = {
 tz?: string;
 };
 
-export type DayInitMarkdownParams = {
-tz?: string;
-};
-
 export type JoplinGetNoteParams = {
 remove_image_refs?: boolean;
 };
@@ -1452,16 +1448,18 @@ export const getJoplinGetNoteIdUrl = (dt: string,) => {
 }
 
 /**
+ * Create the day's Diary Note from the template, filled from the
+ * database as `GET /day/{dt}/new_note_preview` shows it. No Source Sync:
+ * the create dialog runs one before its preview.
  * @summary Joplin Init Note
  */
 export const joplinInitNote = (
     dt: string,
-    stringNull?: string | null,
     params?: JoplinInitNoteParams, options?: AxiosRequestConfig
  ): Promise<AxiosResponse<string>> => {
     return axios.post(
       `/joplin/init_note/${dt}`,
-      stringNull,{
+      undefined,{
     ...options,
         params: {...params, ...options?.params},}
     );
@@ -1534,33 +1532,6 @@ export const getDayNewNotePreviewUrl = (dt: string,
     params: null,
   }).getUri({
     url: `/day/${dt}/new_note_preview`,
-    baseURL: '',
-    params,
-
-  });
-}
-
-/**
- * @summary Day Init Markdown
- */
-export const dayInitMarkdown = (
-    dt: string,
-    params?: DayInitMarkdownParams, options?: AxiosRequestConfig
- ): Promise<AxiosResponse<unknown>> => {
-    return axios.get(
-      `/day_init_markdown/${dt}`,{
-    ...options,
-        params: {...params, ...options?.params},}
-    );
-  }
-export const getDayInitMarkdownUrl = (dt: string,
-    params?: DayInitMarkdownParams,) => {
-
-  return axios.create({
-    baseURL: '',
-    params: null,
-  }).getUri({
-    url: `/day_init_markdown/${dt}`,
     baseURL: '',
     params,
 
@@ -3159,7 +3130,6 @@ export type JoplinGetNoteIdResult = AxiosResponse<string>
 export type JoplinInitNoteResult = AxiosResponse<string>
 export type DaySyncSourcesResult = AxiosResponse<SourceSyncReportRead>
 export type DayNewNotePreviewResult = AxiosResponse<string>
-export type DayInitMarkdownResult = AxiosResponse<unknown>
 export type JoplinGetNoteResult = AxiosResponse<JoplinNote>
 export type JoplinNoteImagesResult = AxiosResponse<MyDiaryImageRead[]>
 export type JoplinUpdateNoteResult = AxiosResponse<unknown>

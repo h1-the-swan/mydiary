@@ -1316,12 +1316,12 @@ def joplin_init_note(
     tz: str = "infer",
     session: Session = Depends(get_session),
     joplin: JoplinPort = Depends(get_joplin_port),
-    body: Optional[str] = Body(None),
 ) -> str:
+    """Create the day's Diary Note from the template, filled from the
+    database as `GET /day/{dt}/new_note_preview` shows it. No Source Sync:
+    the create dialog runs one before its preview."""
     # a plain def: creating waits on a lock for the day, which would block the
-    # event loop. Reads the database only; the create dialog's preview runs
-    # the Source Sync. `body` is ignored: the note is the template, as the
-    # preview showed it.
+    # event loop
     dt = _diary_day(dt, tz, session)
     try:
         day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
@@ -1379,26 +1379,6 @@ def day_new_note_preview(
     as it is. Writes nothing and calls no Source."""
     day = _diary_day(dt, tz, session)
     return MyDiaryDay.from_dt(day, session=session).init_markdown()
-
-
-@app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
-async def day_init_markdown(
-    dt: str, tz: str = "local", session: Session = Depends(get_session)
-):
-    if tz == "infer":
-        tz = get_last_timezone(dt, session=session)
-        logger.info(f"inferred tz: {tz}")
-
-    if dt == "today":
-        dt_obj = pendulum.today(tz=tz)
-    elif dt == "yesterday":
-        dt_obj = pendulum.yesterday(tz=tz)
-    else:
-        dt_obj = pendulum.parse(dt, tz=tz)
-    logger.info(f"dt_obj tz: {dt_obj.tz}")
-    sync_sources(session, dt_obj)
-    day = MyDiaryDay.from_dt(dt_obj, session=session)
-    return day.init_markdown()
 
 
 @app.get(
