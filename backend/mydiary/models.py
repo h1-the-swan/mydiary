@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sqlalchemy import event, Index, UniqueConstraint
 from sqlalchemy.orm import reconstructor
+from sqlalchemy.orm.attributes import set_committed_value
 
 from .core import get_hash_from_txt
 from .hashtags import tag_key
@@ -436,11 +437,18 @@ class GoogleCalendarEvent(SQLModel, table=True):
 
     @reconstructor
     def init_on_load(self):
-        # Initialize the dates as pendulum instances in the case where the class is loaded from the database
+        # Initialize the dates as pendulum instances in the case where the class
+        # is loaded from the database. Set as committed values: an assignment
+        # would mark every row read as changed, and the session's next commit
+        # would write them all back.
         if not isinstance(self.start, pendulum.DateTime):
-            self.start = pendulum.instance(self.start, tz=self.start_timezone)
+            set_committed_value(
+                self, "start", pendulum.instance(self.start, tz=self.start_timezone)
+            )
         if not isinstance(self.end, pendulum.DateTime):
-            self.end = pendulum.instance(self.end, tz=self.end_timezone)
+            set_committed_value(
+                self, "end", pendulum.instance(self.end, tz=self.end_timezone)
+            )
 
     @classmethod
     def from_gcal_api_event(cls, event: Dict) -> "GoogleCalendarEvent":

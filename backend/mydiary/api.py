@@ -117,6 +117,7 @@ from .spotify_connector import (
 )
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
+from .source_sync import GOOGLE_CALENDAR, SourceSyncFailed, sync_sources
 from .gcal_refresh import (
     CalendarSource,
     CalendarUnavailable,
@@ -1296,6 +1297,16 @@ def joplin_get_note_id(
     return Response(diary_note.id if diary_note is not None else "does_not_exist")
 
 
+def _sync_for_note(session: Session, dt: pendulum.DateTime) -> None:
+    """Source Sync ahead of writing the day's note. 502 if Google Calendar
+    failed, since the note's calendar section is written from what it saves;
+    the other Sources' failures are only logged."""
+    try:
+        sync_sources(session, dt).require(GOOGLE_CALENDAR)
+    except SourceSyncFailed as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
 @app.post(
     "/joplin/init_note/{dt}",
     operation_id="joplinInitNote",
@@ -1311,17 +1322,10 @@ def joplin_init_note(
     # event loop
     dt = _diary_day(dt, tz, session)
     try:
-        if body:
-            # body is supplied, so no need to sync with external APIs
-            day = MyDiaryDay.from_dt(
-                dt,
-                joplin_connector=joplin,
-                session=session,
-                spotify_sync=False,
-                gcal_save=False,
-            )
-        else:
-            day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
+        if not body:
+            # a supplied body was previewed after a Source Sync already
+            _sync_for_note(session, dt)
+        day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
         day.init_joplin_note(session=session, body=body)
         logger.debug("initialized note")
@@ -1347,6 +1351,7 @@ async def day_init_markdown(
     else:
         dt_obj = pendulum.parse(dt, tz=tz)
     logger.info(f"dt_obj tz: {dt_obj.tz}")
+    sync_sources(session, dt_obj)
     day = MyDiaryDay.from_dt(dt_obj, session=session)
     return day.init_markdown()
 
@@ -1413,6 +1418,7 @@ def joplin_update_note(
     # event loop
     dt = _diary_day(dt, tz, session)
     try:
+        _sync_for_note(session, dt)
         day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
         day.update_joplin_note(session=session)

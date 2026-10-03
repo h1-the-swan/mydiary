@@ -18,6 +18,8 @@ import logging
 root_logger = logging.getLogger()
 logger = root_logger.getChild(__name__)
 
+GOOGLE_CALENDAR = "Google Calendar"
+
 
 class SpotifySource(Protocol):
     """What a Source Sync needs from Spotify (`MyDiarySpotify`)."""
@@ -63,6 +65,14 @@ class SourceStatus:
     error: Optional[str] = None  # why it failed, for the diarist to read
 
 
+class SourceSyncFailed(Exception):
+    """A Source the caller can't do without failed to sync."""
+
+    def __init__(self, status: "SourceStatus") -> None:
+        self.status = status
+        super().__init__(f"{status.source} is unavailable: {status.error}")
+
+
 @dataclass
 class SourceSyncReport:
     statuses: List[SourceStatus] = field(default_factory=list)
@@ -70,6 +80,12 @@ class SourceSyncReport:
     @property
     def failed(self) -> List[SourceStatus]:
         return [s for s in self.statuses if not s.ok]
+
+    def require(self, *sources: str) -> None:
+        """Raise `SourceSyncFailed` if any of `sources` failed."""
+        for status in self.failed:
+            if status.source in sources:
+                raise SourceSyncFailed(status)
 
 
 def _describe(e: Exception) -> str:
@@ -109,7 +125,7 @@ def sync_sources(
     report = SourceSyncReport()
     for name, run in (
         ("Spotify", run_spotify),
-        ("Google Calendar", run_google_calendar),
+        (GOOGLE_CALENDAR, run_google_calendar),
         ("OwnTracks", run_owntracks),
     ):
         try:

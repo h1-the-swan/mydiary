@@ -17,7 +17,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 2. Raw dump with the diarist (gate), then `status` column + migration + parser
 - [x] 3. Google Calendar Source Sync: `showDeleted`, by-id reconciliation in the shared save
 - [x] 4. `source_sync.py`: `sync_sources`, `SourceSyncReport`, Protocols
-- [ ] 5. Read-only `from_dt`; callers sync explicitly
+- [x] 5. Read-only `from_dt`; callers sync explicitly
 - [ ] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
 - [ ] 7. Create dialog in `MyDiaryDay.vue`
 - [ ] 8. Docs
@@ -25,7 +25,7 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 
 ## Next action
 
-Step 5: make `MyDiaryDay.from_dt(dt, session)` read only the database: Google Calendar events via `events_for_day`, flags `spotify_sync` / `gcal_save` / `owntracks_sync` removed. Every caller that synced before calls `sync_sources(session, dt)` first: `joplin_update_note`, `joplin_init_note`, `day_init_markdown` (routes are reshaped in step 6), and the `joplin_*` scripts. The `day` fixture in `tests/test_mydiary_day.py` then needs no network; mark anything still hitting a real service `external_api`. Adjust `TestNoteRouteDays` in `tests/test_api.py`, which fakes `from_dt`.
+Step 6: routes. `POST /day/{dt}/sync_sources` (report per Source), `GET /day/{dt}/new_note_preview` (reads only; replaces `day_init_markdown`, which is removed), `POST /joplin/init_note/{dt}` without `body` and without a sync. Each resolves the day once via `_diary_day` with `tz=infer`. Unique `operation_id`s. Then `docker compose exec mydiary-vuetify npm run generateClientAPI`; the frontend still calls `/day_init_markdown` by raw axios until step 7, so steps 6 and 7 may need to land together or keep the old route one more step (decide when staging).
 
 ## Notes
 
@@ -40,3 +40,5 @@ Step 5: make `MyDiaryDay.from_dt(dt, session)` read only the database: Google Ca
 - Test fakes must build fresh `GoogleCalendarEvent`s (`fresh()` in `test_gcal_refresh.py`): `model_copy()` shares the original's SQLAlchemy state, and adding the copy expires the original.
 - Files created inside the container (alembic revisions) are root-owned on the host; `docker compose exec -T backend chown 1000:1000 <file>` before editing.
 - Until step 5, a failed by-id lookup (`get_event`) raises out of `from_dt` when `gcal_save` is on, as a failed list call already did. Step 5 removes the sync from `from_dt`; `sync_sources` must catch it per Source.
+- `GoogleCalendarEvent.init_on_load` now sets start/end with `set_committed_value`; plain assignment marked every loaded row dirty, so a later commit wrote them back.
+- Note writes that sync first (`update_note`, `init_note` without body, the `joplin_*` scripts) call `.require(GOOGLE_CALENDAR)` on the report: a Google Calendar failure stops them (502 in the routes), as it did when `from_dt` synced. Spotify/OwnTracks failures are only logged, as before. Step 6's `init_note` doesn't sync at all; the dialog's sync shows failures as warnings instead.

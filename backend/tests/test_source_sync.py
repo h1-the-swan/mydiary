@@ -2,10 +2,16 @@
 """Source Sync of a day: every Source runs, and each fails on its own."""
 
 import pendulum
+import pytest
 from sqlmodel import Session, select
 
 from mydiary.models import GoogleCalendarEvent, MyDiaryWords
-from mydiary.source_sync import SourceStatus, sync_sources
+from mydiary.source_sync import (
+    SourceStatus,
+    SourceSyncFailed,
+    SourceSyncReport,
+    sync_sources,
+)
 from tests.test_gcal_refresh import FakeCalendar
 from tests.test_gcal_sync import nine
 
@@ -130,3 +136,27 @@ def test_google_calendar_syncs_the_requested_day(db_session: Session):
     )
 
     assert days == [DT]
+
+
+def test_require_raises_for_a_named_source_that_failed():
+    report = SourceSyncReport(
+        [
+            SourceStatus("Spotify", ok=False, error="down"),
+            SourceStatus("Google Calendar", ok=False, error="token expired"),
+        ]
+    )
+
+    report.require("OwnTracks")
+    with pytest.raises(SourceSyncFailed, match="Google Calendar is unavailable"):
+        report.require("Google Calendar")
+
+
+def test_require_passes_when_the_named_sources_synced():
+    report = SourceSyncReport(
+        [
+            SourceStatus("Spotify", ok=False, error="down"),
+            SourceStatus("Google Calendar", ok=True),
+        ]
+    )
+
+    report.require("Google Calendar")
