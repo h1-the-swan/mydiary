@@ -9,7 +9,7 @@ Run `lint`, `build` and `test` **inside the container** — the host `node_modul
 ```sh
 docker compose exec mydiary-vuetify npm run build
 docker compose exec mydiary-vuetify npm run lint
-docker compose exec mydiary-vuetify npm test    # vitest: chordpro.ts, chords.ts, practice.ts
+docker compose exec mydiary-vuetify npm test    # vitest: the *.test.ts files under src/
 ```
 
 `npm run lint` reports pre-existing `no-unused-vars` errors. Compare counts before and after a change rather than expecting a clean run.
@@ -23,6 +23,14 @@ docker compose up -d --build -V mydiary-vuetify
 ```
 
 If you skip it, the container still starts and the rest of the app works. Only the pages that import a new package fail to load, so the problem is easy to miss. To check, list the new package inside the container, e.g. `docker compose exec mydiary-vuetify ls node_modules/svguitar`.
+
+## Alembic in the container
+
+`alembic revision --autogenerate` run through `docker compose exec backend` writes the new migration as root, so the host user can't write to it. Hand it over before editing:
+
+```sh
+docker compose exec backend chown "$(id -u):$(id -g)" alembic/versions/<revision>.py
+```
 
 ## API client codegen
 

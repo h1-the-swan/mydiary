@@ -32,6 +32,27 @@ The song-practice workflow (per-instrument ChordPro sheets, the fading practice 
 
 Filling a PerformSong's name and artist from Spotify (lookup by pasted ID, the "Find on Spotify" search, and storing the Reference Recording's track row on save) is documented in [performsong-spotify.md](performsong-spotify.md).
 
+### Diary Days and Source Syncs
+
+The terms Source and Source Sync are defined in [CONTEXT.md](../CONTEXT.md). Building a Diary Day and syncing its Sources are separate steps:
+
+- `MyDiaryDay.from_dt(dt, session)` reads the day from the database only. It makes no network call and writes nothing, so the new-note preview and the template tests run offline.
+- `sync_sources(session, dt)` in `source_sync.py` runs a Source Sync of every Source and returns a `SourceSyncReport`. Each Source is built and run on its own: one that fails (an expired token, an unreachable recorder) is logged, rolled back and reported, and the others still run. It commits or rolls back the session it is given, so call it with nothing pending. Most Sources sync what they have recently, so an old day gains nothing from them; Google Calendar syncs the requested day (see the `sync_sources` docstring).
+
+Who runs a Source Sync of every Source:
+
+- The create dialog in `MyDiaryDay.vue` calls `POST /day/{dt}/sync_sources`, shows each failed Source as a warning, then loads `GET /day/{dt}/new_note_preview`. Create (`POST /joplin/init_note/{dt}`) builds the note from the database as the preview showed it and syncs nothing.
+- `POST /joplin/update_note/{dt}` and the `joplin_*` scripts in `backend/scripts/` sync first, then read, then Refresh or create. They stop (502 in the route) when Google Calendar failed, since the calendar section is written from what it saved (`SourceSyncReport.require`). Any other Source's failure is only logged.
+- Outside these, Spotify and OwnTracks also sync on their own: hourly through the scheduler jobs added in `lifespan` in `api.py`, and on demand through their own routes. Google Calendar syncs only through `sync_sources` and the Refresh's apply route (below).
+
+Google Calendar events (`GoogleCalendarEvent`, synced in `googlecalendar_connector.py`):
+
+- Rows store naive wall-clock times in each event's own zone (`start_timezone`, `end_timezone`). All-day events carry no marker: they are stored as UTC midnight, shown in whatever zone the process ran in. `events_for_day` therefore queries a padded window and filters in Python. A timed event belongs to a day if it overlaps the day in the day's zone. A row whose start and end are both UTC midnight counts as all-day, and belongs to the days its UTC dates cover. All-day events sort at the start of the day, as Google orders them.
+- `status` mirrors Google's (`confirmed`, `tentative`, `cancelled`). Cancelled events are marked and kept, and never appear in a note.
+- `save_calendar_day` is the Google Calendar Source Sync. `get_day` lists the day with `showDeleted=true`. Any row the database had on the day that the listing left out is fetched by id: if it moved, its row takes the new times; if it was cancelled or deleted, its row is marked cancelled. All lookups happen before the first write. The Refresh's apply route saves through the same function.
+- `GoogleCalendarEvent.init_on_load` turns the stored times into pendulum datetimes with `set_committed_value`. A plain assignment would mark every row it loads as changed, and the session's next commit would write them all back.
+- Test fakes build fresh events (`fresh` in `tests/test_gcal_refresh.py`): `model_copy()` shares the original's SQLAlchemy state, and saving the copy expires the original.
+
 ### Diary Notes and Joplin
 
 The terms used here (Diary Note, Note Mirror, Written, App-owned and Frozen Sections) are defined in [CONTEXT.md](../CONTEXT.md). Who may write which section is recorded in [ADR 0002](adr/0002-diary-note-sections-have-one-owner.md).
@@ -59,7 +80,7 @@ Things to know when calling it:
 - Lookups by date and the year listing skip conflict notes, so a day with one still has one Diary Note. The hourly sync fetches a note whose `updated_time` differs from the mirror's in either direction, which catches the older timestamp a collision leaves behind.
 - Write routes answer `NoteClobbered` and `WordsConflict` with 409 (app-wide handlers in `api.py`). `GET /joplin/get_note/{id}` logs a failed mirror refresh and returns the note anyway.
 
-The day page's "Refresh calendar events" button refreshes the Google Calendar events section on its own, behind a Refresh Preview (`gcal_refresh.py`, `GcalRefreshDialog.vue`). `GET /joplin/gcal_refresh_preview/{dt}` renders the day's events with the note template's markdown (`google_calendar_events_markdown` in `mydiary_day.py`) and diffs the result line by line against the note's section. It writes nothing to the note or the database (building the Google client may still save a refreshed OAuth token). `POST /joplin/gcal_refresh/{dt}` takes back the preview's `before` and `after` and writes `after` exactly. If Google now renders something else, or the note's section no longer matches `before`, it answers 409 and writes nothing. The day's events are saved to the database once the note is written. Neither route syncs Spotify or OwnTracks, which `POST /joplin/update_note/{dt}` (`joplin_update_note`) does through `MyDiaryDay.from_dt`. The statuses the dialog explains to the diarist are listed in `_GCAL_REFRESH_ERRORS` in `api.py`.
+The day page's "Refresh calendar events" button refreshes the Google Calendar events section on its own, behind a Refresh Preview (`gcal_refresh.py`, `GcalRefreshDialog.vue`). `GET /joplin/gcal_refresh_preview/{dt}` renders the day's events with the note template's markdown (`google_calendar_events_markdown` in `mydiary_day.py`) and diffs the result line by line against the note's section. It writes nothing to the note or the database (building the Google client may still save a refreshed OAuth token). `POST /joplin/gcal_refresh/{dt}` takes back the preview's `before` and `after` and writes `after` exactly. If Google now renders something else, or the note's section no longer matches `before`, it answers 409 and writes nothing. Once the note is written, applying runs Google Calendar's Source Sync for the day (`save_calendar_day`), which also marks cancelled events. Neither route syncs Spotify or OwnTracks; `POST /joplin/update_note/{dt}` syncs every Source before its Refresh. The statuses the dialog explains to the diarist are listed in `_GCAL_REFRESH_ERRORS` in `api.py`.
 
 `joplin_port.py` defines `JoplinPort`, the narrow set of Joplin calls the app makes: notes, resources, tags and year folders. `HttpJoplin` implements it by wrapping `MyDiaryJoplin` (`joplin_connector.py`), whose methods mostly return raw `requests.Response` objects. The adapter turns those into plain values and any failed request into `JoplinError`. A missing note is `None` at the port. Only the `GET /joplin/get_note_id/{dt}` route turns that into the `"does_not_exist"` string the frontend reads. Routes get a port from the `get_joplin_port` dependency, and the hourly sync opens one with `open_joplin_port()`.
 

@@ -20,12 +20,12 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 5. Read-only `from_dt`; callers sync explicitly
 - [x] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
 - [x] 7. Create dialog in `MyDiaryDay.vue`
-- [ ] 8. Docs
+- [x] 8. Docs
 - [ ] Verification: live check steps 2–4 with the diarist, browser check, full test run
 
 ## Next action
 
-Step 8: docs. `docs/architecture.md`: day assembly (`from_dt` reads only the database), Source Sync (`source_sync.py`, `save_calendar_day`, cancelled events marked), the new routes, the create dialog flow, and the Refresh paragraph that still says `update_note` syncs "through `MyDiaryDay.from_dt`". Move lasting lessons from Notes below into docs. Then the verification section: live check steps 2-4 with the diarist.
+Verification, live check step 2 (spec, "Live check against Google"), with the diarist: they create a throwaway timed event on a test day of their choosing; then run `POST /api/day/<day>/sync_sources` on 8087 and check the row is stored `confirmed` (query the snapshot DB in the backend container, print only id/status/times). Wait for them at each step; never create, move or delete events from code. Then step 3 (they move it to another day; sync the original day; the by-id lookup updates the row's times) and step 4 (they delete it; sync; row `cancelled`; not in `new_note_preview`, and a Refresh Preview on a day with a note doesn't show it).
 
 ## Notes
 
