@@ -123,7 +123,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { md } from '@/markdown'
 import {
@@ -144,9 +144,9 @@ import PhotosSection from '@/components/PhotosSection.vue'
 import MapSection from '@/components/MapSection.vue'
 import TagChips from '@/components/TagChips.vue'
 import { useAppStore } from '@/store/app'
+import { useDiaryDate, toDateStr } from '@/util'
 axios.defaults.baseURL = '/api'
 const router = useRouter()
-const route = useRoute()
 const app = useAppStore()
 const initMarkdown = ref('')
 const joplinNoteId = ref('')
@@ -158,18 +158,7 @@ const gcalRefreshOpen = ref(false)
 const snackbarGcalRefresh = ref(false)
 // the refreshed day, kept so the snackbar doesn't follow a day change
 const gcalRefreshedLabel = ref('')
-const getDate = computed(() => {
-    const qd = route.query.dt
-    if (!qd || qd === 'yesterday') {
-        const dt = new Date()
-        dt.setDate(dt.getDate() - 1)
-        return dt
-    } else if (qd === 'today') {
-        return new Date()
-    } else {
-        return new Date(`${route.query.dt as string}T00:00`)
-    }
-})
+const getDate = useDiaryDate()
 const getDateStr = computed(() => {
     return toDateStr(getDate.value)
 })
@@ -187,9 +176,6 @@ const isToday = computed(() => getDateStr.value === toDateStr(new Date()))
 const diaryNoteExists = computed<boolean>(() => {
     return !!joplinNoteId.value && joplinNoteId.value !== 'does_not_exist'
 })
-function toDateStr(dt: Date) {
-    return dt.toISOString().split('T')[0]
-}
 function updateDate(val: any) {
     const newQD = toDateStr(val)
     router.push({ query: { dt: newQD } })
