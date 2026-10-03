@@ -9,10 +9,11 @@ the calendar or the note's section has moved on since the preview."""
 import difflib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Literal, Optional, Protocol
+from typing import List, Literal, Optional
 
 from .db import Session
 from .diary_note import DiaryNote, _find_section, _has_open_fence
+from .googlecalendar_connector import CalendarDay, CalendarSource, save_calendar_day
 from .joplin_port import JoplinPort
 from .markdown_edits import MarkdownDoc
 from .models import GoogleCalendarEvent
@@ -26,16 +27,6 @@ logger = root_logger.getChild(__name__)
 SECTION = "Google Calendar events"
 
 
-class CalendarSource(Protocol):
-    """What a Refresh needs from Google Calendar (`MyDiaryGCal`)."""
-
-    def get_events_for_day(self, dt: datetime) -> List[GoogleCalendarEvent]: ...
-
-    def save_events_to_database(
-        self, events: List[GoogleCalendarEvent], session: Optional[Session] = None
-    ) -> None: ...
-
-
 class NoDiaryNote(LookupError):
     """The day has no Diary Note to refresh."""
 
@@ -44,9 +35,9 @@ class CalendarUnavailable(Exception):
     """Google Calendar couldn't be read (an expired token, say)."""
 
 
-def _fetch(gcal: CalendarSource, dt: datetime) -> List[GoogleCalendarEvent]:
+def _fetch(gcal: CalendarSource, dt: datetime) -> CalendarDay:
     try:
-        return gcal.get_events_for_day(dt)
+        return gcal.get_day(dt)
     except Exception as e:
         # logged in full: this also catches a bug in parsing an event, which
         # the message alone would blame on Google
@@ -134,7 +125,7 @@ def preview_gcal_refresh(
     """What a Refresh of the day's Google Calendar events section would
     write. Writes nothing anywhere."""
     diary_note = _find(joplin, dt)
-    after = _render(_fetch(gcal, dt))
+    after = _render(_fetch(gcal, dt).events)
     before = _section(diary_note.read().body)
     return GcalRefreshPreview(before=before, after=after, diff=line_diff(before, after))
 
@@ -150,13 +141,14 @@ def apply_gcal_refresh(
     """Write `after` as the day's Google Calendar events section, if the
     calendar still renders to `after` and the note's section is still
     `before`; otherwise raise `GcalSectionChanged` and write nothing. The
-    day's events are saved to the database only once the note is written.
+    day is synced to the database (`save_calendar_day`, so cancelled events
+    are marked) only once the note is written.
     Returns whether the note was written (False when it already held
     `after`). A failure to save the events is logged, not raised: the note
     has been written by then, and the next Refresh saves them again."""
     diary_note = _find(joplin, dt)
-    events = _fetch(gcal, dt)
-    if _render(events) != after:
+    day = _fetch(gcal, dt)
+    if _render(day.events) != after:
         raise GcalSectionChanged("calendar")
     with diary_note.edit(session) as edit:
         if _section(edit.note.body) != before:
@@ -165,7 +157,7 @@ def apply_gcal_refresh(
     # after the edit: it commits the session itself, and asks callers not to
     # hold pending writes across it
     try:
-        gcal.save_events_to_database(events, session=session)
+        save_calendar_day(session, dt, day, gcal)
     except Exception:
         session.rollback()
         logger.exception(f"saving Google Calendar events for {dt.date()} failed")

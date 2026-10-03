@@ -20,7 +20,7 @@ def test_env_loaded():
 @pytest.mark.external_api
 def test_gcal_api_call():
     dt = pendulum.datetime(year=2018, month=8, day=30, tz="America/Los_Angeles")
-    events = MyDiaryGCal().get_events_for_day(dt)
+    events = MyDiaryGCal().get_day(dt).events
     event = events[0]
     assert dt.is_same_day(event.start)
     assert dt.is_same_day(event.end)

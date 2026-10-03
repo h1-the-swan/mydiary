@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 """A Refresh of the Google Calendar events section, and its Refresh Preview."""
 
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 import pendulum
 import pytest
 from sqlmodel import Session, select
 
+import mydiary.gcal_refresh as gcal_refresh_module
 from mydiary.diary_note import new_note_body, section_content
+from mydiary.googlecalendar_connector import CalendarDay
 from mydiary.gcal_refresh import (
     DiffLine,
     GcalSectionChanged,
@@ -43,35 +45,64 @@ def made_up_events() -> List[GoogleCalendarEvent]:
     return [event("ev1", "Practice scales", 9), event("ev2", "Water the ferns", 14)]
 
 
+def fresh(e: GoogleCalendarEvent) -> GoogleCalendarEvent:
+    # not model_copy(), which shares the original's database state
+    return GoogleCalendarEvent(**e.model_dump())
+
+
 class FakeCalendar:
-    """`MyDiaryGCal` without Google: returns `events`, records saves, and
-    notes what the note held when the save happened."""
+    """`MyDiaryGCal` without Google. The day lists `events` (and
+    `cancelled_ids`); `by_id` answers lookups of anything else, None meaning
+    cancelled or gone. With the `record_saves` fixture, it also records each
+    sync of the day to the database, and what the note held at that moment."""
 
     def __init__(
         self,
         events: List[GoogleCalendarEvent],
         joplin: Optional[InMemoryJoplin] = None,
         note_id: Optional[str] = None,
+        cancelled_ids: Optional[Set[str]] = None,
+        by_id: Optional[Dict[str, Optional[GoogleCalendarEvent]]] = None,
     ) -> None:
         self.events = events
+        self.cancelled_ids = cancelled_ids or set()
+        self.by_id = by_id or {}
         self.joplin = joplin
         self.note_id = note_id
         self.fetches = 0
+        self.lookups: List[str] = []
         self.saved: List[List[GoogleCalendarEvent]] = []
         self.body_at_save: Optional[str] = None
 
-    def get_events_for_day(self, dt) -> List[GoogleCalendarEvent]:
+    def get_day(self, dt) -> CalendarDay:
         self.fetches += 1
-        # fresh copies, as Google would give each time
-        return [e.model_copy() for e in self.events]
+        # fresh instances, as Google would give each time
+        return CalendarDay(
+            events=[fresh(e) for e in self.events],
+            cancelled_ids=set(self.cancelled_ids),
+        )
 
-    def save_events_to_database(self, events, session=None) -> None:
+    def get_event(self, event_id: str) -> Optional[GoogleCalendarEvent]:
+        self.lookups.append(event_id)
+        found = self.by_id[event_id]
+        return fresh(found) if found is not None else None
+
+    def record_save(self, day: CalendarDay) -> None:
         if self.joplin is not None:
             self.body_at_save = self.joplin.notes[self.note_id].body
-        self.saved.append(events)
-        for e in events:
-            session.merge(e)
-        session.commit()
+        self.saved.append(day.events)
+
+
+@pytest.fixture(autouse=True)
+def record_saves(monkeypatch):
+    """Has each sync of the day to the database recorded by its calendar."""
+    real = gcal_refresh_module.save_calendar_day
+
+    def recording(session, dt, day, gcal):
+        gcal.record_save(day)
+        real(session, dt, day, gcal)
+
+    monkeypatch.setattr(gcal_refresh_module, "save_calendar_day", recording)
 
 
 def note_body(calendar: str) -> str:
@@ -273,6 +304,23 @@ class TestApply:
         assert section_content(body, "Google Calendar events") == preview.after
 
 
+def test_apply_marks_a_cancelled_event(joplin, db_session: Session):
+    gone, kept = made_up_events()
+    db_session.add(fresh(gone))
+    db_session.commit()
+    joplin.add_note(TITLE, note_body(google_calendar_events_markdown([gone, kept])))
+    # Google lists the day without `gone`, and finds it cancelled by id
+    gcal = FakeCalendar([kept], by_id={gone.id: None})
+
+    preview = preview_gcal_refresh(joplin, DT, gcal)
+    apply_gcal_refresh(db_session, joplin, DT, preview.before, preview.after, gcal)
+
+    assert gone.summary not in preview.after
+    db_session.expire_all()
+    assert db_session.get(GoogleCalendarEvent, gone.id).status == "cancelled"
+    assert db_session.get(GoogleCalendarEvent, kept.id).status == "confirmed"
+
+
 class TestAwkwardNotes:
     def test_title_ending_in_a_space_is_up_to_date_once_written(
         self, joplin, db_session: Session
@@ -319,14 +367,16 @@ class TestAwkwardNotes:
         assert gcal.saved == []
 
 
-def test_a_failed_save_still_reports_the_write(joplin, stale_note, db_session):
+def test_a_failed_save_still_reports_the_write(
+    joplin, stale_note, db_session, monkeypatch
+):
     gcal = FakeCalendar(made_up_events())
     preview = preview_gcal_refresh(joplin, DT, gcal)
 
-    def broken_save(events, session=None):
+    def broken_save(session, dt, day, gcal):
         raise RuntimeError("database is locked")
 
-    gcal.save_events_to_database = broken_save
+    monkeypatch.setattr(gcal_refresh_module, "save_calendar_day", broken_save)
 
     assert apply_gcal_refresh(
         db_session, joplin, DT, preview.before, preview.after, gcal

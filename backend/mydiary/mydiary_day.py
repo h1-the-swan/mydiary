@@ -129,7 +129,7 @@ class MyDiaryDay:
     ) -> "MyDiaryDay":
         from .pocket_connector import MyDiaryPocket
         from .spotify_connector import MyDiarySpotify
-        from .googlecalendar_connector import MyDiaryGCal
+        from .googlecalendar_connector import MyDiaryGCal, save_calendar_day
         from .owntracks_connector import MyDiaryOwnTracks
 
         if session is None:
@@ -171,11 +171,10 @@ class MyDiaryDay:
         spotify_tracks = mydiary_spotify.get_tracks_for_day(dt, session=session)
 
         mydiary_gcal = MyDiaryGCal()
-        google_calendar_events = mydiary_gcal.get_events_for_day(dt)
+        calendar_day = mydiary_gcal.get_day(dt)
         if gcal_save is True:
-            mydiary_gcal.save_events_to_database(
-                google_calendar_events, session=session
-            )
+            save_calendar_day(session, dt, calendar_day, mydiary_gcal)
+        google_calendar_events = calendar_day.events
 
         mydiary_owntracks = MyDiaryOwnTracks()
         if owntracks_sync is True:

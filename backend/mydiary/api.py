@@ -782,7 +782,7 @@ async def check_gcal_auth():
     try:
         from mydiary.googlecalendar_connector import MyDiaryGCal
 
-        events = MyDiaryGCal().get_events_for_day(pendulum.today())
+        MyDiaryGCal().get_day(pendulum.today())
         return Response(status_code=200)
     except Exception as e:
         raise HTTPException(
