@@ -12,11 +12,11 @@ Delete this file in the final commit before merging.
 - [x] 2. Backend core (renderer, preview, apply, tests)
 - [x] 3. Routes, API tests, regenerate client
 - [x] 4. Frontend button and dialog
-- [ ] 5. Docs
+- [x] 5. Docs
 
 ## Next action
 
-Step 5 (docs): `docs/architecture.md` wherever it lists routes or day-page behaviour; ADR-0002 consequences only if stale. Then the plan's verification; ask before any Confirm in the browser. Delete this file in the final commit.
+Verification: ask the user before clicking Confirm on a real day (they pick the day; rollback is pasting the dialog's old section back in Joplin). Then a final commit deleting this file, and the merge when the user says so.
 
 ## Notes
 

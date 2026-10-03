@@ -34,7 +34,7 @@ Most of the work here turned out to be cleanup rather than drawing. The phone re
 
 ### Google Calendar events
 
-Mydiary connects to my personal Google Calendar and fills in all the events for a day. I often use my calendar as a lightweight journaling solution, even backfilling things I did in the last few days when I have a few minutes to do so.
+Mydiary connects to my personal Google Calendar and fills in all the events for a day. I often use my calendar as a lightweight journaling solution, even backfilling things I did in the last few days when I have a few minutes to do so. When I backfill a day that already has an entry, the "Refresh calendar events" button on the day page shows what would change in the entry's calendar section and writes it once I confirm.
 
 ### Pocket articles (deprecated)
 
