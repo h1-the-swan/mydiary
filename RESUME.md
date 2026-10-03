@@ -11,12 +11,12 @@ Delete this file in the final commit before merging.
 - [x] 1. Glossary + resume notes
 - [x] 2. Backend core (renderer, preview, apply, tests)
 - [x] 3. Routes, API tests, regenerate client
-- [ ] 4. Frontend button and dialog
+- [x] 4. Frontend button and dialog
 - [ ] 5. Docs
 
 ## Next action
 
-Step 4: a \"Refresh calendar\" button next to `g-cal-auth` in `MyDiaryDay.vue` (only when `diaryNoteExists`) and a `GcalRefreshDialog` component over `joplinGcalRefreshPreview` / `joplinGcalRefresh` in `src/api.ts`. Lint and build inside the container, then browser-check at http://localhost:8087 (never click Confirm without asking).
+Step 5 (docs): `docs/architecture.md` wherever it lists routes or day-page behaviour; ADR-0002 consequences only if stale. Then the plan's verification; ask before any Confirm in the browser. Delete this file in the final commit.
 
 ## Notes
 
@@ -28,3 +28,5 @@ Step 4: a \"Refresh calendar\" button next to `g-cal-auth` in `MyDiaryDay.vue` (
 - `backend/api.json` is a stale tracked file nothing regenerates; codegen writes the gitignored `mydiary-vuetify/api.json`.
 - A failed event save after the note is written is logged, not raised, so apply never reports a failure for a note it wrote. Any other unexpected 500 from apply: the dialog should suggest previewing again rather than claim nothing was written.
 - Left as is: `get_gcal` builds `MyDiaryGCal` (may refresh the token file) before the note lookup, so a day with no note and an expired token gets 502 rather than 404. The button only shows on days with a note.
+- The button is labelled "Refresh calendar events": the date picker already has a "Refresh calendar" button (reloads its note dots). Agreed with the user 2026-10-02.
+- Browser-checked (Firefox, 1440 and 390): no button on a day without a note; "already up to date" on an unchanged day; diff with Confirm on a day with new events (not confirmed). Lint/build clean in the container.

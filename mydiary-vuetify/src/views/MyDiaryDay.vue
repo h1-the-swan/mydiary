@@ -24,6 +24,9 @@
             <my-diary-day-date-picker />
             <div class="d-flex align-center flex-wrap ga-2 mt-4">
                 <g-cal-auth />
+                <v-btn v-if="diaryNoteExists" size="small" @click="gcalRefreshOpen = true">
+                    Refresh calendar events
+                </v-btn>
                 <v-btn v-if="!diaryNoteExists" size="small" @click="fetchInitMarkdown">
                     Create note for this day
                 </v-btn>
@@ -95,6 +98,20 @@
             </v-card>
         </v-dialog>
 
+        <gcal-refresh-dialog
+            v-if="gcalRefreshOpen"
+            :dt="getDateStr"
+            @close="gcalRefreshOpen = false"
+            @refreshed="onGcalRefreshed"
+        />
+
+        <v-snackbar v-model="snackbarGcalRefresh">
+            Calendar events refreshed for {{ gcalRefreshedLabel }}.
+            <template v-slot:actions>
+                <v-btn variant="text" @click="snackbarGcalRefresh = false">Close</v-btn>
+            </template>
+        </v-snackbar>
+
         <v-snackbar v-model="snackbarInit">
             Note created for {{ dateLabel }}.
             <template v-slot:actions>
@@ -118,6 +135,7 @@ import {
     joplinInitNote,
 } from '@/api'
 import GCalAuth from '@/components/GCalAuth.vue'
+import GcalRefreshDialog from '@/components/GcalRefreshDialog.vue'
 import MyDiaryDayDatePicker from '@/components/MyDiaryDayDatePicker.vue'
 import PageShell from '@/components/PageShell.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
@@ -136,6 +154,10 @@ const diaryNote = ref<JoplinNote>()
 const diaryNoteImages = ref<MyDiaryImageRead[]>([])
 const dialog = ref(false)
 const snackbarInit = ref(false)
+const gcalRefreshOpen = ref(false)
+const snackbarGcalRefresh = ref(false)
+// the refreshed day, kept so the snackbar doesn't follow a day change
+const gcalRefreshedLabel = ref('')
 const getDate = computed(() => {
     const qd = route.query.dt
     if (!qd || qd === 'yesterday') {
@@ -194,6 +216,12 @@ async function onSaveNote() {
     dialog.value = false
     snackbarInit.value = true
     app.calendarShouldUpdate = true
+}
+async function onGcalRefreshed() {
+    gcalRefreshOpen.value = false
+    gcalRefreshedLabel.value = dateLabel.value
+    snackbarGcalRefresh.value = true
+    await fetchJoplinNote()
 }
 async function fetchJoplinNoteId() {
     joplinNoteId.value = ''
