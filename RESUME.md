@@ -18,14 +18,14 @@ Every commit follows the plan's commit workflow: stage, get a sub-agent review o
 - [x] 3. Google Calendar Source Sync: `showDeleted`, by-id reconciliation in the shared save
 - [x] 4. `source_sync.py`: `sync_sources`, `SourceSyncReport`, Protocols
 - [x] 5. Read-only `from_dt`; callers sync explicitly
-- [ ] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
+- [x] 6. Routes (`sync_sources`, `new_note_preview`, `init_note` without body); regenerate client
 - [ ] 7. Create dialog in `MyDiaryDay.vue`
 - [ ] 8. Docs
 - [ ] Verification: live check steps 2–4 with the diarist, browser check, full test run
 
 ## Next action
 
-Step 6: routes. `POST /day/{dt}/sync_sources` (report per Source), `GET /day/{dt}/new_note_preview` (reads only; replaces `day_init_markdown`, which is removed), `POST /joplin/init_note/{dt}` without `body` and without a sync. Each resolves the day once via `_diary_day` with `tz=infer`. Unique `operation_id`s. Then `docker compose exec mydiary-vuetify npm run generateClientAPI`; the frontend still calls `/day_init_markdown` by raw axios until step 7, so steps 6 and 7 may need to land together or keep the old route one more step (decide when staging).
+Step 7: create dialog in `MyDiaryDay.vue`. On open: `daySyncSources`, then `dayNewNotePreview`; show a warning per failed Source and still load the preview. Create calls `joplinInitNote` with no body. In the same commit remove the `day_init_markdown` route and `init_note`'s ignored `body` parameter, then regenerate the client. Lint + build in the container (5 lint errors already exist in untouched files); Playwright on 8087, preview only; ask before clicking Create (real Joplin).
 
 ## Notes
 
@@ -42,3 +42,5 @@ Step 6: routes. `POST /day/{dt}/sync_sources` (report per Source), `GET /day/{dt
 - Until step 5, a failed by-id lookup (`get_event`) raises out of `from_dt` when `gcal_save` is on, as a failed list call already did. Step 5 removes the sync from `from_dt`; `sync_sources` must catch it per Source.
 - `GoogleCalendarEvent.init_on_load` now sets start/end with `set_committed_value`; plain assignment marked every loaded row dirty, so a later commit wrote them back.
 - Note writes that sync first (`update_note`, `init_note` without body, the `joplin_*` scripts) call `.require(GOOGLE_CALENDAR)` on the report: a Google Calendar failure stops them (502 in the routes), as it did when `from_dt` synced. Spotify/OwnTracks failures are only logged, as before. Step 6's `init_note` doesn't sync at all; the dialog's sync shows failures as warnings instead.
+- Step 6 kept `day_init_markdown` and `init_note`'s `body` parameter (now ignored) so the frontend keeps working until step 7 switches it over.
+- `npm run lint` in the container reports 5 errors in files this branch doesn't touch (GCalAuth.vue, PerformSongCard.vue, PerformSongsDataTable.vue, TimeZoneChange.vue).

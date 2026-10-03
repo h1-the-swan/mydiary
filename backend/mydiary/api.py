@@ -1319,21 +1319,66 @@ def joplin_init_note(
     body: Optional[str] = Body(None),
 ) -> str:
     # a plain def: creating waits on a lock for the day, which would block the
-    # event loop
+    # event loop. Reads the database only; the create dialog's preview runs
+    # the Source Sync. `body` is ignored: the note is the template, as the
+    # preview showed it.
     dt = _diary_day(dt, tz, session)
     try:
-        if not body:
-            # a supplied body was previewed after a Source Sync already
-            _sync_for_note(session, dt)
         day = MyDiaryDay.from_dt(dt, joplin_connector=joplin, session=session)
         logger.debug("created MyDiaryDay instance")
-        day.init_joplin_note(session=session, body=body)
+        day.init_joplin_note(session=session)
         logger.debug("initialized note")
         return day.joplin_note_id
     except Exception as e:
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
         print(e)
         raise
+
+
+class SourceStatusRead(SQLModel):
+    source: str
+    ok: bool
+    error: Optional[str] = None
+
+
+class SourceSyncReportRead(SQLModel):
+    statuses: List[SourceStatusRead]
+
+
+@app.post(
+    "/day/{dt}/sync_sources",
+    operation_id="daySyncSources",
+    response_model=SourceSyncReportRead,
+)
+def day_sync_sources(
+    dt: str, tz: str = "infer", session: Session = Depends(get_session)
+):
+    """Source Sync of the day: each Source's latest data into the database.
+    A Source that fails is reported, not raised, so this answers 200 even
+    when every Source failed."""
+    # a plain def: the Sources are network calls, which would block the
+    # event loop
+    report = sync_sources(session, _diary_day(dt, tz, session))
+    return SourceSyncReportRead(
+        statuses=[
+            SourceStatusRead(source=s.source, ok=s.ok, error=s.error)
+            for s in report.statuses
+        ]
+    )
+
+
+@app.get(
+    "/day/{dt}/new_note_preview",
+    operation_id="dayNewNotePreview",
+    response_model=str,
+)
+def day_new_note_preview(
+    dt: str, tz: str = "infer", session: Session = Depends(get_session)
+):
+    """The body a new Diary Note for the day would get, from the database
+    as it is. Writes nothing and calls no Source."""
+    day = _diary_day(dt, tz, session)
+    return MyDiaryDay.from_dt(day, session=session).init_markdown()
 
 
 @app.get("/day_init_markdown/{dt}", operation_id="dayInitMarkdown")
