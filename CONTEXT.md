@@ -34,6 +34,14 @@ _Avoid_: generated section, auto section
 **Frozen Section**:
 An App-owned Section whose source is gone, so it is never written again (Pocket articles).
 
+**Refresh**:
+Rewriting one or more App-owned Sections of an existing Diary Note from their sources. A Refresh never touches Written Sections.
+_Avoid_: update, sync (when a Refresh is meant)
+
+**Refresh Preview**:
+The before and after of a Refresh, shown to the diarist for approval before anything is written. What the diarist approves is exactly what gets written; if the section changed in the meantime, nothing is written and the preview has to be redone.
+_Avoid_: dry run, diff (when the whole approval step is meant)
+
 ### What a note shows
 
 **Photo**:

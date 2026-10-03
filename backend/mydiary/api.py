@@ -7,7 +7,7 @@ import re
 import secrets
 import threading
 import pendulum
-from typing import Dict, List, Optional, Set, Tuple, Union, Any
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union, Any
 from pathlib import Path
 from urllib.parse import urlsplit
 from fastapi import (
@@ -117,6 +117,15 @@ from .spotify_connector import (
 )
 from .pocket_connector import MyDiaryPocket
 from .core import get_last_timezone
+from .gcal_refresh import (
+    CalendarSource,
+    CalendarUnavailable,
+    GcalSectionChanged,
+    NoDiaryNote,
+    SectionUnreadable,
+    apply_gcal_refresh,
+    preview_gcal_refresh,
+)
 
 # a route default, so it has to be resolved at import time rather than lazily
 # like the rest of the owntracks imports. owntracks_track is pure and cheap.
@@ -545,6 +554,19 @@ def open_joplin_port():
 def get_joplin_port():
     with open_joplin_port() as joplin:
         yield joplin
+
+
+def get_gcal() -> CalendarSource:
+    """Google Calendar for a Refresh. 502 if it can't be set up (an expired
+    token, say), with the reason for the dialog to show."""
+    from .googlecalendar_connector import MyDiaryGCal
+
+    try:
+        return MyDiaryGCal()
+    except Exception as e:
+        raise HTTPException(
+            status_code=502, detail=f"Google Calendar is unavailable: {e}"
+        )
 
 
 def get_mydiary_spotify_or_none() -> Optional[MyDiarySpotify]:
@@ -1399,6 +1421,95 @@ def joplin_update_note(
         # raise HTTPException(status_code=500, detail=getattr(e, 'message', 'NO EXCEPTION MESSAGE AVAILABLE'))
         print(e)
         raise
+
+
+class GcalRefreshDiffLine(SQLModel):
+    op: Literal["same", "add", "remove"]
+    text: str
+
+
+class GcalRefreshPreviewRead(SQLModel):
+    before: str
+    after: str
+    changed: bool
+    diff: List[GcalRefreshDiffLine]
+
+
+class GcalRefreshApply(SQLModel):
+    # the preview's `before` and `after`, sent back as the diarist saw them
+    before: str
+    after: str
+
+
+class GcalRefreshResult(SQLModel):
+    wrote: bool
+
+
+# the status each Refresh failure maps to; its message is what the dialog shows
+_GCAL_REFRESH_ERRORS = (
+    (NoDiaryNote, 404),
+    (GcalSectionChanged, 409),
+    (SectionUnreadable, 422),
+    (CalendarUnavailable, 502),
+)
+
+
+def _gcal_refresh_http_error(e: Exception) -> HTTPException:
+    status = next(code for exc, code in _GCAL_REFRESH_ERRORS if isinstance(e, exc))
+    return HTTPException(status_code=status, detail=str(e))
+
+
+@app.get(
+    "/joplin/gcal_refresh_preview/{dt}",
+    operation_id="joplinGcalRefreshPreview",
+    response_model=GcalRefreshPreviewRead,
+)
+def joplin_gcal_refresh_preview(
+    dt: str,
+    tz: str = "infer",
+    session: Session = Depends(get_session),
+    joplin: JoplinPort = Depends(get_joplin_port),
+    gcal: CalendarSource = Depends(get_gcal),
+):
+    """What a Refresh of the day's Google Calendar events section would
+    write. Writes nothing."""
+    day = _diary_day(dt, tz, session)
+    try:
+        preview = preview_gcal_refresh(joplin, day, gcal)
+    except tuple(exc for exc, _ in _GCAL_REFRESH_ERRORS) as e:
+        raise _gcal_refresh_http_error(e) from e
+    return GcalRefreshPreviewRead(
+        before=preview.before,
+        after=preview.after,
+        changed=preview.changed,
+        diff=[GcalRefreshDiffLine(op=d.op, text=d.text) for d in preview.diff],
+    )
+
+
+@app.post(
+    "/joplin/gcal_refresh/{dt}",
+    operation_id="joplinGcalRefresh",
+    response_model=GcalRefreshResult,
+)
+def joplin_gcal_refresh(
+    dt: str,
+    body: GcalRefreshApply,
+    tz: str = "infer",
+    session: Session = Depends(get_session),
+    joplin: JoplinPort = Depends(get_joplin_port),
+    gcal: CalendarSource = Depends(get_gcal),
+):
+    """Write a Refresh Preview's `after` as the day's Google Calendar events
+    section. 409 and nothing written if the calendar or the section changed
+    since the preview."""
+    # a plain def: the edit waits on the note's lock, which would block the
+    # event loop
+    day = _diary_day(dt, tz, session)
+    try:
+        wrote = apply_gcal_refresh(session, joplin, day, body.before, body.after, gcal)
+    except tuple(exc for exc, _ in _GCAL_REFRESH_ERRORS) as e:
+        raise _gcal_refresh_http_error(e) from e
+    return GcalRefreshResult(wrote=wrote)
 
 
 @app.get(
