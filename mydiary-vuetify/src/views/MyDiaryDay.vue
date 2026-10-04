@@ -69,7 +69,11 @@
             :dt="getDateStr"
             :joplin-note-id="joplinNoteId"
         />
-        <map-section :dt="getDateStr" :joplin-note-id="joplinNoteId" />
+        <map-section
+            :dt="getDateStr"
+            :joplin-note-id="joplinNoteId"
+            :note-title="diaryNote?.title"
+        />
 
         <v-dialog v-model="dialog" max-width="900" :persistent="creating">
             <v-card :title="`Create note for ${createLabel}`">

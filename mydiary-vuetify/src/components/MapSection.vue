@@ -88,15 +88,12 @@
             {{ error }}
         </v-alert>
 
-        <v-alert
-            v-if="notice"
-            class="mt-2"
-            type="success"
-            closable
-            @click:close="notice = ''"
-        >
+        <v-snackbar v-model="showNotice" color="success" :timeout="4000">
             {{ notice }}
-        </v-alert>
+            <template #actions>
+                <v-btn variant="text" @click="showNotice = false">Close</v-btn>
+            </template>
+        </v-snackbar>
     </section>
 </template>
 
@@ -118,6 +115,7 @@ import SectionHeader from '@/components/SectionHeader.vue'
 const props = defineProps<{
     dt: string
     joplinNoteId?: string
+    noteTitle?: string
 }>()
 
 // same four periods, same hexes, as the rendered PNG
@@ -159,6 +157,7 @@ const loading = ref(false)
 const syncing = ref(false)
 const error = ref('')
 const notice = ref('')
+const showNotice = ref(false)
 const summary = ref('')
 const hasTrack = ref(false)
 
@@ -371,7 +370,7 @@ async function onSyncToNote() {
     if (!hasNote.value) return
     syncing.value = true
     error.value = ''
-    notice.value = ''
+    showNotice.value = false
     try {
         const r = (await owntracksMapToNote(props.dt, {})).data as {
             result: string
@@ -380,10 +379,12 @@ async function onSyncToNote() {
         // a day spent in two or more distinct areas gets a map each, plus the
         // whole-day overview, so say how many actually landed
         const maps = r.num_maps === 1 ? 'the map' : `${r.num_maps} maps`
+        const title = props.noteTitle ? ` - ${props.noteTitle}` : ''
         notice.value =
             r.result === 'no update'
-                ? `The note already has ${maps}`
-                : `Added ${maps} to the note`
+                ? `The note already has ${maps}${title}`
+                : `Added ${maps} to the note${title}`
+        showNotice.value = true
     } catch (e: any) {
         error.value =
             e?.response?.data?.detail ||
