@@ -49,7 +49,7 @@ For each photo being **added**:
 
 For each photo being **removed** (present in the note but not in the desired list):
 
-- The markdown ref is removed. The Joplin resource is dropped: deleted after the note has been written and committed, and only if no other note references it (the same photo on two days is one resource).
+- The markdown ref is removed. The Joplin resource stays in Joplin, so adding the photo back reuses it ([ADR 0003](adr/0003-mydiary-never-deletes-joplin-resources.md)).
 - iPhone-sync rows (`H1phone_sync/…`): the `MyDiaryImage` row is **deleted** (with its link rows first), since it is derived data, recreated identically on re-add. A row another note also links is kept.
 - Upload rows (`mydiary_uploads/…`): the row is **kept** with `joplin_resource_id` nulled, so the image still appears (deselected) in the uploads tab and can be re-added later.
 
@@ -57,7 +57,7 @@ Bookkeeping:
 
 - **Unknown resource ids** — refs in the Images section with no matching `MyDiaryImage` row (e.g. images added by the removed Google Photos flow) — are preserved in place and never touched.
 - `JoplinNoteImageLink` rows are part of the Note Mirror. Every mirror refresh (this sync's write, the hourly sync, opening the day) rebuilds them from the Images section's refs in order, with contiguous `sequence_num`, skipping unknown ids. So the links also follow photos reordered or removed by hand in Joplin.
-- Failure: the DB is rolled back and the resources this sync created are deleted, unless the note turned out to reference them. A write the Joplin app keeps overwriting fails with 409 (`NoteClobbered`).
+- Failure: the DB is rolled back. Resources this sync uploaded stay in Joplin, and a retry reuses them. A write the Joplin app keeps overwriting fails with 409 (`NoteClobbered`).
 
 Reading back: `GET /joplin/get_note_images/{note_id}` (`joplinNoteImages`) takes the resource ids from the note's Images section and joins them to `MyDiaryImage` rows by `joplin_resource_id` (unknown ids are skipped). The frontend marks a grid photo as "in the note" iff its path appears among the returned `nextcloud_path`s.
 
