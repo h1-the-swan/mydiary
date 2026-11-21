@@ -403,6 +403,10 @@ class MyDiaryJoplin:
         force: bool = False,
         ignore_id: Optional[Union[str, Collection[str]]] = None,
     ) -> requests.Response:
+        """Only for cleaning up after external_api tests: the app never
+        deletes a resource (docs/adr/0003-mydiary-never-deletes-joplin-resources.md).
+        A resource deleted and then created again with the same id before
+        the next Joplin sync is lost on every device."""
         if ignore_id is None:
             ignore_id = set()
         elif isinstance(ignore_id, str):

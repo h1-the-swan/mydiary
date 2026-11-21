@@ -4,7 +4,9 @@ DESCRIPTION = """Re-encode the OwnTracks maps already embedded in Joplin notes.
 
 The maps used to be saved as PNG, which costs roughly 5x the bytes of the JPEG
 they are saved as now for no visible difference. Every day already in
-OwnTracksDayMap is re-rendered and its Joplin resource replaced.
+OwnTracksDayMap is re-rendered and its Joplin resource replaced. The old PNG
+stays in Joplin until the desktop app's orphan cleanup removes it (ADR 0003),
+so the "saved" figures are what the notes stop using, not space freed yet.
 
 Resumable and safe to re-run: OwnTracksDayMap.content_hash now covers the
 render parameters, so an un-migrated day hashes differently and gets the work,

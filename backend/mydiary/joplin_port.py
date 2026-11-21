@@ -2,10 +2,12 @@
 """The narrow port the app uses to talk to Joplin, and its HTTP adapter.
 
 `JoplinPort` covers only what talks to Joplin: finding, listing, reading,
-creating and updating notes, creating and deleting resources, reading tags, and the year
-subfolders notes are filed in. `HttpJoplin` implements it over the Joplin data
-API. Tests use `InMemoryJoplin` (tests/in_memory_joplin.py), which implements
-the same port without any HTTP.
+creating and updating notes, creating resources, reading tags, and the year
+subfolders notes are filed in. It has no way to delete a resource, on
+purpose: see docs/adr/0003-mydiary-never-deletes-joplin-resources.md.
+`HttpJoplin` implements it over the Joplin data API. Tests use
+`InMemoryJoplin` (tests/in_memory_joplin.py), which implements the same port
+without any HTTP.
 
 A missing note is `None` here. Only the `joplin_get_note_id` route turns that
 into the `"does_not_exist"` string the frontend reads.
@@ -74,14 +76,7 @@ class JoplinPort(Protocol):
         stored raises. Check `resource_exists` first to reuse one."""
         ...
 
-    def delete_resource(self, resource_id: str) -> None: ...
-
     def resource_exists(self, resource_id: str) -> bool: ...
-
-    def get_resource_note_ids(self, resource_id: str) -> List[str]:
-        """Ids of the notes that reference a resource. Joplin indexes this in
-        the background, so a note saved moments ago may not be counted yet."""
-        ...
 
     def get_note_tags(self, note_id: str) -> List[str]:
         """Titles of Joplin's own tags on a note."""
@@ -165,18 +160,9 @@ class HttpJoplin:
             r.raise_for_status()
         return r.json()["id"]
 
-    def delete_resource(self, resource_id: str) -> None:
-        with _joplin_errors(f"deleting resource {resource_id}"):
-            self.client.delete_resource(resource_id, force=True).raise_for_status()
-
     def resource_exists(self, resource_id: str) -> bool:
         with _joplin_errors(f"looking up resource {resource_id}"):
             return self.client.resource_exists(resource_id)
-
-    def get_resource_note_ids(self, resource_id: str) -> List[str]:
-        url = f"{self.client.base_url}/resources/{resource_id}/notes"
-        with _joplin_errors(f"listing the notes of resource {resource_id}"):
-            return [item["id"] for item in self.client._yield_pages(url, ["id"])]
 
     def get_note_tags(self, note_id: str) -> List[str]:
         with _joplin_errors(f"getting the tags of note {note_id}"):

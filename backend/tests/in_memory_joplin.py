@@ -157,16 +157,11 @@ class InMemoryJoplin:
         )
         return resource_id
 
-    def delete_resource(self, resource_id: str) -> None:
-        if self.resources.pop(resource_id, None) is None:
-            raise JoplinError(f"no resource {resource_id}")
+    # no delete_resource, like the port: a call to one fails the tests with
+    # AttributeError
 
     def resource_exists(self, resource_id: str) -> bool:
         return resource_id in self.resources
-
-    def get_resource_note_ids(self, resource_id: str) -> List[str]:
-        # always current, unlike Joplin's background index
-        return [n.id for n in self.notes.values() if f":/{resource_id}" in n.body]
 
     # --- tags ---
 

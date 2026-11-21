@@ -245,7 +245,7 @@ def test_a_write_clobbered_once_is_retried(db_with_locations, dt):
     assert resource_ids_in(section.content) == list(joplin.resources)
 
 
-def test_a_write_that_keeps_being_clobbered_raises_and_leaves_nothing(
+def test_a_write_that_keeps_being_clobbered_raises_and_saves_no_rows(
     db_with_locations, dt
 ):
     joplin = joplin_with_note()
@@ -256,11 +256,11 @@ def test_a_write_that_keeps_being_clobbered_raises_and_leaves_nothing(
     with pytest.raises(NoteClobbered):
         sync_day_map_to_note(dt, session=db_with_locations, joplin=joplin)
     assert body_of(joplin) == NOTE_BODY
-    assert not joplin.resources  # the uploaded map is cleaned up
+    assert len(joplin.resources) == 1  # the uploaded map stays (ADR 0003)
     assert db_with_locations.get(OwnTracksDayMap, (dt.date(), 0)) is None
 
 
-def test_force_replaces_the_resource_and_deletes_the_old_one(
+def test_force_replaces_the_resource_and_keeps_the_old_one(
     db_with_locations, dt, monkeypatch
 ):
     joplin = joplin_with_note()
@@ -278,8 +278,11 @@ def test_force_replaces_the_resource_and_deletes_the_old_one(
         dt, session=db_with_locations, joplin=joplin, force=True
     )
     assert result == "updated"
-    assert first_id not in joplin.resources
-    assert len(joplin.resources) == 1
+    section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
+    (new_id,) = resource_ids_in(section.content)
+    assert new_id != first_id
+    # resources are never deleted (ADR 0003)
+    assert set(joplin.resources) == {first_id, new_id}
 
 
 def test_missing_location_data_raises_lookup_error(db_session, dt):
@@ -464,7 +467,7 @@ def test_a_day_that_gains_areas_reuses_its_overview_resource(
     assert len(joplin.resources) == 3
 
 
-def test_a_day_that_loses_areas_drops_their_maps_and_rows(
+def test_a_day_that_loses_areas_drops_their_maps_from_the_note_and_their_rows(
     db_two_areas, dt_two_areas, monkeypatch
 ):
     import mydiary.owntracks_maps as om
@@ -480,7 +483,10 @@ def test_a_day_that_loses_areas_drops_their_maps_and_rows(
         dt_two_areas, session=db_two_areas, joplin=joplin
     )
     assert (result, num_maps) == ("updated", 1)
-    assert list(joplin.resources) == [overview_id]
+    section = MarkdownDoc(body_of(joplin)).get_section_by_title("Location")
+    assert resource_ids_in(section.content) == [overview_id]
+    # the dropped panels' maps stay in Joplin (ADR 0003)
+    assert len(joplin.resources) == 3
     rows = db_two_areas.exec(
         select(OwnTracksDayMap).where(OwnTracksDayMap.diary_date == dt_two_areas.date())
     ).all()

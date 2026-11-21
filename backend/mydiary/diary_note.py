@@ -210,11 +210,6 @@ def readable_body(body: Optional[str]) -> str:
     return _RESOURCE_REF.sub(r"[Joplin resource_id: \1]", body or "")
 
 
-def _references(body: Optional[str], resource_id: str) -> bool:
-    # any mention, not only an embed: a plain `[name](:/id)` link counts too
-    return f":/{resource_id}" in (body or "")
-
-
 # One edit at a time per note, within this process. A second edit waits for
 # the first to finish, then reads the note the first one wrote.
 _locks_guard = threading.Lock()
@@ -323,7 +318,6 @@ class DiaryNote:
         ```
         with diary_note.edit(session) as edit:
             rid = edit.add_resource(png_bytes, title="map", ext="png")
-            edit.drop_resource(old_rid)
             edit.set_section("Location", content)
             session.merge(OwnTracksDayMap(...))  # the caller's own rows
         ```
@@ -331,11 +325,14 @@ class DiaryNote:
         Holds the note's lock throughout and reads the note on entering. On a
         clean exit it writes the note if anything changed, verifies the
         write (rewriting once, then raising `NoteClobbered`), refreshes the
-        Note Mirror from the verifying read, commits the session (the
-        caller's rows with the mirror), then deletes dropped resources that
-        nothing else references. On any exception the session is rolled
-        back and the resources this edit created are deleted, unless the
-        note turned out to reference them.
+        Note Mirror from the verifying read, and commits the session (the
+        caller's rows with the mirror). On any exception the session is
+        rolled back.
+
+        It never deletes a Joplin resource, not even one it created or one
+        the note no longer uses. See ADR 0003: a resource deleted and then
+        created again under the same id before the next Joplin sync is lost
+        on every device, and resource ids come from the bytes.
 
         Commit your own pending writes before entering: a failed edit rolls
         back the whole session, and uncommitted SQLite writes held while
@@ -360,9 +357,7 @@ class DiaryNote:
                 session.commit()
             except BaseException:
                 session.rollback()
-                edit._delete_created(session)
                 raise
-            edit._delete_dropped(session)
 
 
 class NoteEdit:
@@ -374,30 +369,25 @@ class NoteEdit:
         self.joplin = diary_note.joplin
         self.note = note  # as read on entering
         self.sections: Dict[str, str] = {}
+        # resources this edit uploaded, as opposed to reused
         self.created: List[str] = []
-        self.dropped: List[str] = []
         # whether the edit PUT the note; readable once the edit has exited
         self.wrote = False
-        # the body Joplin was last seen holding
-        self._last_seen = note.body
 
     def add_resource(
         self, data: bytes, title: Optional[str] = None, ext: str = "jpg"
     ) -> str:
         """Store a file in Joplin now and return its id, for a ref in a
         section. The id is the md5 of `data`, so bytes Joplin already has
-        reuse that resource, and a failed edit leaves it alone."""
+        reuse that resource. mydiary never deletes resources, so a photo or
+        map added back after being removed, or a failed edit retried, finds
+        the one Joplin still has."""
         resource_id = hashlib.md5(data).hexdigest()
         if self.joplin.resource_exists(resource_id):
             return resource_id
         resource_id = self.joplin.create_resource(data, title=title, ext=ext)
         self.created.append(resource_id)
         return resource_id
-
-    def drop_resource(self, resource_id: str) -> None:
-        """Delete a resource once the edit has been written and committed,
-        unless another note still references it."""
-        self.dropped.append(resource_id)
 
     def set_section(self, heading: str, content: str) -> None:
         """Replace an App-owned Section's whole content, adding the section
@@ -418,7 +408,6 @@ class NoteEdit:
         # on the body read before it would put back whatever the diarist
         # typed in Joplin meanwhile
         current = self.diary_note.read()
-        self._last_seen = current.body
         # Words cleared in Joplin since entering: the mirror refresh after
         # the PUT would raise, so don't write
         check_words(session, current)
@@ -433,8 +422,7 @@ class NoteEdit:
         # doesn't round-trip every body (one starting with `## `, say)
         body = doc.txt if _apply_sections(doc, self.sections) else original
         if body == original:
-            # content decides, whatever resources were staged: dropped ones
-            # are only deleted if the note no longer references them
+            # content decides, whatever resources were added
             return current
         written = self._put_and_read(body)
         unmatched = _unmatched_sections(written.body, self.sections)
@@ -463,82 +451,7 @@ class NoteEdit:
     def _put_and_read(self, body: str) -> JoplinNote:
         self.joplin.update_note_body(self.diary_note.id, body)
         self.wrote = True
-        # what Joplin holds as far as we know, should the read fail
-        self._last_seen = body
-        written = self.diary_note.read()
-        self._last_seen = written.body
-        return written
-
-    def _delete_created(self, session: Session) -> None:
-        if not self.created:
-            return
-        # a write may have landed even though the edit failed (the read after
-        # it raised, say), so ask Joplin what the note holds now
-        try:
-            body = self.diary_note.read().body
-        except Exception:
-            logger.exception(
-                f"can't tell whether note {self.note.title} uses {self.created}; "
-                "keeping them"
-            )
-            return
-        for resource_id in self.created:
-            if _references(body, resource_id):
-                # deleting it would leave a broken image
-                logger.warning(
-                    f"keeping resource {resource_id}: note {self.note.title} "
-                    "references it although the edit failed"
-                )
-                continue
-            try:
-                # the same photo on another day is the same resource, which a
-                # concurrent edit of that note may have just used
-                if self._used_by_other_notes(session, resource_id):
-                    continue
-                self.joplin.delete_resource(resource_id)
-            except Exception:
-                logger.exception(f"failed to clean up resource {resource_id}")
-
-    def _delete_dropped(self, session: Session) -> None:
-        # a created resource the written note doesn't use is dropped too
-        unused = [r for r in self.created if not _references(self._last_seen, r)]
-        for resource_id in dict.fromkeys(self.dropped + unused):
-            try:
-                if self._still_referenced(session, resource_id):
-                    continue
-                self.joplin.delete_resource(resource_id)
-            except Exception:
-                logger.exception(f"failed to delete resource {resource_id}")
-
-    def _still_referenced(self, session: Session, resource_id: str) -> bool:
-        if _references(self._last_seen, resource_id):
-            logger.warning(
-                f"keeping resource {resource_id}: note {self.note.title} "
-                "still references it"
-            )
-            return True
-        return self._used_by_other_notes(session, resource_id)
-
-    def _used_by_other_notes(self, session: Session, resource_id: str) -> bool:
-        # Joplin indexes note resources in the background, a few seconds
-        # behind, so the mirror is asked as well
-        mirrored = session.exec(
-            select(JoplinNote.title).where(
-                JoplinNote.id != self.diary_note.id,
-                JoplinNote.body.contains(f":/{resource_id}"),
-            )
-        ).all()
-        in_joplin = [
-            note_id
-            for note_id in self.joplin.get_resource_note_ids(resource_id)
-            if note_id != self.diary_note.id
-        ]
-        if mirrored or in_joplin:
-            logger.info(
-                f"keeping resource {resource_id}: also used by {mirrored or in_joplin}"
-            )
-            return True
-        return False
+        return self.diary_note.read()
 
 
 def section_content(body: Optional[str], heading: str) -> str:
