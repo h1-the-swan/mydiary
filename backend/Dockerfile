@@ -30,13 +30,6 @@ COPY . .
 # Run poetry install again, this time to install the root package
 RUN poetry install --no-interaction --no-ansi
 
-# # Configure Joplin-Nextcloud sync
-# RUN npx joplin config sync.5.path https://nextcloud.jasport.org/remote.php/webdav/Joplin
-# RUN npx joplin config sync.5.username ${NEXTCLOUD_USERNAME}
-# RUN npx joplin config sync.5.password ${NEXTCLOUD_PASSWORD}
-# RUN npx joplin config sync.target 5
-# RUN npx joplin config api.token $JOPLIN_AUTH_TOKEN
-
 # Kick things off
 # ENTRYPOINT [ "poetry" ]
 # CMD ["run", "python", "-m", "mydiary.api" ]

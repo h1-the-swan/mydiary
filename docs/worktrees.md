@@ -78,8 +78,10 @@ connects to whichever stack published 3001 — the primary. `VITE_HMR_CLIENT_POR
 (set from `MYDIARY_VITE_PORT` in the base compose file, defaulting to 3001)
 pins it to the right one.
 
-Still shared, and not solved: Joplin and the OwnTracks recorder are single
-instances on the host, and every stack talks to the same ones. Reading from
+Still shared, and not solved: Joplin (the headless client the data API comes
+from, see [env-vars.md](env-vars.md#joplin_base_url-and-joplin_auth_token))
+and the OwnTracks recorder are single instances on the host, and every stack
+talks to the same ones. Reading from
 either is harmless. **Joplin writes are not** — anything reaching
 `DiaryNote.create()` or `DiaryNote.edit()` (the "Init note" button, adding photos
 or a map, `POST /joplin/update_note/{dt}`, the `joplin_init*` / `joplin_update*`

@@ -10,8 +10,6 @@ services:
       # Do NOT run `poetry install`/`poetry lock` *inside* this container --
       # Poetry would recreate the host's .venv (via this bind mount) as a
       # broken, root-owned, container-Python venv. Run Poetry on the host.
-      # specify joplin data as a persistent docker volume (defined below)
-      - joplin_data:/root/.config/joplin
       # use timezone information from host machine
       # - /etc/timezone:/etc/timezone:ro
       # - /etc/localtime:/etc/localtime:ro
@@ -28,9 +26,11 @@ services:
       - SPOTIFY_TOKEN_CACHE_PATH=/usr/local/src/app/backend/token_cache/spotify.json
       - GOOGLECALENDAR_TOKEN_CACHE=/usr/local/src/app/backend/token_cache/googlecalendar_token.json
       - GOOGLECALENDAR_CREDENTIALS_FILE=/usr/local/src/app/backend/token_cache/googlecalendar_credentials.json
-      # no port: the backend scans Joplin's port range (41184-41194) and
-      # finds the data API wherever it landed
-      - JOPLIN_BASE_URL=http://host.docker.internal
+      # Joplin's data API, from a headless Joplin client that runs in its own
+      # compose project on the host. To fall back to the desktop app, drop the
+      # port: the backend then scans Joplin's default range (41184-41194),
+      # where the desktop app lands. See docs/env-vars.md.
+      - JOPLIN_BASE_URL=http://host.docker.internal:41200
       # the owntracks recorder runs in its own compose project on the host
       - OWNTRACKS_RECORDER_URL=http://host.docker.internal:8083
     extra_hosts:
@@ -120,7 +120,6 @@ services:
   #     - proxy
 
 volumes:
-  joplin_data:
   tailscale_state:
 
 networks:
