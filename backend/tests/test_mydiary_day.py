@@ -145,8 +145,10 @@ def test_add_images(
     joplin_client: MyDiaryJoplin,
     loaded_db: Session,
     day_initialized: MyDiaryDay,
-    resource,
 ):
+    # The photos' resources are left in Joplin afterwards, like the app leaves
+    # them (ADR 0003): their ids are fixed, so deleting them would make the
+    # next run's re-create vanish at the following sync. That run reuses them.
     note_id = day_initialized.joplin_note_id
     note = joplin_client.get_note(note_id)
     db_note = loaded_db.get(JoplinNote, note_id)
@@ -178,22 +180,17 @@ def test_add_images(
         loaded_db.add(note_image_link)
     loaded_db.commit()
 
-    try:
-        resource_ids_md = [f"![](:/{resource_id})" for resource_id in resource_ids]
-        assert (len(resource_ids_md)) == 2
-        sec_images.set_content("\n\n".join(resource_ids_md))
-        for item in resource_ids_md:
-            assert item in sec_images.txt
-            assert item in md_note.txt
-        r_put_note = joplin_client.update_note_body(note_id, md_note.txt)
-        r_put_note.raise_for_status()
+    resource_ids_md = [f"![](:/{resource_id})" for resource_id in resource_ids]
+    assert (len(resource_ids_md)) == 2
+    sec_images.set_content("\n\n".join(resource_ids_md))
+    for item in resource_ids_md:
+        assert item in sec_images.txt
+        assert item in md_note.txt
+    r_put_note = joplin_client.update_note_body(note_id, md_note.txt)
+    r_put_note.raise_for_status()
 
-        note_refreshed = joplin_client.get_note(note_id)
-        assert len(image_resource_ids_of(note_refreshed.body)) == 2
-
-    finally:
-        for resource_id in resource_ids:
-            joplin_client.delete_resource(resource_id, force=True)
+    note_refreshed = joplin_client.get_note(note_id)
+    assert len(image_resource_ids_of(note_refreshed.body)) == 2
 
 
 @pytest.mark.external_api
