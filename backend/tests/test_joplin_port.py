@@ -9,7 +9,6 @@ like any other code that writes to Joplin (see CLAUDE.md)."""
 
 import hashlib
 import os
-import time
 import uuid
 from datetime import date
 
@@ -106,9 +105,10 @@ class HttpHarness:
             raise errors[0]
 
     def _delete_resource_if_present(self, resource_id: str) -> None:
-        # a test may already have deleted it
+        # the port can't delete (ADR 0003); these bytes were random, so the id
+        # is never created again
         if self.port.resource_exists(resource_id):
-            self.port.delete_resource(resource_id)
+            self.client.delete_resource(resource_id, force=True).raise_for_status()
 
     def _delete_test_folder(self) -> None:
         folder_id = self.client.get_subfolder_id(str(TEST_YEAR))
@@ -204,24 +204,6 @@ def test_resource_round_trip(joplin):
 
     assert resource_id == hashlib.md5(data).hexdigest()
     assert joplin.port.resource_exists(resource_id)
-    joplin.port.delete_resource(resource_id)
-    assert not joplin.port.resource_exists(resource_id)
-
-
-def test_resource_note_ids(joplin):
-    resource_id = joplin.port.create_resource(os.urandom(256))
-    assert joplin.port.get_resource_note_ids(resource_id) == []
-
-    note_id = _create_day_note(joplin.port, f"# 2098-03-14\n\n![](:/{resource_id})\n")
-
-    # Joplin indexes a note's resources in the background, not on save
-    deadline = time.monotonic() + 90
-    while (
-        joplin.port.get_resource_note_ids(resource_id) != [note_id]
-        and time.monotonic() < deadline
-    ):
-        time.sleep(1)
-    assert joplin.port.get_resource_note_ids(resource_id) == [note_id]
 
 
 def test_same_bytes_twice_raises(joplin):

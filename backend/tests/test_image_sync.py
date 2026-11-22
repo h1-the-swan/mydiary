@@ -153,7 +153,7 @@ def test_pure_remove_iphone_row_deleted(db_session: Session, joplin, note_id, db
 
     result = sync(db_session, joplin, note_id, [IPHONE_PATH_2])
     assert result["removed"] == [IPHONE_PATH_1]
-    assert not joplin.resource_exists(res1)
+    assert joplin.resource_exists(res1)  # resources are never deleted (ADR 0003)
     body = joplin.notes[note_id].body
     assert f"![](:/{res1})" not in body
     assert f"![](:/{res2})" in body
@@ -210,7 +210,7 @@ def test_remove_upload_row_kept(db_session: Session, joplin, note_id, db_note):
 
     result = sync(db_session, joplin, note_id, [])
     assert result["removed"] == [UPLOAD_PATH]
-    assert not joplin.resource_exists(resup)
+    assert joplin.resource_exists(resup)  # resources are never deleted (ADR 0003)
     # upload row survives with nulled resource id, keeping its diary_date
     row = db_session.exec(
         select(MyDiaryImage).where(MyDiaryImage.nextcloud_path == UPLOAD_PATH)
@@ -348,26 +348,45 @@ def test_no_op(db_session: Session, joplin, note_id, db_note):
     assert joplin.resource_exists(res1)
 
 
-def test_note_update_failure_cleans_up(db_session: Session, joplin, note_id, db_note):
+def test_note_update_failure_saves_no_rows(
+    db_session: Session, joplin, note_id, db_note
+):
     joplin.fail_next_update()
     with pytest.raises(JoplinError):
         sync(db_session, joplin, note_id, [IPHONE_PATH_1])
-    # the resource created before the failed PUT was cleaned up
-    assert joplin.resources == {}
+    # the resource uploaded before the failed PUT stays, for a retry to reuse
+    assert len(joplin.resources) == 1
     # nothing persisted
     assert db_session.exec(select(MyDiaryImage)).all() == []
     assert get_links(db_session, note_id) == []
 
 
-def test_a_write_that_keeps_being_clobbered_raises_and_leaves_nothing(
+def test_a_write_that_keeps_being_clobbered_raises_and_saves_no_rows(
     db_session: Session, joplin, note_id, db_note
 ):
     joplin.clobber_next_update(note_id, make_note_body())
     joplin.clobber_next_update(note_id, make_note_body())
     with pytest.raises(NoteClobbered):
         sync(db_session, joplin, note_id, [IPHONE_PATH_1])
-    assert joplin.resources == {}
+    assert len(joplin.resources) == 1  # kept for a retry
     assert db_session.exec(select(MyDiaryImage)).all() == []
+
+
+def test_a_photo_removed_and_added_back_reuses_its_resource(
+    db_session: Session, joplin, note_id, db_note
+):
+    # deleting it and creating it again under the same id would lose it at
+    # the next Joplin sync (ADR 0003)
+    (rid,) = sync(db_session, joplin, note_id, [IPHONE_PATH_1])["resource_ids"]
+    sync(db_session, joplin, note_id, [])
+    created = []
+    real_create = joplin.create_resource
+    joplin.create_resource = lambda *a, **kw: created.append(1) or real_create(*a, **kw)
+
+    result = sync(db_session, joplin, note_id, [IPHONE_PATH_1])
+    assert result["resource_ids"] == [rid]
+    assert created == []
+    assert f"![](:/{rid})" in joplin.notes[note_id].body
 
 
 def test_the_mirror_is_current_after_a_sync(

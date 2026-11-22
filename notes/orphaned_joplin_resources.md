@@ -6,9 +6,13 @@ Recorded 2026-07-20, during the image-handling overhaul.
 
 A scan of the Joplin backend (Data API: enumerate `/resources`, cross-check each
 against `/resources/:id/notes`) found **216 resources referenced by no note** out
-of 1,907 total. These predate the overhaul — the new two-way sync deletes a
-resource when its photo is deselected, so it does not create orphans (verified:
-resources removed during testing return 404).
+of 1,907 total. These predate the overhaul. At the time, the new two-way sync
+deleted a resource when its photo was deselected. Since
+[ADR 0003](../docs/adr/0003-mydiary-never-deletes-joplin-resources.md)
+(2026-11), mydiary deletes no resources, so unreferenced ones now accumulate
+on purpose and the Joplin desktop app's orphan cleanup removes them. That
+cleanup skips resources the desktop app never saw attached to a note, which
+may be why some of these were never removed.
 
 Breakdown of the 216:
 
@@ -44,7 +48,11 @@ Decide scope before deleting — this is real diary data:
    delete the rows, or null their `joplin_resource_id`, matching the upload-row
    removal policy in `image_sync.py`).
 
-Deletion via `MyDiaryJoplin.delete_resource(resource_id, force=True)`. To
+Delete them with a one-off script that sends `DELETE /resources/:id` to the
+Data API. The app never deletes resources. If a resource is deleted and the
+same photo is added back before the deleting client's next Joplin sync, it is
+lost on every device (ADR 0003), so only delete resources nothing has
+referenced for a long time. To
 re-identify the orphans, re-run the enumerate-and-cross-check scan against
 `/resources` + `/resources/:id/notes`.
 

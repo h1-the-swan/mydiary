@@ -250,10 +250,8 @@ def _sync_day_map_to_note(
                 resource_id = edit.add_resource(data, title=title, ext=render.ext)
             resource_ids.append(resource_id)
 
+        # a replaced map's resource is left in Joplin (ADR 0003)
         edit.set_section(SECTION_TITLE, section_content(resource_ids, panels))
-        for row in existing:
-            if row.joplin_resource_id not in resource_ids:
-                edit.drop_resource(row.joplin_resource_id)
 
         by_panel = {row.panel: row for row in existing}
         for i, (panel, resource_id) in enumerate(zip(panels, resource_ids)):

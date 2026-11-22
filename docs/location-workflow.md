@@ -228,7 +228,7 @@ beneath. Only stays over an hour get a duration label.
 the section's only writer. It does all of this inside one `DiaryNote.edit()`
 (see [architecture.md](architecture.md#diary-notes-and-joplin)), so the
 `OwnTracksDayMap` rows are committed only once the note write has been
-verified, and a map resource the day no longer uses is deleted only after that.
+verified.
 A note the Joplin app keeps overwriting gets a 409 from
 `/owntracks/map/{dt}/to_note`.
 
@@ -241,8 +241,9 @@ A note the Joplin app keeps overwriting gets a 409 from
   `content_hash` — `sha256` over that panel's track hash plus
   `RenderParams.cache_key()`, composed in `owntracks_maps` rather than in
   `owntracks_track`, which is pure track maths and should not know about image
-  encoding. An unchanged re-run is a no-op; a changed one creates the new
-  resource and deletes the old, so re-rendering never orphans resources.
+  encoding. An unchanged re-run is a no-op. A changed one adds the new
+  resource and leaves the old one in Joplin for the desktop app's orphan
+  cleanup ([ADR 0003](adr/0003-mydiary-never-deletes-joplin-resources.md)).
   A panel whose hash is unchanged keeps its resource, so a day that gains areas
   re-uploads only the new panels.
 

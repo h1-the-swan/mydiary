@@ -4,7 +4,7 @@
 import os
 import threading
 import time
-from datetime import date, datetime
+from datetime import date
 
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -15,7 +15,7 @@ from mydiary.diary_note import (
     SectionNotAppOwned,
     WordsConflict,
 )
-from mydiary.joplin_port import JoplinError
+from mydiary.joplin_port import HttpJoplin, JoplinError, JoplinPort
 from mydiary.models import Dog, JoplinNote
 from tests.in_memory_joplin import InMemoryJoplin
 
@@ -151,18 +151,8 @@ class TestWrite:
     def test_staged_resources_alone_make_no_put(self, db_session: Session):
         note = diary_note()
         with note.edit(db_session) as edit:
-            rid = edit.add_resource(b"photo")
-            edit.drop_resource(rid)
+            edit.add_resource(b"photo")
         assert note.joplin.updates == []
-
-    def test_a_created_resource_the_note_does_not_use_is_deleted(
-        self, db_session: Session
-    ):
-        note = diary_note()
-        with note.edit(db_session) as edit:
-            rid = edit.add_resource(b"photo")
-            edit.set_section("Spotify tracks", "a song")
-        assert not note.joplin.resource_exists(rid)
 
 
 class TestClobber:
@@ -194,7 +184,6 @@ class TestClobber:
         with pytest.raises(NoteClobbered) as e:
             with note.edit(db_session) as edit:
                 new = edit.add_resource(b"new map", ext="png")
-                edit.drop_resource(old)
                 edit.set_section("Images", f"![](:/{new})")
                 db_session.add(Dog(name="Ruffles"))
 
@@ -202,9 +191,7 @@ class TestClobber:
         assert body_of(note) == stale
         assert dogs(db_session) == []
         assert db_session.get(JoplinNote, note.id) is None
-        # the stale body never references the new resource, and still
-        # references the old one
-        assert not joplin.resource_exists(new)
+        assert joplin.resource_exists(new)
         assert joplin.resource_exists(old)
 
     def test_a_clobbering_copy_with_a_section_twice_is_a_clobber(
@@ -229,7 +216,6 @@ class TestFailure:
                 db_session.add(Dog(name="Ruffles"))
         assert body_of(note) == BODY
         assert dogs(db_session) == []
-        assert not note.joplin.resource_exists(rid)
 
     def test_caller_exception_writes_nothing(self, db_session: Session):
         note = diary_note()
@@ -241,40 +227,25 @@ class TestFailure:
                 1 / 0
         assert note.joplin.updates == []
         assert dogs(db_session) == []
-        assert not note.joplin.resource_exists(rid)
 
-    def test_a_reused_resource_survives_a_failed_edit(self, db_session: Session):
-        joplin = InMemoryJoplin()
-        existing = joplin.create_resource(b"photo")
-        note = diary_note(joplin=joplin)
-        with pytest.raises(ZeroDivisionError):
-            with note.edit(db_session) as edit:
-                assert edit.add_resource(b"photo") == existing
-                1 / 0
-        assert joplin.resource_exists(existing)
-
-    def test_a_created_resource_the_note_ended_up_with_is_kept(
-        self, db_session: Session
-    ):
+    def test_a_words_conflict_after_the_write_rolls_back(self, db_session: Session):
         note = diary_note()
         with note.edit(db_session):
             pass  # mirror "hello"
         # right after the write lands, the Words are cleared in Joplin: the
         # write verifies, then the mirror refresh raises
+        cleared = BODY.replace("hello", "").replace(
+            "## Spotify tracks\n\nNone", "## Spotify tracks\n\na song"
+        )
+        note.joplin.clobber_next_update(note.id, cleared)
         with pytest.raises(WordsConflict):
             with note.edit(db_session) as edit:
-                rid = edit.add_resource(b"photo")
-                edit.set_section("Images", f"![](:/{rid})")
-                note.joplin.clobber_next_update(
-                    note.id,
-                    BODY.replace("hello", "").replace(
-                        "## Images\n", f"## Images\n\n![](:/{rid})\n"
-                    ),
-                )
-        # the note shows it, so deleting it would leave a broken image
-        assert note.joplin.resource_exists(rid)
+                edit.set_section("Spotify tracks", "a song")
+                db_session.add(Dog(name="Ruffles"))
+        assert body_of(note) == cleared
+        assert dogs(db_session) == []
 
-    def test_a_write_that_landed_keeps_its_resource_when_the_read_after_fails(
+    def test_a_failed_read_after_the_put_raises_with_the_write_landed(
         self, db_session: Session
     ):
         note = diary_note()
@@ -291,128 +262,65 @@ class TestFailure:
         joplin.get_note = flaky_get_note
         with pytest.raises(JoplinError):
             with note.edit(db_session) as edit:
+                edit.set_section("Spotify tracks", "a song")
+                db_session.add(Dog(name="Ruffles"))
+        assert "## Spotify tracks\n\na song\n" in body_of(note)
+        assert dogs(db_session) == []
+
+
+class TestResourcesAreNeverDeleted:
+    """A resource deleted and then created again with the same id before the
+    next Joplin sync is lost on every device, and ids come from the bytes
+    (ADR 0003). So nothing deletes one, and adding the same bytes again finds
+    the resource that is still there."""
+
+    def test_a_photo_removed_then_added_back_reuses_its_resource(
+        self, db_session: Session
+    ):
+        # guards NoteEdit itself; the regression test for the caller that
+        # used to delete is in test_image_sync.py
+        note = diary_note()
+        with note.edit(db_session) as edit:
+            rid = edit.add_resource(b"photo")
+            edit.set_section("Images", f"![](:/{rid})")
+        with note.edit(db_session) as edit:
+            edit.set_section("Images", "")
+        assert note.joplin.resource_exists(rid)
+
+        with note.edit(db_session) as edit:
+            assert edit.add_resource(b"photo") == rid
+            edit.set_section("Images", f"![](:/{rid})")
+        assert edit.created == []
+
+    def test_a_failed_edit_keeps_its_resource_for_the_retry(
+        self, db_session: Session
+    ):
+        note = diary_note()
+        note.joplin.fail_next_update()
+        with pytest.raises(JoplinError):
+            with note.edit(db_session) as edit:
                 rid = edit.add_resource(b"photo")
                 edit.set_section("Images", f"![](:/{rid})")
+        assert note.joplin.resource_exists(rid)
+
+        with note.edit(db_session) as edit:
+            assert edit.add_resource(b"photo") == rid
+            edit.set_section("Images", f"![](:/{rid})")
+        assert edit.created == []
         assert f":/{rid}" in body_of(note)
-        assert joplin.resource_exists(rid)
 
-    def test_created_resources_are_kept_when_the_note_cant_be_read(
+    def test_a_created_resource_the_note_does_not_use_is_kept(
         self, db_session: Session
     ):
         note = diary_note()
-        joplin = note.joplin
-        get_note = joplin.get_note
-        reads = []
-
-        def failing_after_the_put(note_id):
-            reads.append(note_id)
-            if len(reads) >= 3:
-                raise JoplinError("Joplin went away")
-            return get_note(note_id)
-
-        joplin.get_note = failing_after_the_put
-        with pytest.raises(JoplinError):
-            with note.edit(db_session) as edit:
-                rid = edit.add_resource(b"photo")
-                edit.set_section("Images", f"![](:/{rid})")
-        assert joplin.resource_exists(rid)
-
-    def test_a_created_resource_another_note_took_up_is_kept(
-        self, db_session: Session
-    ):
-        # the same photo on two days is one resource: an edit of the other
-        # day can pick up the one this edit created before this one fails
-        note = diary_note()
-        joplin = note.joplin
-        with pytest.raises(JoplinError):
-            with note.edit(db_session) as edit:
-                rid = edit.add_resource(b"photo")
-                joplin.add_note("2026-09-14", f"## Images\n\n![](:/{rid})\n")
-                edit.set_section("Images", f"![](:/{rid})")
-                joplin.fail_next_update()
-        assert joplin.resource_exists(rid)
-
-    def test_dropped_resources_survive_a_failed_edit(self, db_session: Session):
-        joplin = InMemoryJoplin()
-        old = joplin.create_resource(b"old photo")
-        note = diary_note(
-            BODY.replace("## Images\n", f"## Images\n\n![](:/{old})\n"), joplin
-        )
-        with note.edit(db_session):
-            pass  # mirror "hello"
-        # the write verifies without `old`, then the mirror refresh raises
-        joplin.clobber_next_update(note.id, BODY.replace("hello", ""))
-        with pytest.raises(WordsConflict):
-            with note.edit(db_session) as edit:
-                edit.drop_resource(old)
-                edit.set_section("Images", "")
-        assert f":/{old}" not in body_of(note)
-        assert joplin.resource_exists(old)
-
-
-class TestDroppedResources:
-    def with_photo(self, joplin: InMemoryJoplin, resource_id: str) -> DiaryNote:
-        body = BODY.replace("## Images\n", f"## Images\n\n![](:/{resource_id})\n")
-        return diary_note(body, joplin)
-
-    def test_deleted_after_the_write(self, db_session: Session):
-        joplin = InMemoryJoplin()
-        rid = joplin.create_resource(b"photo")
-        note = self.with_photo(joplin, rid)
         with note.edit(db_session) as edit:
-            edit.drop_resource(rid)
-            edit.set_section("Images", "")
-        assert not joplin.resource_exists(rid)
+            rid = edit.add_resource(b"photo")
+            edit.set_section("Spotify tracks", "a song")
+        assert note.joplin.resource_exists(rid)
 
-    def test_kept_while_this_note_still_references_it(self, db_session: Session):
-        joplin = InMemoryJoplin()
-        rid = joplin.create_resource(b"photo")
-        note = self.with_photo(joplin, rid)
-        with note.edit(db_session) as edit:
-            edit.drop_resource(rid)
-        assert joplin.resource_exists(rid)
-
-    def test_kept_when_another_note_references_it(self, db_session: Session):
-        joplin = InMemoryJoplin()
-        rid = joplin.create_resource(b"photo")
-        note = self.with_photo(joplin, rid)
-        # the same photo on another day shares the resource
-        joplin.add_note("2026-09-14", f"## Images\n\n![](:/{rid})\n")
-        with note.edit(db_session) as edit:
-            edit.drop_resource(rid)
-            edit.set_section("Images", "")
-        assert joplin.resource_exists(rid)
-
-    def test_kept_when_only_the_mirror_knows_another_note_uses_it(
-        self, db_session: Session
-    ):
-        # Joplin's resource index lags a few seconds behind a save
-        joplin = InMemoryJoplin()
-        rid = joplin.create_resource(b"photo")
-        note = self.with_photo(joplin, rid)
-        db_session.add(
-            JoplinNote(
-                id="other",
-                parent_id="folder",
-                title="2026-09-14",
-                body=f"## Images\n\n![](:/{rid})\n",
-                created_time=datetime(2026, 9, 14),
-                updated_time=datetime(2026, 9, 14),
-            )
-        )
-        db_session.commit()
-        with note.edit(db_session) as edit:
-            edit.drop_resource(rid)
-            edit.set_section("Images", "")
-        assert joplin.resource_exists(rid)
-
-    def test_a_failed_delete_is_logged_not_raised(self, db_session: Session, caplog):
-        note = diary_note()
-        with note.edit(db_session) as edit:
-            edit.drop_resource("f" * 32)  # Joplin has no such resource
-            db_session.add(Dog(name="Ruffles"))
-        assert dogs(db_session) == ["Ruffles"]
-        assert "failed to delete resource" in caplog.text
+    def test_the_port_offers_no_way_to_delete_one(self):
+        for port in (JoplinPort, HttpJoplin, InMemoryJoplin):
+            assert not hasattr(port, "delete_resource"), port
 
 
 class TestSections:
@@ -578,4 +486,3 @@ class TestWordsCheckOnEntering:
                 edit.set_section("Images", f"![](:/{rid})")
                 note.joplin.edit_note(note.id, BODY.replace("hello", ""))
         assert note.joplin.updates == []
-        assert not note.joplin.resource_exists(rid)

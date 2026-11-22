@@ -139,8 +139,9 @@ def sync_note_images(
       Joplin, and recorded in the database. New iPhone photos are placed among the
       section's photos by capture time, and new uploads go at the end (see
       `place_by_capture_time`). Photos already in the note keep their order.
-    - Images in the note but not in desired_paths are removed from the section and
-      their Joplin resources deleted. iPhone-sync rows are deleted from the database;
+    - Images in the note but not in desired_paths are removed from the section.
+      Their Joplin resources are kept (see ADR 0003), so adding one back reuses
+      the resource. iPhone-sync rows are deleted from the database;
       upload rows are kept (with joplin_resource_id nulled) so they remain available
       for re-selection via their diary_date.
     - Resource ids in the note with no MyDiaryImage row (e.g. from the removed Google
@@ -248,8 +249,9 @@ def sync_note_images(
             SECTION_TITLE, "\n\n".join(resource_ref(rid) for rid in final_refs)
         )
 
+        # the removed photos' Joplin resources stay (ADR 0003); only the rows
+        # change
         for rid, img in to_remove.items():
-            edit.drop_resource(rid)
             if img.nextcloud_path and is_upload_path(img.nextcloud_path):
                 img.joplin_resource_id = None
                 session.add(img)

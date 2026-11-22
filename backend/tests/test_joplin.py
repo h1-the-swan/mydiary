@@ -50,7 +50,9 @@ def test_joplin_note_from_api(joplin_client: MyDiaryJoplin):
 
 @pytest.mark.external_api
 def test_create_resource(resource, image_bytes):
-    r = resource(image_bytes)
+    # random trailing bytes: the resource fixture deletes what it creates
+    # (see its docstring)
+    r = resource(image_bytes + os.urandom(16))
     j = r.json()
     assert j["id"] is not None
     assert len(j["id"]) > 0

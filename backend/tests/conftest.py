@@ -24,6 +24,9 @@ def joplin_client():
 
 @pytest.fixture
 def resource(joplin_client: MyDiaryJoplin):
+    """Create resources in Joplin, deleted again at teardown. Pass bytes no
+    other run uses: a resource deleted and then created again with the same
+    id before the next Joplin sync is lost (ADR 0003)."""
     created_resources = []
 
     def _create_resource(data: bytes):

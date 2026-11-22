@@ -62,14 +62,15 @@ The terms used here (Diary Note, Note Mirror, Written, App-owned and Frozen Sect
 ```python
 with diary_note.edit(session) as edit:
     rid = edit.add_resource(png_bytes, title="map", ext="png")
-    edit.drop_resource(old_rid)
     edit.set_section("Location", content)   # App-owned Sections only
     session.merge(OwnTracksDayMap(...))     # the caller's own rows
 ```
 
-On leaving the block, `edit()` re-reads the note and applies the staged sections to that fresh copy, so text typed in Joplin meanwhile survives. It PUTs only if the body changed, then re-reads to verify the write. Joplin's API has no conditional write, and the Joplin app's autosave can write back a stale copy of a note it has open. A section that didn't stick is rewritten once; if it still doesn't stick, the edit raises `NoteClobbered`. The mirror is refreshed from the last read and committed in the same transaction as the caller's rows. Dropped resources are deleted last, and only when no note references them. That check asks the mirror as well as Joplin, because Joplin indexes resource usage a few seconds behind a save. On any failure the session is rolled back and the resources the edit created are deleted, unless this note or another one turned out to use them.
+On leaving the block, `edit()` re-reads the note and applies the staged sections to that fresh copy, so text typed in Joplin meanwhile survives. It PUTs only if the body changed, then re-reads to verify the write. Joplin's API has no conditional write, and the Joplin app's autosave can write back a stale copy of a note it has open. A section that didn't stick is rewritten once; if it still doesn't stick, the edit raises `NoteClobbered`. The mirror is refreshed from the last read and committed in the same transaction as the caller's rows. On any failure the session is rolled back.
 
-The verifying re-read only sees a clobber that lands before it. When the app's autosave arrives later (seen on 2026-09-26 with the note open and being typed in), Joplin keeps both versions. The app's copy goes back on the note, with the app's older `updated_time`, and the edit's write is set aside as a conflict note (`is_conflict`) with the same title in the same folder. The edit has already reported success by then, and may have deleted a resource it dropped (an older map, say) that the app's copy still shows. Running the same sync again (the map button, say) puts the section back onto the note, and the diarist deletes or merges the conflict note in the Joplin app.
+Nothing in the app deletes a Joplin resource, including ones an edit uploaded and ones a note stops using, and `JoplinPort` has no method for it. Joplin's sync loses a resource that is deleted and then created again with the same id before the next sync, and resource ids are the md5 of the bytes, so a photo removed and added back would vanish. Adding the same bytes again reuses the resource that is still there. Unused resources are left to the Joplin desktop app's orphan cleanup. See [ADR 0003](adr/0003-mydiary-never-deletes-joplin-resources.md).
+
+The verifying re-read only sees a clobber that lands before it. When the app's autosave arrives later (seen on 2026-09-26 with the note open and being typed in), Joplin keeps both versions. The app's copy goes back on the note, with the app's older `updated_time`, and the edit's write is set aside as a conflict note (`is_conflict`) with the same title in the same folder. The edit has already reported success by then. Any resource the app's copy shows (an older map, say) still exists. Running the same sync again (the map button, say) puts the section back onto the note, and the diarist deletes or merges the conflict note in the Joplin app.
 
 Things to know when calling it:
 
